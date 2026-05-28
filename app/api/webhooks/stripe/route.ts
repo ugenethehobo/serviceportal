@@ -88,7 +88,8 @@ export async function POST(request: NextRequest) {
 
             // Create or update subscription record
             if (session.subscription) {
-              const stripeSub = await stripe.subscriptions.retrieve(session.subscription as string)
+              // Cast to any to work around Stripe's Response<Subscription> type (common TS issue on Vercel)
+              const stripeSub = await stripe.subscriptions.retrieve(session.subscription as string) as any;
 
               await supabaseAdmin
                 .from('subscriptions')
