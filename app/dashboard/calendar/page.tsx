@@ -1,6 +1,5 @@
 'use client'
-
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,14 +7,21 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, startOfWeek, endOfWeek, addDays } from 'date-fns'
+import { expandRecurringJob, getDefaultTimezone, formatJobSchedule } from '@/lib/date-utils'
 
 interface Job {
   id: string
   title: string
   status: string
   scheduled_date: string | null
+  scheduled_start?: string | null
+  scheduled_end?: string | null
   price: number | null
   clients: { name: string } | null
+  bills?: any[]
+  is_recurring?: boolean
+  recurrence_frequency?: string | null
+  recurrence_end_date?: string | null
 }
 
 export default function CalendarPage() {
@@ -26,20 +32,67 @@ export default function CalendarPage() {
   const [showJobModal, setShowJobModal] = useState(false)
   const [view, setView] = useState<'month' | 'week'>('month')
   const [draggedJobId, setDraggedJobId] = useState<string | null>(null)
+  const [jobStatuses, setJobStatuses] = useState<any[]>([])
+  const [defaultTimezone, setDefaultTimezone] = useState('America/Chicago')
+
   const supabase = createClient()
 
-  const loadJobs = async () => {
+  // Load company tz + all jobs (including recurring masters), then client-side expand recurring
+  const loadJobsAndSettings = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: settings } = await supabase
+        .from('company_settings')
+        .select('default_timezone, job_statuses')
+        .eq('user_id', user.id)
+        .single()
+      if (settings?.default_timezone) setDefaultTimezone(getDefaultTimezone(settings.default_timezone))
+      if (settings?.job_statuses && Array.isArray(settings.job_statuses)) {
+        setJobStatuses(settings.job_statuses)
+      }
+    }
+
     const { data } = await supabase
       .from('jobs')
-      .select(`*, clients (name)`)
-      .not('scheduled_date', 'is', null)
-    if (data) setJobs(data)
+      .select(`*, clients (name), bills (*)`)
+      // Do not filter here — we expand recurring which may synthesize dates; fetch all with any schedule info
+      .or('scheduled_date.not.is.null,scheduled_start.not.is.null')
+
+    if (data) {
+      // Store the raw masters; expansion happens in getJobsForDay per visible range
+      setJobs(data)
+    }
+  }
+
+  const loadJobStatuses = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data: settings } = await supabase
+      .from('company_settings')
+      .select('job_statuses')
+      .eq('user_id', user.id)
+      .single()
+
+    if (settings?.job_statuses && Array.isArray(settings.job_statuses)) {
+      setJobStatuses(settings.job_statuses)
+    } else {
+      setJobStatuses([
+        { key: "quote_sent", label: "Quote Sent", color: "#eab308" },
+        { key: "scheduled", label: "Scheduled", color: "#3b82f6" },
+        { key: "in_progress", label: "In Progress", color: "#8b5cf6" },
+        { key: "completed", label: "Completed", color: "#22c55e" },
+        { key: "invoiced", label: "Invoiced", color: "#f97316" },
+        { key: "paid", label: "Paid", color: "#10b981" },
+      ])
+    }
   }
 
   useEffect(() => {
-    loadJobs()
+    loadJobsAndSettings()
   }, [])
 
+  // Date calculations
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
   const calendarStart = startOfWeek(monthStart)
@@ -50,41 +103,75 @@ export default function CalendarPage() {
   const weekStart = startOfWeek(currentDate)
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
+  // Expand recurring jobs into instances for the currently visible calendar range.
+  // This makes recurring jobs appear on the calendar (the previous implementation did not).
+  const expandedJobs = useMemo(() => {
+    // Recompute range locally so we don't depend on later declarations
+    const monthStartLocal = startOfMonth(currentDate)
+    const monthEndLocal = endOfMonth(currentDate)
+    const calendarStartLocal = startOfWeek(monthStartLocal)
+    const calendarEndLocal = endOfWeek(monthEndLocal)
+    const weekStartLocal = startOfWeek(currentDate)
+
+    const rangeStart = view === 'month' ? calendarStartLocal : weekStartLocal
+    const rangeEnd = view === 'month' ? calendarEndLocal : addDays(weekStartLocal, 6)
+
+    const all: any[] = []
+    for (const raw of jobs) {
+      const ex = expandRecurringJob(raw, rangeStart, rangeEnd)
+      all.push(...ex)
+    }
+    return all
+  }, [jobs, view, currentDate])
+
   const getJobsForDay = (day: Date) => {
-  const targetDateString = format(day, 'yyyy-MM-dd')
+    const targetDateString = format(day, 'yyyy-MM-dd')
+    return expandedJobs.filter(job => {
+      const s = job.scheduled_start || job.scheduled_date
+      if (!s) return false
+      const jobDateString = s.includes('T') ? s.split('T')[0] : s
+      return jobDateString === targetDateString
+    })
+  }
 
-  return jobs.filter(job => {
-    if (!job.scheduled_date) return false
-
-    // Extract just the date part (handles both "2026-05-18" and full ISO strings)
-    const jobDateString = job.scheduled_date.includes('T')
-      ? job.scheduled_date.split('T')[0]
-      : job.scheduled_date
-
-    return jobDateString === targetDateString
-  })
-}
-
-  const openDayModal = (day: Date) => {
+  const openDayModal = async (day: Date) => {
     const dayJobs = getJobsForDay(day)
     setSelectedDate(day)
-    setSelectedJobs(dayJobs)
+
+    // Fetch bills for these jobs (more reliable than nested select)
+    if (dayJobs.length > 0) {
+      const jobIds = dayJobs.map(j => j.id)
+
+      const { data: billsData } = await supabase
+        .from('bills')
+        .select('*')
+        .in('job_id', jobIds)
+
+      // Attach bills to each job
+      const jobsWithBills = dayJobs.map(job => ({
+        ...job,
+        bills: billsData?.filter(b => b.job_id === job.id) || []
+      }))
+
+      setSelectedJobs(jobsWithBills)
+    } else {
+      setSelectedJobs([])
+    }
+
     setShowJobModal(true)
   }
 
   const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      quote_sent: 'bg-yellow-500',
-      scheduled: 'bg-blue-500',
-      in_progress: 'bg-purple-500',
-      completed: 'bg-green-500',
-      invoiced: 'bg-orange-500',
-      paid: 'bg-emerald-500'
-    }
-    return colors[status] || 'bg-gray-500'
+    const found = jobStatuses.find((s: any) => s.key === status)
+    return found?.color || '#64748b'
   }
 
-  // Drag and Drop
+  const getStatusLabel = (status: string) => {
+    const found = jobStatuses.find((s: any) => s.key === status)
+    return found?.label || status.replace('_', ' ')
+  }
+
+  // ==================== DRAG AND DROP (UNCHANGED) ====================
   const handleDragStart = (e: React.DragEvent, jobId: string) => {
     setDraggedJobId(jobId)
     e.dataTransfer.effectAllowed = 'move'
@@ -96,33 +183,32 @@ export default function CalendarPage() {
   }
 
   const handleDrop = async (e: React.DragEvent) => {
-  e.preventDefault()
-  if (!draggedJobId) return
+    e.preventDefault()
+    if (!draggedJobId) return
 
-  const targetElement = e.currentTarget as HTMLElement
-  const newDateString = targetElement.getAttribute('data-date')
-  if (!newDateString) return
+    const targetElement = e.currentTarget as HTMLElement
+    const newDateString = targetElement.getAttribute('data-date')
+    if (!newDateString) return
 
-  // Send as local midnight to avoid any timezone shift
-  const localMidnight = new Date(newDateString + 'T00:00:00')
-  const isoString = localMidnight.toISOString()
+    const localMidnight = new Date(newDateString + 'T00:00:00')
+    const isoString = localMidnight.toISOString()
 
-  const { error } = await supabase
-    .from('jobs')
-    .update({ scheduled_date: isoString })
-    .eq('id', draggedJobId)
+    const { error } = await supabase
+      .from('jobs')
+      .update({ scheduled_date: isoString, scheduled_start: isoString })
+      .eq('id', draggedJobId)
 
-  if (!error) {
-    // Update local state with clean date string
-    setJobs(prev => prev.map(job =>
-      job.id === draggedJobId
-        ? { ...job, scheduled_date: newDateString }
-        : job
-    ))
+    if (!error) {
+      setJobs(prev =>
+        prev.map(job =>
+          job.id === draggedJobId
+            ? { ...job, scheduled_date: newDateString }
+            : job
+        )
+      )
+    }
+    setDraggedJobId(null)
   }
-
-  setDraggedJobId(null)
-}
 
   return (
     <div>
@@ -141,36 +227,22 @@ export default function CalendarPage() {
           </Tabs>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (view === 'month') {
-                  setCurrentDate(subMonths(currentDate, 1))
-                } else {
-                  setCurrentDate(addDays(currentDate, -7))
-                }
-              }}
-            >
+            <Button variant="outline" onClick={() => {
+              if (view === 'month') setCurrentDate(subMonths(currentDate, 1))
+              else setCurrentDate(addDays(currentDate, -7))
+            }}>
               ←
             </Button>
-
             <div className="font-semibold text-xl min-w-[220px] text-center">
               {view === 'month'
                 ? format(currentDate, 'MMMM yyyy')
                 : `${format(weekStart, 'MMM d')} - ${format(addDays(weekStart, 6), 'MMM d, yyyy')}`
               }
             </div>
-
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (view === 'month') {
-                  setCurrentDate(addMonths(currentDate, 1))
-                } else {
-                  setCurrentDate(addDays(currentDate, 7))
-                }
-              }}
-            >
+            <Button variant="outline" onClick={() => {
+              if (view === 'month') setCurrentDate(addMonths(currentDate, 1))
+              else setCurrentDate(addDays(currentDate, 7))
+            }}>
               →
             </Button>
           </div>
@@ -203,20 +275,14 @@ export default function CalendarPage() {
                       onClick={() => openDayModal(day)}
                       onDragOver={handleDragOver}
                       onDrop={handleDrop}
-                      className={`
-                        min-h-[120px] p-3 border rounded-2xl cursor-pointer transition-all hover:border-primary
-                        ${isCurrentMonth ? 'bg-background' : 'bg-muted/30 text-muted-foreground'}
-                        ${isToday ? 'border-primary bg-primary/5' : ''}
-                      `}
+                      className={`min-h-[120px] p-3 border rounded-2xl cursor-pointer transition-all hover:border-primary ${isCurrentMonth ? 'bg-background' : 'bg-muted/30 text-muted-foreground'} ${isToday ? 'border-primary bg-primary/5' : ''}`}
                     >
                       <div className="flex justify-between items-start mb-2">
                         <div className={`text-sm font-medium ${isToday ? 'text-primary' : ''}`}>
                           {format(day, 'd')}
                         </div>
                         {dayJobs.length > 0 && (
-                          <Badge variant="secondary" className="text-xs">
-                            {dayJobs.length}
-                          </Badge>
+                          <Badge variant="secondary" className="text-xs">{dayJobs.length}</Badge>
                         )}
                       </div>
 
@@ -226,15 +292,14 @@ export default function CalendarPage() {
                             key={i}
                             draggable
                             onDragStart={(e) => handleDragStart(e, job.id)}
-                            className={`text-xs p-1.5 rounded-lg text-white truncate cursor-move ${getStatusColor(job.status)}`}
+                            className="text-xs p-1.5 rounded-lg text-white truncate cursor-move"
+                            style={{ backgroundColor: getStatusColor(job.status) }}
                           >
                             {job.title}
                           </div>
                         ))}
                         {dayJobs.length > 2 && (
-                          <div className="text-xs text-muted-foreground">
-                            +{dayJobs.length - 2} more
-                          </div>
+                          <div className="text-xs text-muted-foreground">+{dayJobs.length - 2} more</div>
                         )}
                       </div>
                     </div>
@@ -257,10 +322,7 @@ export default function CalendarPage() {
                     onClick={() => openDayModal(day)}
                     onDragOver={handleDragOver}
                     onDrop={handleDrop}
-                    className={`
-                      min-h-[400px] p-4 border rounded-2xl cursor-pointer transition-all hover:border-primary
-                      ${isToday ? 'border-primary bg-primary/5' : 'bg-background'}
-                    `}
+                    className={`min-h-[400px] p-4 border rounded-2xl cursor-pointer transition-all hover:border-primary ${isToday ? 'border-primary bg-primary/5' : 'bg-background'}`}
                   >
                     <div className="text-center mb-4">
                       <div className="text-sm text-muted-foreground">{format(day, 'EEE')}</div>
@@ -275,7 +337,8 @@ export default function CalendarPage() {
                           key={i}
                           draggable
                           onDragStart={(e) => handleDragStart(e, job.id)}
-                          className={`p-3 rounded-xl text-white text-sm cursor-move ${getStatusColor(job.status)}`}
+                          className="p-3 rounded-xl text-white text-sm cursor-move"
+                          style={{ backgroundColor: getStatusColor(job.status) }}
                         >
                           <div className="font-medium truncate">{job.title}</div>
                           <div className="text-xs opacity-80 mt-1">{job.clients?.name}</div>
@@ -301,25 +364,40 @@ export default function CalendarPage() {
 
           {selectedJobs.length > 0 ? (
             <div className="space-y-4">
-              {selectedJobs.map((job, index) => (
-                <div key={index} className="border rounded-2xl p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <div className="font-semibold text-lg">{job.title}</div>
-                      <div className="text-sm text-muted-foreground">{job.clients?.name}</div>
-                    </div>
-                    <Badge className={getStatusColor(job.status)}>
-                      {job.status.replace('_', ' ')}
-                    </Badge>
-                  </div>
+              {selectedJobs.map((job, index) => {
+                const jobBills = job.bills || []
+                const totalDue = jobBills
+                  .filter((b: any) => b.status === 'pending')
+                  .reduce((sum: number, b: any) => sum + Number(b.amount), 0)
 
-                  {job.price && (
-                    <div className="text-sm font-medium text-emerald-600">
-                      ${job.price}
+                return (
+                  <div key={index} className="border rounded-2xl p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <div className="font-semibold text-lg">{job.title}</div>
+                        <div className="text-sm text-muted-foreground">{job.clients?.name}</div>
+                        {(job.scheduled_start || job.scheduled_date) && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {formatJobSchedule(job, getDefaultTimezone(defaultTimezone))}
+                          </div>
+                        )}
+                      </div>
+                      <Badge style={{ backgroundColor: getStatusColor(job.status) }} className="text-white">
+                        {getStatusLabel(job.status)}
+                      </Badge>
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="text-muted-foreground">
+                        {jobBills.length} bill{jobBills.length !== 1 ? 's' : ''}
+                      </div>
+                      <div className="font-semibold text-emerald-600">
+                        ${totalDue.toFixed(2)} due
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">

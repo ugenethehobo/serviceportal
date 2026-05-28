@@ -1,12 +1,17 @@
 'use client'
-
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
+import { Clock } from "lucide-react"
+import { TrialStatusBanner } from "@/components/trial-status-banner"
+import { SubscriptionStatus } from "@/components/subscription-status"
+import { getSubscriptionStatusAction } from "./actions"
 
 interface Client {
   id: string
@@ -14,139 +19,160 @@ interface Client {
   email: string | null
   phone: string | null
   address: string | null
-  notes: string | null
   created_at: string
 }
 
+interface ClientWithStats extends Client {
+  jobCount: number
+  activeJobs: number
+  totalDue: number
+  lastActivity: string | null
+}
+
 export default function ClientsPage() {
-  const [clients, setClients] = useState<Client[]>([])
+  const router = useRouter()
+  const [clients, setClients] = useState<ClientWithStats[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddDialog, setShowAddDialog] = useState(false)
-  const [showEditDialog, setShowEditDialog] = useState(false)
-  const [showViewDialog, setShowViewDialog] = useState(false)
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
-  const [portalLink, setPortalLink] = useState('')
-  const [formData, setFormData] = useState({
-    name: '', email: '', phone: '', address: '', notes: ''
-  })
-
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', address: '', notes: '' })
+  const [trialRemaining, setTrialRemaining] = useState<number | null>(null)
+  const [subscriptionHealthy, setSubscriptionHealthy] = useState<boolean>(true)
   const supabase = createClient()
 
   const loadClients = async () => {
-    const { data, error } = await supabase
+    const { data: clientsData } = await supabase
       .from('clients')
       .select('*')
       .order('created_at', { ascending: false })
-    if (!error) setClients(data || [])
+
+    // Load subscription + trial status for button control
+    const subStatus = await getSubscriptionStatusAction()
+    setSubscriptionHealthy(subStatus.isActive)
+
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (subStatus.isActive && subStatus.status === 'trialing' && user) {
+      const { data: company } = await supabase
+        .from('companies')
+        .select('trial_clients_used, trial_clients_limit')
+        .or(`owner_user_id.eq.${user.id},company_users.user_id.eq.${user.id}`)
+        .limit(1)
+        .single()
+
+      const limit = company?.trial_clients_limit ?? 3
+      const usedCount = company?.trial_clients_used ?? 0
+      setTrialRemaining(Math.max(0, limit - usedCount))
+    } else {
+      setTrialRemaining(null)
+    }
+
+    if (!clientsData) {
+      setLoading(false)
+      return
+    }
+
+    const clientsWithStats = await Promise.all(
+      clientsData.map(async (client) => {
+        const { data: jobs } = await supabase
+          .from('jobs')
+          .select('id, status, scheduled_date, created_at')
+          .eq('client_id', client.id)
+
+        const { data: bills } = await supabase
+          .from('bills')
+          .select('amount, status')
+          .in('job_id', jobs?.map(j => j.id) || [])
+
+        const totalDue = bills
+          ?.filter(b => b.status === 'pending')
+          .reduce((sum, b) => sum + Number(b.amount), 0) || 0
+
+        const activeJobs = jobs?.filter(j =>
+          ['scheduled', 'in_progress', 'quote_sent'].includes(j.status)
+        ).length || 0
+
+        const lastActivity = jobs && jobs.length > 0
+          ? jobs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at
+          : client.created_at
+
+        return {
+          ...client,
+          jobCount: jobs?.length || 0,
+          activeJobs,
+          totalDue,
+          lastActivity
+        }
+      })
+    )
+
+    setClients(clientsWithStats)
     setLoading(false)
   }
 
-  useEffect(() => { loadClients() }, [])
+  useEffect(() => {
+    loadClients()
+  }, [])
 
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
 
-    const { error } = await supabase.from('clients').insert([{ ...formData, user_id: user.id }])
-    if (!error) {
+    // Use the new server action that includes trial enforcement
+    const { createClientAction } = await import('./actions')
+    const result = await createClientAction(formData)
+
+    if (result.success) {
       setFormData({ name: '', email: '', phone: '', address: '', notes: '' })
       setShowAddDialog(false)
       loadClients()
+    } else {
+      const message = result.error || 'Failed to create client'
+      alert(message)
     }
   }
 
-  const handleEditClient = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selectedClient) return
-
-    const { error } = await supabase.from('clients').update(formData).eq('id', selectedClient.id)
-    if (!error) {
-      setShowEditDialog(false)
-      setSelectedClient(null)
-      loadClients()
-    }
-  }
-
-  const handleDeleteClient = async (clientId: string) => {
-    if (!confirm('Are you sure you want to delete this client?')) return
-    const { error } = await supabase.from('clients').delete().eq('id', clientId)
-    if (!error) loadClients()
-  }
-
-  const openEditModal = (client: Client) => {
-    setSelectedClient(client)
-    setFormData({
-      name: client.name,
-      email: client.email || '',
-      phone: client.phone || '',
-      address: client.address || '',
-      notes: client.notes || ''
-    })
-    setShowEditDialog(true)
-  }
-
-  const openViewModal = (client: Client) => {
-    setSelectedClient(client)
-    setPortalLink('')
-    setShowViewDialog(true)
-  }
-
-  const generatePortalLink = () => {
-    if (!selectedClient) return
-    const link = `${window.location.origin}/portal/${selectedClient.id}`
-    setPortalLink(link)
+  if (loading) {
+    return <div className="p-8">Loading clients...</div>
   }
 
   return (
-    <div>
+    <div className="p-8 max-w-7xl mx-auto">
+      <SubscriptionStatus />
+      <TrialStatusBanner />
+
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-4xl font-bold tracking-tight">Clients</h1>
-          <p className="text-muted-foreground mt-2">Manage your client relationships</p>
+          <p className="text-muted-foreground mt-2">Your main command center</p>
         </div>
-
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogTrigger asChild>
-            <Button>+ Add Client</Button>
+            <Button disabled={!subscriptionHealthy || trialRemaining === 0}>
+              + Add Client
+            </Button>
           </DialogTrigger>
+
+          {!subscriptionHealthy && (
+            <p className="text-xs text-destructive mt-1">
+              Your subscription is not active. Please update your billing.
+            </p>
+          )}
+          {subscriptionHealthy && trialRemaining === 0 && (
+            <p className="text-xs text-destructive mt-1">
+              You have reached your free client limit.
+            </p>
+          )}
+
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add New Client</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleAddClient} className="space-y-4">
-              <Input
-                placeholder="Full Name *"
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                required
-              />
-              <Input
-                type="email"
-                placeholder="Email"
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-              />
-              <Input
-                type="tel"
-                placeholder="Phone"
-                value={formData.phone}
-                onChange={(e) => setFormData({...formData, phone: e.target.value})}
-              />
-              <Input
-                placeholder="Address"
-                value={formData.address}
-                onChange={(e) => setFormData({...formData, address: e.target.value})}
-              />
-              <Textarea
-                placeholder="Notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({...formData, notes: e.target.value})}
-              />
+              <Input placeholder="Full Name *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
+              <Input type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+              <Input type="tel" placeholder="Phone" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+              <Input placeholder="Address" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
               <div className="flex gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)} className="flex-1">
-                  Cancel
-                </Button>
+                <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)} className="flex-1">Cancel</Button>
                 <Button type="submit" className="flex-1">Add Client</Button>
               </div>
             </form>
@@ -154,100 +180,63 @@ export default function ClientsPage() {
         </Dialog>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          {clients.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="text-6xl mb-4">👥</div>
-              <h3 className="text-xl font-semibold mb-2">No clients yet</h3>
-              <p className="text-muted-foreground mb-6">Add your first client to get started</p>
-              <Button onClick={() => setShowAddDialog(true)}>Add Your First Client</Button>
-            </div>
-          ) : (
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-muted-foreground">Name</th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-muted-foreground">Email</th>
-                  <th className="text-left px-6 py-4 text-sm font-medium text-muted-foreground">Phone</th>
-                  <th className="w-40 px-6 py-4"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {clients.map((client) => (
-                  <tr key={client.id} className="hover:bg-muted/50">
-                    <td className="px-6 py-4 font-medium">{client.name}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{client.email || '—'}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{client.phone || '—'}</td>
-                    <td className="px-6 py-4 flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => openViewModal(client)}>
-                        View
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => openEditModal(client)}>
-                        Edit
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteClient(client.id)} className="text-destructive hover:text-destructive">
-                        Delete
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* View Client Dialog */}
-      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{selectedClient?.name}</DialogTitle>
-          </DialogHeader>
-
-          {selectedClient && (
-            <div className="space-y-4">
-              <div>
-                <div className="text-sm text-muted-foreground">Email</div>
-                <div>{selectedClient.email || '—'}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Phone</div>
-                <div>{selectedClient.phone || '—'}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Address</div>
-                <div>{selectedClient.address || '—'}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">Notes</div>
-                <div>{selectedClient.notes || '—'}</div>
-              </div>
-
-              <div className="pt-4 border-t">
-                <Button onClick={generatePortalLink} className="w-full mb-4">
-                  Generate Portal Link
-                </Button>
-
-                {portalLink && (
-                  <div className="bg-muted p-4 rounded-xl">
-                    <div className="text-sm text-muted-foreground mb-2">Client Portal Link:</div>
-                    <div className="font-mono text-sm break-all bg-background p-3 rounded-lg border">{portalLink}</div>
-                    <Button
-                      variant="link"
-                      size="sm"
-                      onClick={() => navigator.clipboard.writeText(portalLink)}
-                      className="mt-2 p-0 h-auto"
-                    >
-                      Copy Link
-                    </Button>
+      {/* Client Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {clients.length === 0 ? (
+          <div className="col-span-full text-center py-20">
+            <div className="text-6xl mb-4">👥</div>
+            <h3 className="text-2xl font-semibold mb-2">No clients yet</h3>
+            <p className="text-muted-foreground mb-6">Add your first client to get started</p>
+            <Button onClick={() => setShowAddDialog(true)}>Add First Client</Button>
+          </div>
+        ) : (
+          clients.map((client) => (
+            <Card
+              key={client.id}
+              className="hover:shadow-xl transition-all cursor-pointer border-2 hover:border-primary/50"
+              onClick={() => router.push(`/dashboard/clients/${client.id}`)}
+            >
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-2xl">{client.name}</CardTitle>
+                    {client.address && (
+                      <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+                        📍 {client.address}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+                  <Badge variant={client.activeJobs > 0 ? "default" : "secondary"}>
+                    {client.activeJobs} Active
+                  </Badge>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-2xl font-semibold">{client.jobCount}</div>
+                    <div className="text-xs text-muted-foreground">Total Jobs</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-semibold text-emerald-600">${client.totalDue}</div>
+                    <div className="text-xs text-muted-foreground">Due</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-semibold">{client.activeJobs}</div>
+                    <div className="text-xs text-muted-foreground">In Progress</div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t text-sm text-muted-foreground flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Last active: {client.lastActivity ? new Date(client.lastActivity).toLocaleDateString() : 'Never'}
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
     </div>
   )
 }

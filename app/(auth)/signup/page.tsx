@@ -1,6 +1,5 @@
 'use client'
-
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
@@ -16,6 +15,17 @@ export default function SignUp() {
   const [error, setError] = useState('')
   const router = useRouter()
   const supabase = createClient()
+
+  // Redirect if already logged in
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        router.push('/dashboard')
+      }
+    }
+    checkAuth()
+  }, [router, supabase])
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -93,13 +103,11 @@ export default function SignUp() {
                 required
               />
             </div>
-
             {error && (
               <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-xl">
                 {error}
               </div>
             )}
-
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Creating account...' : 'Create Account'}
             </Button>
