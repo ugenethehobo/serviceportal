@@ -89,15 +89,14 @@ export async function POST(request: NextRequest) {
 
     if (session.subscription) {
       try {
-        // Cast to Stripe.Subscription to satisfy TypeScript (retrieve returns Stripe.Response<Subscription>)
-        const stripeSub = (await stripe.subscriptions.retrieve(
+        const stripeSub = await stripe.subscriptions.retrieve(
           session.subscription as string
-        )) as Stripe.Subscription;
+        );
 
         subscriptionStatus = stripeSub.status;
         plan = stripeSub.items.data[0]?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly';
-        currentPeriodEnd = stripeSub.current_period_end 
-          ? new Date(stripeSub.current_period_end * 1000).toISOString() 
+        currentPeriodEnd = (stripeSub as any).current_period_end 
+          ? new Date((stripeSub as any).current_period_end * 1000).toISOString() 
           : null;
       } catch (e) {
         console.error('Failed to retrieve Stripe subscription details:', e);
