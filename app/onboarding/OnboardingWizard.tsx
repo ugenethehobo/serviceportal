@@ -45,6 +45,8 @@ export default function OnboardingWizard() {
   const [currentStep, setCurrentStep] = useState<'welcome' | number | 'complete'>('welcome')
   const [intakeData, setIntakeData] = useState<IntakeData>({})
   const [isCompleting, setIsCompleting] = useState(false)
+  const [provisioningStep, setProvisioningStep] = useState(0)
+  const [provisioningError, setProvisioningError] = useState<string | null>(null)
 
   const stepNumber = typeof currentStep === 'number' ? currentStep : 0
   const progress = stepNumber > 0 ? Math.round(((stepNumber - 1) / TOTAL_STEPS) * 100) : 0
@@ -66,7 +68,19 @@ export default function OnboardingWizard() {
 
     // Handle "Complete Setup" on the Review step (step 5)
     if (currentStep === 5) {
+      if (!sessionId) {
+        setProvisioningError('Missing Stripe session ID. Please go back to the pricing page and try again.');
+        return;
+      }
+
       setIsCompleting(true);
+      setProvisioningError(null);
+      setProvisioningStep(0);
+
+      // Start visual progress steps (these are optimistic but feel good)
+      const stepInterval = setInterval(() => {
+        setProvisioningStep(prev => Math.min(prev + 1, 3));
+      }, 1100);
 
       try {
         const res = await fetch('/api/onboarding/complete', {
@@ -81,18 +95,20 @@ export default function OnboardingWizard() {
         const result = await res.json();
 
         if (!res.ok) {
+          console.error('Onboarding complete failed:', result);
           throw new Error(result.error || 'Failed to complete onboarding');
         }
 
-        // Success — store result for the final screen and move forward
+        // Success — clear interval and move to completion screen
+        clearInterval(stepInterval);
         console.log('Provisioning result:', result);
         setCurrentStep('complete');
 
       } catch (error: any) {
+        clearInterval(stepInterval);
         console.error('Failed to complete onboarding:', error);
-        alert(error.message || 'Something went wrong. Please try again.');
-      } finally {
-        setIsCompleting(false);
+        setProvisioningError(error.message || 'Something went wrong. Please try again.');
+        setIsCompleting(false); // allow retry on error
       }
     }
   }
@@ -560,28 +576,77 @@ export default function OnboardingWizard() {
               </div>
             )}
 
-            {/* Navigation */}
-            <div className="flex justify-between pt-6 border-t">
-              <Button
-                variant="outline"
-                className="rounded-none"
-                onClick={prevStep}
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
-              </Button>
+            {/* Step 5 specific error / completion states */}
+            {currentStep === 5 && provisioningError && (
+              <div className="mt-6 border border-destructive bg-destructive/10 p-4 text-sm text-destructive rounded-none">
+                <strong>Failed to complete setup:</strong> {provisioningError}
+                <div className="mt-3">
+                  <Button 
+                    onClick={nextStep} 
+                    className="rounded-none"
+                    variant="outline"
+                  >
+                    Try Completing Setup Again
+                  </Button>
+                </div>
+              </div>
+            )}
 
-              <Button
-                className="rounded-none"
-                onClick={nextStep}
-                disabled={currentStep === 1 && !intakeData.company_name || isCompleting}
-              >
-                {isCompleting && currentStep === 5 ? 'Completing...' : 
-                 currentStep === 5 ? 'Complete Setup' : 
-                 currentStep === 4 ? 'Continue to Review' : 'Continue'}
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
+            {/* Special Provisioning Loading State for Step 5 */}
+            {currentStep === 5 && isCompleting && !provisioningError && (
+              <div className="py-8">
+                <div className="text-center mb-6">
+                  <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                  <h3 className="text-xl font-semibold tracking-tight">
+                    Setting up your ServicePortal account...
+                  </h3>
+                </div>
+
+                <div className="max-w-sm mx-auto space-y-2 text-sm">
+                  {[
+                    "Verifying payment with Stripe",
+                    "Creating your user account",
+                    "Applying your company settings & branding",
+                    "Sending your secure magic login link"
+                  ].map((label, index) => (
+                    <div 
+                      key={index}
+                      className={`flex items-center gap-2 p-2 border rounded-none ${
+                        provisioningStep >= index ? 'border-primary bg-primary/5' : 'border-border opacity-50'
+                      }`}
+                    >
+                      <span>{provisioningStep > index ? '✓' : index + 1}.</span>
+                      <span>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Normal Navigation (hidden during active provisioning on step 5) */}
+            {!(currentStep === 5 && isCompleting && !provisioningError) && (
+              <div className="flex justify-between pt-6 border-t">
+                <Button
+                  variant="outline"
+                  className="rounded-none"
+                  onClick={prevStep}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+
+                <Button
+                  className="rounded-none"
+                  onClick={nextStep}
+                  disabled={currentStep === 1 && !intakeData.company_name || isCompleting}
+                >
+                  {isCompleting && currentStep === 5 ? 'Completing...' : 
+                   currentStep === 5 ? 'Complete Setup' : 
+                   currentStep === 4 ? 'Continue to Review' : 'Continue'}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
