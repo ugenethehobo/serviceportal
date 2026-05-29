@@ -1,9 +1,10 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { OwnerCustomersTable } from './OwnerCustomersTable'
 
 export default async function OwnerDashboard() {
-  const supabase = await createClient()
+  // Use admin client so the owner can see *all* companies regardless of RLS
+  const supabase = createAdminClient()
 
   // Use the new companies table (migration has been applied)
   const { data: companies } = await supabase

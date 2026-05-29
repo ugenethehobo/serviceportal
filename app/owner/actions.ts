@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import Stripe from 'stripe'
 import { revalidatePath } from 'next/cache'
 import { isCurrentUserOwner } from '@/lib/authorization'
@@ -13,7 +13,8 @@ export async function deleteCompanyAsOwner(companyId: string) {
     throw new Error('Unauthorized')
   }
 
-  const supabase = await createClient()
+  // Always use admin client in owner actions so we can fully manage any company
+  const supabase = createAdminClient()
 
   // Get company details first
   const { data: company, error: companyFetchError } = await supabase

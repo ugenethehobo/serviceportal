@@ -1,11 +1,12 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { deleteCompanyAsOwner } from '../../actions'
 import { Button } from '@/components/ui/button'
 
 export default async function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = await createClient()
+  // Use admin client so owners can view any customer's details
+  const supabase = createAdminClient()
 
   // Try to load from onboarding_intakes (best source of full data)
   const { data: intake } = await supabase
