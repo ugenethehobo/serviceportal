@@ -85,9 +85,10 @@ export async function POST(request: NextRequest) {
             <p>This link will expire in 24 hours.</p>
           `,
         })
-      } catch (emailError) {
+      } catch (emailError: any) {
         console.error('Failed to send magic link email via Resend:', emailError)
         // Don't fail the whole provisioning if email sending fails
+        // In development, you might want to surface this
       }
     }
 

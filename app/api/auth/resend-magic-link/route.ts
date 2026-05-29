@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Generate link ourselves (bypasses Supabase rate limits)
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
@@ -40,9 +40,13 @@ export async function POST(request: NextRequest) {
       })
 
       return NextResponse.json({ success: true })
-    } catch (emailError) {
+    } catch (emailError: any) {
       console.error('Failed to send resend email via Resend:', emailError)
-      return NextResponse.json({ error: 'Failed to send email' }, { status: 500 })
+      // Return more details in development
+      const message = process.env.NODE_ENV === 'development' 
+        ? `Resend error: ${emailError?.message || emailError}` 
+        : 'Failed to send email';
+      return NextResponse.json({ error: message }, { status: 500 })
     }
   } catch (error: any) {
     console.error('Resend magic link error:', error)
