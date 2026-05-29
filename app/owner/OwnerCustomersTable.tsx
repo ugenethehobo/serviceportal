@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { deleteCompanyAsOwner } from './actions'
 
 interface Customer {
   id: string
@@ -24,6 +26,16 @@ interface OwnerCustomersTableProps {
 export function OwnerCustomersTable({ customers }: OwnerCustomersTableProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean
+    companyId: string
+    companyName: string
+  }>({
+    open: false,
+    companyId: '',
+    companyName: '',
+  })
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const filteredCustomers = customers
     .filter((customer) => {
@@ -40,6 +52,33 @@ export function OwnerCustomersTable({ customers }: OwnerCustomersTableProps) {
     { value: 'past_due', label: 'Past Due' },
     { value: 'canceled', label: 'Canceled' },
   ]
+
+  const handleDeleteClick = (customer: Customer) => {
+    setDeleteDialog({
+      open: true,
+      companyId: customer.id,
+      companyName: customer.name || 'Unnamed Company',
+    })
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteDialog.companyId) return
+
+    setIsDeleting(true)
+
+    try {
+      const result = await deleteCompanyAsOwner(deleteDialog.companyId)
+      // The server action already does revalidatePath
+      // We can close the dialog
+      setDeleteDialog({ open: false, companyId: '', companyName: '' })
+      alert(result.message || 'Company deleted successfully')
+    } catch (error: any) {
+      console.error('Delete failed:', error)
+      alert(`Failed to delete: ${error.message || 'Unknown error'}`)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   return (
     <Card className="rounded-none">
@@ -121,6 +160,12 @@ export function OwnerCustomersTable({ customers }: OwnerCustomersTableProps) {
                       <a href={`/dashboard`} className="text-muted-foreground hover:underline">
                         Impersonate
                       </a>
+                      <button
+                        onClick={() => handleDeleteClick(customer)}
+                        className="text-red-600 hover:text-red-700 hover:underline"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -129,6 +174,19 @@ export function OwnerCustomersTable({ customers }: OwnerCustomersTableProps) {
           </div>
         )}
       </CardContent>
+
+      <ConfirmDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => {
+          if (!open) setDeleteDialog({ open: false, companyId: '', companyName: '' })
+        }}
+        title="Delete Company?"
+        description={`This will permanently delete "${deleteDialog.companyName}" and all associated data (clients, jobs, settings, subscriptions, user account, etc.). This action cannot be undone.`}
+        confirmLabel={isDeleting ? "Deleting..." : "Delete Company"}
+        destructive
+        onConfirm={handleConfirmDelete}
+        loading={isDeleting}
+      />
     </Card>
   )
 }

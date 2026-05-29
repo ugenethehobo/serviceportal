@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { deleteCompanyAsOwner } from '../actions'
+import { Button } from '@/components/ui/button'
 
 export default async function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -69,6 +71,26 @@ export default async function CustomerDetail({ params }: { params: Promise<{ id:
 
       <div className="mt-6 text-xs text-muted-foreground">
         This page will become much richer once the full multi-tenant migration is applied and more data is being captured.
+      </div>
+
+      {/* Admin Delete Section */}
+      <div className="mt-12 border-t pt-8">
+        <div className="text-sm font-medium text-destructive mb-2">Danger Zone</div>
+        <form action={async () => {
+          'use server'
+          await deleteCompanyAsOwner(id)
+        }}>
+          <Button
+            type="submit"
+            variant="destructive"
+            className="rounded-none"
+          >
+            Admin Delete This Company
+          </Button>
+        </form>
+        <p className="text-xs text-muted-foreground mt-2">
+          Permanently removes the company, all related data, Stripe customer, and the user account. For testing/cleanup only.
+        </p>
       </div>
     </div>
   )
