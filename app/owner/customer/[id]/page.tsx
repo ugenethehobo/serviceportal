@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { deleteCompanyAsOwner } from '../actions'
+import { deleteCompanyAsOwner } from '../../actions'
 import { Button } from '@/components/ui/button'
 
 export default async function CustomerDetail({ params }: { params: Promise<{ id: string }> }) {
