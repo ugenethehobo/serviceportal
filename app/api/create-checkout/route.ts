@@ -44,6 +44,17 @@ export async function POST(request: NextRequest) {
     // Initialize Stripe with platform key
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
+    // Same robust base URL logic as the subscription checkout
+    const vercelUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : null;
+
+    const publicBaseUrl = 
+      process.env.NEXT_PUBLIC_PUBLIC_URL || 
+      vercelUrl || 
+      process.env.NEXT_PUBLIC_APP_URL || 
+      'http://localhost:3000';
+
     // Fetch the bills
     const { data: bills, error: billsError } = await supabase
       .from('bills')
@@ -70,12 +81,13 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         })),
         mode: 'payment',
+        // Use the same robust URL logic as the subscription checkout
         success_url: portalToken
-          ? `${process.env.NEXT_PUBLIC_APP_URL}/portal/${portalToken}?payment=success&session_id={CHECKOUT_SESSION_ID}`
-          : `${process.env.NEXT_PUBLIC_APP_URL}/portal/success`,
+          ? `${publicBaseUrl}/portal/${portalToken}?payment=success&session_id={CHECKOUT_SESSION_ID}`
+          : `${publicBaseUrl}/portal/success`,
         cancel_url: portalToken
-          ? `${process.env.NEXT_PUBLIC_APP_URL}/portal/${portalToken}?payment=cancelled`
-          : `${process.env.NEXT_PUBLIC_APP_URL}/portal/cancel`,
+          ? `${publicBaseUrl}/portal/${portalToken}?payment=cancelled`
+          : `${publicBaseUrl}/portal/cancel`,
         customer_email: clientEmail,
         metadata: {
           billIds: billIds.join(','),

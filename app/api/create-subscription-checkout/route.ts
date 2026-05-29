@@ -26,11 +26,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Allow overriding the public base URL for testing (e.g. via ngrok)
-    // Set NEXT_PUBLIC_PUBLIC_URL in .env.local when you want Stripe redirects
-    // to go through a public tunnel while developing on localhost.
+    // Determine the correct base URL for Stripe redirects.
+    // This logic is designed to work reliably in Production, Preview deployments, and local dev.
+    //
+    // Priority order:
+    // 1. NEXT_PUBLIC_PUBLIC_URL  → explicit override (e.g. ngrok for local testing)
+    // 2. VERCEL_URL              → the actual current deployment URL (best for Preview deploys)
+    // 3. NEXT_PUBLIC_APP_URL     → your configured main URL
+    // 4. localhost fallback
+    const vercelUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : null;
+
     const publicBaseUrl = 
       process.env.NEXT_PUBLIC_PUBLIC_URL || 
+      vercelUrl || 
       process.env.NEXT_PUBLIC_APP_URL || 
       'http://localhost:3000';
 
