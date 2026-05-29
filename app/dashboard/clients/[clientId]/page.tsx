@@ -108,7 +108,7 @@ export default function ClientDetailPage() {
     { description: '', amount: '' }
   ])
   const [savingEstimate, setSavingEstimate] = useState(false)
-  const [rightPanel, setRightPanel] = useState<'timeline' | 'estimates'>('timeline')
+  const [rightPanel, setRightPanel] = useState<'timeline' | 'estimates' | 'contracts'>('timeline')
   const [estimates, setEstimates] = useState<any[]>([])
   const [loadingEstimates, setLoadingEstimates] = useState(false)
   const [contracts, setContracts] = useState<any[]>([])
@@ -775,17 +775,21 @@ export default function ClientDetailPage() {
 
     // Build visual blocks for the timeline.
     // When it's today, we clamp past jobs so they don't appear as "available" on the left side of the bar.
-    const bookedBlocks = dayBookings.map((b) => {
-      const win = getJobTimeWindow(b)
-      if (!win.start || !win.end) return null
+    type TimelineBlock = { left: number; width: number; title: string; color: string; status: string }
 
-      const left = getTimelinePercent(win.start, tz, nowForClamping)
-      const right = getTimelinePercent(win.end, tz, nowForClamping)
-      const width = Math.max(1.5, right - left)
+    const bookedBlocks: TimelineBlock[] = dayBookings
+      .map((b): TimelineBlock | null => {
+        const win = getJobTimeWindow(b)
+        if (!win.start || !win.end) return null
 
-      const color = getStatusColor(b.status)
-      return { left, width, title: b.title, color, status: b.status }
-    }).filter(Boolean)
+        const left = getTimelinePercent(win.start, tz, nowForClamping)
+        const right = getTimelinePercent(win.end, tz, nowForClamping)
+        const width = Math.max(1.5, right - left)
+
+        const color = getStatusColor(b.status)
+        return { left, width, title: b.title, color, status: b.status }
+      })
+      .filter((block): block is TimelineBlock => block !== null)
 
     const proposedLeft = proposalStartISO
       ? getTimelinePercent(new Date(proposalStartISO), tz, nowForClamping)
@@ -1132,7 +1136,7 @@ export default function ClientDetailPage() {
             title: "Error",
             description: "Failed to update bill status.",
             confirmLabel: "OK",
-            onConfirm: () => setConfirmDialog({ open: false })
+            onConfirm: () => setConfirmDialog(prev => ({ ...prev, open: false }))
           })
         }
       }
@@ -2020,7 +2024,6 @@ export default function ClientDetailPage() {
                             <div className="text-center px-3">
                               <Select
                                 value={job.status}
-                                modal={false}
                                 onValueChange={async (newStatus) => {
                                   if (newStatus === job.status) return
                                   const { error } = await supabase.from('jobs').update({ status: newStatus }).eq('id', job.id)
@@ -2129,8 +2132,8 @@ export default function ClientDetailPage() {
                     {job.photos.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[280px] overflow-y-auto pr-1">
                         {Array.from(new Set(job.photos.map((p: any) => p.category)))
-                          .filter(Boolean)
-                          .map((category: string) => {
+                          .filter((c): c is string => Boolean(c))
+                          .map((category) => {
                             const categoryPhotos = job.photos.filter((p: any) => p.category === category).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                             const latestPhoto = categoryPhotos[0]
                             return (
@@ -2181,7 +2184,7 @@ export default function ClientDetailPage() {
                         const input = document.createElement('input')
                         input.type = 'file'
                         input.onchange = async (e) => {
-                          const file = e.target.files?.[0]
+                          const file = (e.target as HTMLInputElement | null)?.files?.[0]
                           if (!file) return
                           setUploading(true)
                           try {
