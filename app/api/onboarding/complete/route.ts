@@ -57,9 +57,10 @@ export async function POST(request: NextRequest) {
 
     const userId = authUser.user.id
 
-    // Send a password reset email so the user can set their own password (much better UX)
+    // Send a magic link so the user can set their password and log in.
+    // We send them through the auth callback so the session is properly established.
     await supabaseAdmin.auth.resetPasswordForEmail(customerEmail, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/login?reset=true`,
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/dashboard`,
     })
 
     // 3. Create Company record (new schema)

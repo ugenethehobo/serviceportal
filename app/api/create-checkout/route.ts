@@ -49,11 +49,28 @@ export async function POST(request: NextRequest) {
       ? `https://${process.env.VERCEL_URL}` 
       : null;
 
-    const publicBaseUrl = 
+    let publicBaseUrl = 
       process.env.NEXT_PUBLIC_PUBLIC_URL || 
       vercelUrl || 
       process.env.NEXT_PUBLIC_APP_URL || 
       'http://localhost:3000';
+
+    // Strong safety net for Vercel deployments
+    const isOnVercel = !!process.env.VERCEL_ENV;
+    const looksStale = 
+      publicBaseUrl.includes('ngrok') || 
+      publicBaseUrl.includes('localhost') ||
+      (isOnVercel && !publicBaseUrl.includes(process.env.VERCEL_URL || ''));
+
+    if (isOnVercel && looksStale && vercelUrl) {
+      console.warn(
+        `⚠️ Resolved publicBaseUrl looks stale ("${publicBaseUrl}"). ` +
+        `Falling back to current Vercel deployment URL.`
+      );
+      publicBaseUrl = vercelUrl;
+    }
+
+    console.log('[create-checkout] Using publicBaseUrl:', publicBaseUrl);
 
     // Fetch the bills
     const { data: bills, error: billsError } = await supabase

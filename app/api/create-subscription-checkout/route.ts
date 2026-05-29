@@ -27,22 +27,50 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine the correct base URL for Stripe redirects.
-    // This logic is designed to work reliably in Production, Preview deployments, and local dev.
+    // 
+    // For Vercel deployments (Preview or Production), we strongly prefer VERCEL_URL.
+    // This prevents the common problem of stale NEXT_PUBLIC_* URLs causing 404s on redirects.
     //
-    // Priority order:
-    // 1. NEXT_PUBLIC_PUBLIC_URL  → explicit override (e.g. ngrok for local testing)
-    // 2. VERCEL_URL              → the actual current deployment URL (best for Preview deploys)
-    // 3. NEXT_PUBLIC_APP_URL     → your configured main URL
-    // 4. localhost fallback
+    // Priority (highest first):
+    // 1. NEXT_PUBLIC_PUBLIC_URL  → only for local ngrok testing. Should be empty in Vercel.
+    // 2. VERCEL_URL              → injected by Vercel for the current deployment (best for previews)
+    // 3. NEXT_PUBLIC_APP_URL     → only really needed for Production custom domains
+    // 4. localhost
     const vercelUrl = process.env.VERCEL_URL 
       ? `https://${process.env.VERCEL_URL}` 
       : null;
 
-    const publicBaseUrl = 
+    let publicBaseUrl = 
       process.env.NEXT_PUBLIC_PUBLIC_URL || 
       vercelUrl || 
       process.env.NEXT_PUBLIC_APP_URL || 
       'http://localhost:3000';
+
+    // Strong safety net for Vercel: If we're on Vercel and the resolved URL looks like
+    // an old/stale value (ngrok, localhost, or a previous preview), prefer VERCEL_URL.
+    const isOnVercel = !!process.env.VERCEL_ENV;
+    const looksStale = 
+      publicBaseUrl.includes('ngrok') || 
+      publicBaseUrl.includes('localhost') ||
+      (isOnVercel && !publicBaseUrl.includes(process.env.VERCEL_URL || ''));
+
+    if (isOnVercel && looksStale && vercelUrl) {
+      console.warn(
+        `⚠️ Resolved publicBaseUrl looks stale ("${publicBaseUrl}"). ` +
+        `Falling back to current Vercel deployment URL.`
+      );
+      publicBaseUrl = vercelUrl;
+    }
+
+    console.log('[create-subscription-checkout] Using publicBaseUrl:', publicBaseUrl);
+
+    const fullSuccessUrl = `${publicBaseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
+    console.log('[create-subscription-checkout] Full success_url sent to Stripe:', fullSuccessUrl);
+
+    // Helpful log for debugging preview vs production issues
+    if (process.env.VERCEL_ENV) {
+      console.log(`[create-subscription-checkout] VERCEL_ENV=${process.env.VERCEL_ENV}, VERCEL_URL=${process.env.VERCEL_URL}`);
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
