@@ -11,14 +11,15 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Helper to safely access Stripe Subscription properties
-// This works around inconsistent Response<Subscription> typing between local and Vercel
-function getStripeSubProp<T extends keyof Stripe.Subscription>(
-  sub: Stripe.Subscription | any,
-  prop: T
-): Stripe.Subscription[T] {
-  return (sub as any)[prop];
-}
+/**
+ * Safely cast Stripe objects coming from webhooks or API responses.
+ *
+ * Stripe's TypeScript definitions frequently return `Response<T>` wrappers
+ * that don't expose all properties cleanly (especially under Turbopack on Vercel).
+ * This helper centralizes the pragmatic `as any` workaround so we can
+ * easily find and update these casts later.
+ */
+const asStripe = <T>(obj: any): T => obj as T;
 
 export async function POST(request: NextRequest) {
   const body = await request.text()
@@ -97,8 +98,9 @@ export async function POST(request: NextRequest) {
 
             // Create or update subscription record
             if (session.subscription) {
-              // Cast to any to work around Stripe's Response<Subscription> type (common TS issue on Vercel)
-              const stripeSub = await stripe.subscriptions.retrieve(session.subscription as string) as any;
+              const stripeSub = asStripe<Stripe.Subscription>(
+                await stripe.subscriptions.retrieve(session.subscription as string)
+              );
 
               await supabaseAdmin
                 .from('subscriptions')
@@ -122,8 +124,7 @@ export async function POST(request: NextRequest) {
       // ============================================
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
-        // Cast to any to bypass Stripe's Response<Subscription> typing (consistent with the retrieve workaround)
-        const subscription = event.data.object as any
+        const subscription = asStripe<Stripe.Subscription>(event.data.object)
         const customerId = typeof subscription.customer === 'string'
           ? subscription.customer
           : subscription.customer.id
@@ -152,7 +153,7 @@ export async function POST(request: NextRequest) {
               stripe_subscription_id: subscription.id,
               status: subscription.status,
               plan: subscription.items.data[0]?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly',
-              current_period_end: new Date((subscription as any).current_period_end * 1000).toISOString(),
+              current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
               amount: subscription.items.data[0]?.price?.unit_amount || 0,
               updated_at: new Date().toISOString(),
             }, { onConflict: 'stripe_subscription_id' })
@@ -164,7 +165,7 @@ export async function POST(request: NextRequest) {
       // Subscription Canceled / Deleted
       // ============================================
       case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription
+        const subscription = asStripe<Stripe.Subscription>(event.data.object)
         const customerId = typeof subscription.customer === 'string'
           ? subscription.customer
           : subscription.customer.id
@@ -198,7 +199,7 @@ export async function POST(request: NextRequest) {
       // Payment Failed
       // ============================================
       case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice
+        const invoice = asStripe<Stripe.Invoice>(event.data.object)
         if (invoice.subscription && invoice.customer) {
           const customerId = typeof invoice.customer === 'string'
             ? invoice.customer
@@ -231,7 +232,7 @@ export async function POST(request: NextRequest) {
       // Payment Succeeded
       // ============================================
       case 'invoice.payment_succeeded': {
-        const invoice = event.data.object as Stripe.Invoice
+        const invoice = asStripe<Stripe.Invoice>(event.data.object)
         if (invoice.subscription && invoice.customer) {
           const customerId = typeof invoice.customer === 'string'
             ? invoice.customer
