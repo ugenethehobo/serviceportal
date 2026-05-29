@@ -48,6 +48,12 @@ export default function OnboardingWizard() {
   const [provisioningStep, setProvisioningStep] = useState(0)
   const [provisioningError, setProvisioningError] = useState<string | null>(null)
 
+  // Completion screen states — must be declared at the top (before any early returns)
+  // to satisfy React's Rules of Hooks. These were previously declared after conditional
+  // returns, causing "Rendered more hooks than during the previous render" (React #310).
+  const [resending, setResending] = useState(false)
+  const [resendMessage, setResendMessage] = useState<string | null>(null)
+
   const stepNumber = typeof currentStep === 'number' ? currentStep : 0
   const progress = stepNumber > 0 ? Math.round(((stepNumber - 1) / TOTAL_STEPS) * 100) : 0
 
@@ -654,9 +660,6 @@ export default function OnboardingWizard() {
   }
 
   // ==================== COMPLETION SCREEN ====================
-  const [resending, setResending] = useState(false)
-  const [resendMessage, setResendMessage] = useState<string | null>(null)
-
   const handleResendMagicLink = async () => {
     if (!intakeData.company_email) return
 
