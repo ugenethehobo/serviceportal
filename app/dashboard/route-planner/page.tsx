@@ -178,18 +178,19 @@ export default function RoutePlannerPage() {
       setGeocodingStatus(prev => ({ ...prev, company: 'pending' }))
       companyCoords = await geocodeAddress(companyAddr, passedToken)
       if (companyCoords) {
+        const coords = companyCoords // capture narrowed non-null value for use inside state updater callbacks
         const companyStopForSave = {
           job: { client_id: '' } as any,
-          lat: companyCoords.lat,
-          lng: companyCoords.lng,
+          lat: coords.lat,
+          lng: coords.lng,
           address: companyAddr,
         }
 
         setCompanyInfo(prev => ({
           ...prev,
           address: companyAddr,
-          lat: companyCoords.lat,
-          lng: companyCoords.lng
+          lat: coords.lat,
+          lng: coords.lng
         }))
         setGeocodingStatus(prev => ({ ...prev, company: 'success' }))
 

@@ -455,7 +455,7 @@ export function doTimeWindowsOverlap(
 ): boolean {
   const A = normalizeWindow(aStart, aEnd, defaultDurationMinutes);
   const B = normalizeWindow(bStart, bEnd, defaultDurationMinutes);
-  if (!A.start || !B.start) return false;
+  if (!A.start || !B.start || !A.end || !B.end) return false;
 
   // Classic interval overlap: max(start) < min(end)
   const latestStart = A.start > B.start ? A.start : B.start;

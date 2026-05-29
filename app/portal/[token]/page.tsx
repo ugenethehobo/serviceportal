@@ -534,8 +534,8 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
     }
   }
 
-  const allPhotos = jobs.flatMap(job =>
-    (job.photos || []).map((file: any) => ({
+  const allPhotos = jobs.flatMap((job: any) =>
+    ((job.photos || job.files?.filter((f: any) => f.file_type === 'photo') || [])).map((file: any) => ({
       ...file,
       jobTitle: job.title
     }))
