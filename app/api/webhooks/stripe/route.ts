@@ -11,6 +11,15 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Helper to safely access Stripe Subscription properties
+// This works around inconsistent Response<Subscription> typing between local and Vercel
+function getStripeSubProp<T extends keyof Stripe.Subscription>(
+  sub: Stripe.Subscription | any,
+  prop: T
+): Stripe.Subscription[T] {
+  return (sub as any)[prop];
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.text()
   const signature = request.headers.get('stripe-signature')
@@ -65,8 +74,8 @@ export async function POST(request: NextRequest) {
         if (session.mode === 'subscription' && session.customer) {
           console.log('✅ Processing subscription checkout completed:', event.id)
 
-          const customerId = typeof session.customer === 'string' 
-            ? session.customer 
+          const customerId = typeof session.customer === 'string'
+            ? session.customer
             : session.customer.id
 
           // Find the company by stripe_customer_id
@@ -113,9 +122,10 @@ export async function POST(request: NextRequest) {
       // ============================================
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
-        const subscription = event.data.object as Stripe.Subscription
-        const customerId = typeof subscription.customer === 'string' 
-          ? subscription.customer 
+        // Cast to any to bypass Stripe's Response<Subscription> typing (consistent with the retrieve workaround)
+        const subscription = event.data.object as any
+        const customerId = typeof subscription.customer === 'string'
+          ? subscription.customer
           : subscription.customer.id
 
         console.log(`✅ Processing ${event.type}:`, event.id)
@@ -142,7 +152,7 @@ export async function POST(request: NextRequest) {
               stripe_subscription_id: subscription.id,
               status: subscription.status,
               plan: subscription.items.data[0]?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly',
-              current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+              current_period_end: new Date((subscription as any).current_period_end * 1000).toISOString(),
               amount: subscription.items.data[0]?.price?.unit_amount || 0,
               updated_at: new Date().toISOString(),
             }, { onConflict: 'stripe_subscription_id' })
@@ -155,8 +165,8 @@ export async function POST(request: NextRequest) {
       // ============================================
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription
-        const customerId = typeof subscription.customer === 'string' 
-          ? subscription.customer 
+        const customerId = typeof subscription.customer === 'string'
+          ? subscription.customer
           : subscription.customer.id
 
         console.log('⚠️ Processing subscription cancellation:', event.id)
@@ -175,7 +185,7 @@ export async function POST(request: NextRequest) {
 
           await supabaseAdmin
             .from('subscriptions')
-            .update({ 
+            .update({
               status: 'canceled',
               updated_at: new Date().toISOString()
             })
@@ -190,8 +200,8 @@ export async function POST(request: NextRequest) {
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice
         if (invoice.subscription && invoice.customer) {
-          const customerId = typeof invoice.customer === 'string' 
-            ? invoice.customer 
+          const customerId = typeof invoice.customer === 'string'
+            ? invoice.customer
             : invoice.customer.id
 
           console.log('❌ Processing payment failure:', event.id)
@@ -223,8 +233,8 @@ export async function POST(request: NextRequest) {
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice
         if (invoice.subscription && invoice.customer) {
-          const customerId = typeof invoice.customer === 'string' 
-            ? invoice.customer 
+          const customerId = typeof invoice.customer === 'string'
+            ? invoice.customer
             : invoice.customer.id
 
           const { data: company } = await supabaseAdmin
@@ -255,7 +265,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true })
   } catch (error: any) {
     console.error('Error processing webhook event:', error)
-    
+
     // For critical events, we may want Stripe to retry.
     // Return 500 for important subscription events.
     const criticalEvents = [
