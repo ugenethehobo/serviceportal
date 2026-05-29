@@ -12,7 +12,10 @@ interface Message {
   content: string
   is_from_client: boolean
   created_at: string
-  clients: { name: string }
+  client_id: string
+  clients?: { name: string } | null
+  read?: boolean
+  sender_id?: string
 }
 
 export default function MessagesPage() {
