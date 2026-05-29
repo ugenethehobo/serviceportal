@@ -53,6 +53,7 @@ export default function OnboardingWizard() {
   // returns, causing "Rendered more hooks than during the previous render" (React #310).
   const [resending, setResending] = useState(false)
   const [resendMessage, setResendMessage] = useState<string | null>(null)
+  const [resendCooldown, setResendCooldown] = useState(0)
 
   const stepNumber = typeof currentStep === 'number' ? currentStep : 0
   const progress = stepNumber > 0 ? Math.round(((stepNumber - 1) / TOTAL_STEPS) * 100) : 0
@@ -661,7 +662,7 @@ export default function OnboardingWizard() {
 
   // ==================== COMPLETION SCREEN ====================
   const handleResendMagicLink = async () => {
-    if (!intakeData.company_email) return
+    if (!intakeData.company_email || resendCooldown > 0) return
 
     setResending(true)
     setResendMessage(null)
@@ -677,6 +678,17 @@ export default function OnboardingWizard() {
 
       if (result.success) {
         setResendMessage('Magic link sent! Check your email.')
+        // Start a 60-second cooldown to avoid hitting Supabase rate limits
+        setResendCooldown(60)
+        const interval = setInterval(() => {
+          setResendCooldown((prev) => {
+            if (prev <= 1) {
+              clearInterval(interval)
+              return 0
+            }
+            return prev - 1
+          })
+        }, 1000)
       } else {
         setResendMessage(result.error || 'Failed to send magic link.')
       }
@@ -719,9 +731,14 @@ export default function OnboardingWizard() {
             variant="outline"
             className="rounded-none w-full"
             onClick={handleResendMagicLink}
-            disabled={resending}
+            disabled={resending || resendCooldown > 0}
           >
-            {resending ? 'Sending...' : 'Resend Magic Link'}
+            {resending 
+              ? 'Sending...' 
+              : resendCooldown > 0 
+                ? `Resend Magic Link (${resendCooldown}s)` 
+                : 'Resend Magic Link'
+            }
           </Button>
         )}
 

@@ -57,11 +57,39 @@ export async function POST(request: NextRequest) {
 
     const userId = authUser.user.id
 
-    // Send a magic link so the user can set their password and log in.
-    // We send them through the auth callback so the session is properly established.
-    await supabaseAdmin.auth.resetPasswordForEmail(customerEmail, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/dashboard`,
+    // Generate the magic link ourselves using the Admin API (bypasses Supabase email rate limits)
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery', // This gives a "set password" style magic link
+      email: customerEmail,
+      options: {
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/dashboard`,
+      },
     })
+
+    if (linkError || !linkData?.properties?.action_link) {
+      console.error('Failed to generate magic link:', linkError)
+      // Still continue — the user account exists, they can request a new link later
+    } else {
+      // Send the magic link via Resend (proper transactional email)
+      try {
+        const resend = new (await import('resend')).Resend(process.env.RESEND_API_KEY!)
+
+        await resend.emails.send({
+          from: process.env.RESEND_FROM_EMAIL || 'ServicePortal <onboarding@resend.dev>',
+          to: customerEmail,
+          subject: 'Set up your ServicePortal account',
+          html: `
+            <p>Welcome to ServicePortal!</p>
+            <p>Click the link below to set your password and access your account:</p>
+            <p><a href="${linkData.properties.action_link}">Set up my account →</a></p>
+            <p>This link will expire in 24 hours.</p>
+          `,
+        })
+      } catch (emailError) {
+        console.error('Failed to send magic link email via Resend:', emailError)
+        // Don't fail the whole provisioning if email sending fails
+      }
+    }
 
     // 3. Create Company record (new schema)
     const { data: company, error: companyError } = await supabaseAdmin
