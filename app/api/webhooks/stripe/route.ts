@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       // Subscription Checkout Completed
       // ============================================
       case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session
+        const session = asStripe<Stripe.Checkout.Session>(event.data.object)
 
         if (session.mode === 'subscription' && session.customer) {
           console.log('✅ Processing subscription checkout completed:', event.id)
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
             // Create or update subscription record
             if (session.subscription) {
-              const stripeSub = asStripe<Stripe.Subscription>(
+              const stripeSub = asStripe<any>(
                 await stripe.subscriptions.retrieve(session.subscription as string)
               );
 
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       // ============================================
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
-        const subscription = asStripe<Stripe.Subscription>(event.data.object)
+        const subscription = asStripe<any>(event.data.object)
         const customerId = typeof subscription.customer === 'string'
           ? subscription.customer
           : subscription.customer.id
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
       // Subscription Canceled / Deleted
       // ============================================
       case 'customer.subscription.deleted': {
-        const subscription = asStripe<Stripe.Subscription>(event.data.object)
+        const subscription = asStripe<any>(event.data.object)
         const customerId = typeof subscription.customer === 'string'
           ? subscription.customer
           : subscription.customer.id
@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
       // Payment Failed
       // ============================================
       case 'invoice.payment_failed': {
-        const invoice = asStripe<Stripe.Invoice>(event.data.object)
+        const invoice = asStripe<any>(event.data.object)
         if (invoice.subscription && invoice.customer) {
           const customerId = typeof invoice.customer === 'string'
             ? invoice.customer
@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
       // Payment Succeeded
       // ============================================
       case 'invoice.payment_succeeded': {
-        const invoice = asStripe<Stripe.Invoice>(event.data.object)
+        const invoice = asStripe<any>(event.data.object)
         if (invoice.subscription && invoice.customer) {
           const customerId = typeof invoice.customer === 'string'
             ? invoice.customer
