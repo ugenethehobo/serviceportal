@@ -11,10 +11,10 @@ export async function getSubscriptionStatusAction() {
 
 export async function createClientAction(formData: {
   name: string
-  email?: string
-  phone?: string
-  address?: string
-  notes?: string
+  email?: string | null
+  phone?: string | null
+  address?: string | null
+  notes?: string | null
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

@@ -262,9 +262,9 @@ export default function LeadsPage() {
           const { createClientAction } = await import('../clients/actions')
           const result = await createClientAction({
             name: lead.name,
-            email: lead.email,
-            phone: lead.phone,
-            address: lead.address,
+            email: lead.email || undefined,
+            phone: lead.phone || undefined,
+            address: lead.address || undefined,
             notes: lead.notes ? `Converted from lead on ${new Date().toLocaleDateString()}. Original notes: ${lead.notes}` : `Converted from lead on ${new Date().toLocaleDateString()}`,
           })
 
