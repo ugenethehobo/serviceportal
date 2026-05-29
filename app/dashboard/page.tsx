@@ -68,7 +68,7 @@ export default async function Dashboard() {
     supabase.from('jobs').select('*').eq('status', 'in_progress').lt('scheduled_date', new Date().toISOString()),
     supabase.from('bills').select('amount').eq('status', 'pending'),
     supabase.from('clients').select('*').gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
-    supabase.from('jobs').select('price'),
+    supabase.from('jobs').select('price, status'),
     supabase.from('leads').select('id, created_at'),   // for pipeline glance + age buckets
     supabase.from('company_settings')
       .select('lead_fresh_days, lead_stale_days, job_statuses, primary_color, route_planner_enabled, mapbox_access_token')
@@ -82,10 +82,19 @@ export default async function Dashboard() {
   ])
 
   // Company settings (with safe defaults matching Settings/Leads page)
-  const companySettings = settingsData || {}
+  // Explicit type to satisfy strict TS checking on Vercel (settingsData from .single() can be null)
+  type CompanySettings = {
+    lead_fresh_days?: number
+    lead_stale_days?: number
+    job_statuses?: any[]
+    primary_color?: string
+    route_planner_enabled?: boolean
+    mapbox_access_token?: string
+  }
+  const companySettings = (settingsData ?? {}) as CompanySettings
   const leadFreshDays = companySettings.lead_fresh_days ?? 7
   const leadStaleDays = companySettings.lead_stale_days ?? 30
-  const jobStatusCustomColors = companySettings.job_statuses || [] // array of {key, label, color} if present
+  const jobStatusCustomColors = companySettings.job_statuses || []
   const primaryColor = companySettings.primary_color || null
   const routePlannerEnabled = companySettings.route_planner_enabled ?? false
   const hasMapboxToken = !!companySettings.mapbox_access_token
@@ -105,18 +114,18 @@ export default async function Dashboard() {
   const unreadMessageCount = unreadMessages?.length || 0
   const jobsDueThisWeekCount = jobsDueThisWeek?.length || 0
   const overdueJobsCount = overdueJobs?.length || 0
-  const totalOutstanding = outstandingBills?.reduce((sum, bill) => sum + (bill.amount || 0), 0) || 0
+  const totalOutstanding = outstandingBills?.reduce((sum: number, bill: any) => sum + (bill.amount || 0), 0) || 0
   const newClientsThisMonthCount = newClientsThisMonth?.length || 0
   const totalJobsCount = allJobs?.length || 0
   const averageJobValue = totalJobsCount > 0
-    ? Math.round((allJobs?.reduce((sum, job) => sum + (job.price || 0), 0) || 0) / totalJobsCount)
+    ? Math.round((allJobs?.reduce((sum: number, job: any) => sum + (job.price || 0), 0) || 0) / totalJobsCount)
     : 0
   const completionRate = totalJobsCount > 0
     ? Math.round((completedThisMonthCount / totalJobsCount) * 100)
     : 0
 
   // MTD Revenue (from the dedicated recent paid bills query)
-  const mtdRevenue = (mtdPaidBills?.data || []).reduce((sum, bill) => sum + (bill.amount || 0), 0)
+  const mtdRevenue = (mtdPaidBills || []).reduce((sum: number, bill: any) => sum + (bill.amount || 0), 0)
 
   // Job status distribution (for visual breakdown in Pipeline section)
   const statusDistribution: Record<string, number> = {}
