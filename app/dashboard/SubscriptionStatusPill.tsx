@@ -3,11 +3,26 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
+async function isCurrentUserOwner(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/auth/is-owner', { method: 'GET' })
+    if (!res.ok) return false
+    const data = await res.json()
+    return !!data.isOwner
+  } catch {
+    return false
+  }
+}
+
 export function SubscriptionStatusPill() {
   const [status, setStatus] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
+      // Owners never see the status pill
+      const isOwner = await isCurrentUserOwner()
+      if (isOwner) return
+
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return

@@ -23,30 +23,43 @@ export async function createClientAction(formData: {
     return { success: false, error: 'Not authenticated' }
   }
 
-  // Check subscription health first
-  const subStatus = await getCurrentSubscriptionStatus()
-  if (!subStatus.isActive) {
-    let message = 'Your subscription is not active. Please update your billing to continue adding clients.'
+  // Owners have unrestricted access — skip all subscription/trial checks
+  const ownerEmails = (process.env.OWNER_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean)
 
-    if (subStatus.status === 'past_due') {
-      message = 'Your payment is past due. Please update your payment method to add more clients.'
-    } else if (subStatus.status === 'canceled' || subStatus.status === 'unpaid') {
-      message = 'Your subscription has been canceled. Please resubscribe to continue.'
+  const isOwner = ownerEmails.includes(user.email?.toLowerCase() || '')
+
+  let subStatus: any = { isActive: true, status: 'active' }
+  let trialCheck: { allowed: boolean; reason?: string } = { allowed: true }
+
+  if (!isOwner) {
+    // Check subscription health first (non-owners only)
+    subStatus = await getCurrentSubscriptionStatus()
+    if (!subStatus.isActive) {
+      let message = 'Your subscription is not active. Please update your billing to continue adding clients.'
+
+      if (subStatus.status === 'past_due') {
+        message = 'Your payment is past due. Please update your payment method to add more clients.'
+      } else if (subStatus.status === 'canceled' || subStatus.status === 'unpaid') {
+        message = 'Your subscription has been canceled. Please resubscribe to continue.'
+      }
+
+      return {
+        success: false,
+        error: message,
+      }
     }
 
-    return {
-      success: false,
-      error: message,
-    }
-  }
-
-  // Then check trial limits (if still on trial)
-  const trialCheck = await canCreateAnotherClient()
-  if (!trialCheck.allowed) {
-    return {
-      success: false,
-      error: trialCheck.reason || 'Trial limit reached',
-      trialInfo: trialCheck,
+    // Then check trial limits (if still on trial)
+    trialCheck = await canCreateAnotherClient()
+    if (!trialCheck.allowed) {
+      return {
+        success: false,
+        error: trialCheck.reason || 'Trial limit reached',
+        trialInfo: trialCheck,
+      }
     }
   }
 
@@ -68,8 +81,8 @@ export async function createClientAction(formData: {
     return { success: false, error: error.message }
   }
 
-  // Increment trial count if still on trial
-  if (company?.id && subStatus.status === 'trialing') {
+  // Only increment trial count for non-owners who are still trialing
+  if (!isOwner && company?.id && subStatus.status === 'trialing') {
     await incrementTrialClientCount(company.id)
   }
 

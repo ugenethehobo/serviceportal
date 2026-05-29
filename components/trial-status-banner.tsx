@@ -4,6 +4,18 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { AlertTriangle } from 'lucide-react'
 
+/** Check if current user is an owner via server action (safe for client) */
+async function isCurrentUserOwner(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/auth/is-owner', { method: 'GET' })
+    if (!res.ok) return false
+    const data = await res.json()
+    return !!data.isOwner
+  } catch {
+    return false
+  }
+}
+
 interface TrialStatus {
   isTrialing: boolean
   clientsUsed: number
@@ -16,6 +28,10 @@ export function TrialStatusBanner() {
 
   useEffect(() => {
     async function loadTrialStatus() {
+      // Don't show trial banner for owners
+      const isOwner = await isCurrentUserOwner()
+      if (isOwner) return
+
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return

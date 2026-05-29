@@ -19,6 +19,16 @@ export async function canUserPerformAction(action: 'create_client' | 'create_job
     return { allowed: false, reason: 'Not authenticated' }
   }
 
+  // Owners bypass all subscription and trial restrictions
+  const ownerEmails = (process.env.OWNER_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean)
+
+  if (ownerEmails.includes(user.email?.toLowerCase() || '')) {
+    return { allowed: true, status: 'active' }
+  }
+
   const subscription = await getCurrentSubscriptionStatus()
 
   // If subscription is not active/trialing, block most actions
@@ -59,4 +69,22 @@ export async function requireActionPermission(action: 'create_client' | 'create_
   if (!check.allowed) {
     throw new Error(check.reason || 'Action not allowed due to subscription status.')
   }
+}
+
+/**
+ * Checks if the currently authenticated user is in the OWNER_EMAILS allowlist.
+ * Used to show admin-only UI (owner banner, owner console access, etc.).
+ */
+export async function isCurrentUserOwner(): Promise<boolean> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user?.email) return false
+
+  const ownerEmails = (process.env.OWNER_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean)
+
+  return ownerEmails.includes(user.email.toLowerCase())
 }

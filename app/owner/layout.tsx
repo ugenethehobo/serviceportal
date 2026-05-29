@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { isCurrentUserOwner } from '@/lib/authorization'
 
-const OWNER_EMAILS = (process.env.OWNER_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
-
-// Simple owner protection. Add OWNER_EMAILS=you@email.com,other@email.com to .env.local
+// Simple owner protection using the centralized helper.
+// Add OWNER_EMAILS=you@email.com,other@email.com to .env.local (or Vercel env vars)
 
 export default async function OwnerLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -13,9 +13,9 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
     redirect('/login')
   }
 
-  const userEmail = user.email?.toLowerCase()
+  const isOwner = await isCurrentUserOwner()
 
-  if (!userEmail || (OWNER_EMAILS.length > 0 && !OWNER_EMAILS.includes(userEmail))) {
+  if (!isOwner) {
     // Not an owner — send them away
     redirect('/dashboard')
   }
@@ -24,13 +24,22 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
     <div className="min-h-screen bg-background">
       <div className="border-b bg-card">
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg tracking-[-1px]">SP</span>
-            </div>
-            <div>
-              <span className="font-semibold tracking-widest">SERVICEPORTAL</span>
-              <span className="ml-2 text-sm text-muted-foreground">Owner Console</span>
+          <div className="flex items-center gap-4">
+            <a 
+              href="/dashboard" 
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← Back to Dashboard
+            </a>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-primary flex items-center justify-center">
+                <span className="text-primary-foreground font-bold text-lg tracking-[-1px]">SP</span>
+              </div>
+              <div>
+                <span className="font-semibold tracking-widest">SERVICEPORTAL</span>
+                <span className="ml-2 text-sm text-muted-foreground">Owner Console</span>
+              </div>
             </div>
           </div>
           <div className="text-sm text-muted-foreground">

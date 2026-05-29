@@ -1,5 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 
+/** Pure helper — no Supabase call */
+function getOwnerEmails(): string[] {
+  return (process.env.OWNER_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean)
+}
+
 export type SubscriptionStatus = 
   | 'active' 
   | 'trialing' 
@@ -26,6 +34,18 @@ export async function getCurrentSubscriptionStatus(): Promise<SubscriptionInfo> 
 
   if (!user) {
     return { status: 'unknown', isActive: false, isPastDue: false, isCanceled: false }
+  }
+
+  // Owners get full access regardless of any company's subscription state
+  const ownerEmails = getOwnerEmails()
+  if (ownerEmails.includes(user.email?.toLowerCase() || '')) {
+    return {
+      status: 'active',
+      isActive: true,
+      isPastDue: false,
+      isCanceled: false,
+      plan: 'owner',
+    }
   }
 
   const { data: company } = await supabase

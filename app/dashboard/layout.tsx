@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import SidebarNav from './sidebar'
 import { SubscriptionStatus } from '@/components/subscription-status'
+import OwnerBanner from '@/components/owner-banner'
 
 export async function generateMetadata() {
   const supabase = await createClient()
@@ -101,6 +102,10 @@ export default async function DashboardLayout({
       {/* Main Content */}
       <div className="flex-1 overflow-auto">
         <div className="p-8">
+          {/* Owner banner only appears in the normal dashboard.
+              It is intentionally not rendered on /owner routes because
+              those use a completely separate layout (app/owner/layout.tsx). */}
+          <OwnerBanner />
           <SubscriptionStatus />
           {children}
         </div>

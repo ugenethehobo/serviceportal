@@ -1,5 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 
+/** Pure helper — no Supabase call */
+function getOwnerEmails(): string[] {
+  return (process.env.OWNER_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean)
+}
+
 /**
  * Checks whether a company (belonging to the current user) can create another client
  * under the "first N clients free" trial model.
@@ -10,6 +18,12 @@ export async function canCreateAnotherClient(): Promise<{ allowed: boolean; reas
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return { allowed: false, reason: 'Not authenticated' }
+  }
+
+  // Owners have unlimited access — bypass all trial/subscription limits
+  const ownerEmails = getOwnerEmails()
+  if (ownerEmails.includes(user.email?.toLowerCase() || '')) {
+    return { allowed: true }
   }
 
   // Find the company this user owns (via company_users or owner_user_id)
