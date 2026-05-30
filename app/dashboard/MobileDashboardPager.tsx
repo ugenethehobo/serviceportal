@@ -338,7 +338,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                 })
               }
             }}
-            className={`rounded-full cursor-pointer flex-shrink-0 transition-all ${
+            className={`dashboard-page-dot rounded-full flex-shrink-0 transition-colors ${
               currentPage === index 
                 ? 'w-2 h-2 bg-primary' 
                 : 'w-2 h-2 bg-muted-foreground/40 hover:bg-muted-foreground/70'

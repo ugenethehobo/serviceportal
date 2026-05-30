@@ -137,5 +137,11 @@
       min-height: 44px;
       min-width: 44px;
     }
+
+    /* Exception for small page indicator dots in mobile pagers - keep them actual circles */
+    .dashboard-page-dot {
+      min-height: 0 !important;
+      min-width: 0 !important;
+    }
   }
 }
