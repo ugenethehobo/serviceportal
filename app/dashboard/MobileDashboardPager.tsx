@@ -90,7 +90,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
   }
 
   return (
-    <div className="lg:hidden">
+    <div className="lg:hidden"> {/* All elements inside are forced square for mobile */}
 
       <div 
         ref={scrollerRef}
@@ -99,7 +99,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
         
         {/* Page 1: Today & Upcoming (pure - no stats) */}
         <div className="min-w-[92vw] snap-start">
-          <Card className="border-l-4 border-l-primary h-full">
+          <Card className="border-l-4 border-l-primary h-full rounded-none">
             <CardHeader className="flex flex-row items-center justify-between py-3">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4" />
@@ -122,7 +122,11 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                       {todayJobs.slice(0, 4).map((job: any) => {
                         const color = customColorMap[job.status] || getStatusColor(job.status);
                         return (
-                          <div key={job.id} className="border p-3 text-sm rounded-xl">
+                          <div 
+                            key={job.id} 
+                            className="border p-3 text-sm rounded-none"
+                            style={{ borderLeftColor: color, borderLeftWidth: '4px' }}
+                          >
                             <div className="font-medium truncate">{job.title || 'Untitled job'}</div>
                             <div className="text-xs text-muted-foreground mt-1">
                               {new Date(job.scheduled_date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
@@ -132,13 +136,13 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                       })}
                     </div>
                   ) : (
-                    <div className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-xl">
+                    <div className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-none">
                       No jobs scheduled for today
                     </div>
                   )}
                 </div>
 
-                {/* Upcoming */}
+                {/* Upcoming - with status colors */}
                 <div>
                   <div className="flex justify-between items-baseline mb-2">
                     <div className="text-sm font-semibold">Next 7 Days</div>
@@ -146,14 +150,21 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                   </div>
                   {upcomingJobs.length > 0 ? (
                     <div className="flex gap-2 overflow-x-auto pb-1">
-                      {upcomingJobs.slice(0, 5).map((job: any) => (
-                        <div key={job.id} className="min-w-[150px] flex-shrink-0 border p-3 text-sm rounded-xl">
-                          <div className="font-medium truncate leading-tight">{job.title}</div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {new Date(job.scheduled_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      {upcomingJobs.slice(0, 5).map((job: any) => {
+                        const color = customColorMap[job.status] || getStatusColor(job.status);
+                        return (
+                          <div 
+                            key={job.id} 
+                            className="min-w-[150px] flex-shrink-0 border p-3 text-sm rounded-none"
+                            style={{ borderLeftColor: color, borderLeftWidth: '4px' }}
+                          >
+                            <div className="font-medium truncate leading-tight">{job.title}</div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {new Date(job.scheduled_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground py-4">No upcoming jobs</div>
@@ -166,7 +177,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
 
         {/* Page 2: Leads Pipeline ONLY */}
         <div className="min-w-[92vw] snap-start">
-          <Card className="h-full">
+          <Card className="h-full rounded-none">
             <CardHeader>
               <CardTitle className="text-base">Leads Pipeline</CardTitle>
             </CardHeader>
@@ -177,7 +188,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between border p-4 rounded-2xl">
+                <div className="flex items-center justify-between border p-4">
                   <div>
                     <div className="font-medium">Fresh</div>
                     <div className="text-xs text-muted-foreground">High priority</div>
@@ -185,7 +196,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                   <div className="text-3xl font-semibold text-green-600">{freshLeads}</div>
                 </div>
 
-                <div className="flex items-center justify-between border p-4 rounded-2xl">
+                <div className="flex items-center justify-between border p-4">
                   <div>
                     <div className="font-medium">Aging</div>
                     <div className="text-xs text-muted-foreground">Needs attention</div>
@@ -193,7 +204,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                   <div className="text-3xl font-semibold text-amber-600">{agingLeads}</div>
                 </div>
 
-                <div className="flex items-center justify-between border p-4 rounded-2xl">
+                <div className="flex items-center justify-between border p-4">
                   <div>
                     <div className="font-medium">Stale</div>
                     <div className="text-xs text-muted-foreground">Follow up urgently</div>
@@ -204,7 +215,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
 
               <Link 
                 href="/dashboard/leads" 
-                className="block w-full text-center py-3 text-sm font-medium border rounded-2xl hover:bg-muted"
+                className="block w-full text-center py-3 text-sm font-medium border hover:bg-muted"
               >
                 Manage Leads →
               </Link>
@@ -214,7 +225,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
 
         {/* Page 3: Route Planner */}
         <div className="min-w-[92vw] snap-start">
-          <Card className="relative min-h-[320px] overflow-hidden p-0 rounded-2xl">
+          <Card className="relative min-h-[320px] overflow-hidden p-0 rounded-none">
             <div className="absolute inset-0 z-0">
               <RoutePlannerPreviewWrapper points={routePreviewPoints} />
             </div>
@@ -241,7 +252,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                 <Button 
                   asChild 
                   size="lg" 
-                  className="w-full bg-white text-black hover:bg-white/95 rounded-2xl h-12 text-base font-medium"
+                  className="w-full bg-white text-black hover:bg-white/95 h-12 text-base font-medium rounded-none"
                   disabled={!routePlannerEnabled}
                 >
                   <Link href="/dashboard/route-planner">
@@ -257,27 +268,27 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
         <div className="min-w-[92vw] snap-start">
           <div className="space-y-4">
             {/* Key Metrics */}
-            <Card>
+            <Card className="rounded-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Key Metrics</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="border p-4 rounded-2xl">
+                  <div className="border p-4">
                     <div className="text-xs text-muted-foreground">Today</div>
                     <div className="text-3xl font-semibold mt-1 tabular-nums">{jobsDueThisWeekCount}</div>
                   </div>
-                  <div className="border p-4 rounded-2xl">
+                  <div className="border p-4">
                     <div className="text-xs text-muted-foreground">Active Jobs</div>
                     <div className="text-3xl font-semibold mt-1 tabular-nums">{activeJobs}</div>
                   </div>
-                  <div className="border p-4 rounded-2xl">
+                  <div className="border p-4">
                     <div className="text-xs text-muted-foreground">MTD Revenue</div>
                     <div className="text-2xl font-semibold mt-1 tabular-nums text-emerald-600">
                       ${mtdRevenue.toLocaleString()}
                     </div>
                   </div>
-                  <div className="border p-4 rounded-2xl">
+                  <div className="border p-4">
                     <div className="text-xs text-muted-foreground">Outstanding</div>
                     <div className="text-2xl font-semibold mt-1 tabular-nums text-rose-600">
                       ${totalOutstanding.toLocaleString()}
@@ -288,7 +299,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
             </Card>
 
             {/* Outstanding Summary */}
-            <Card>
+            <Card className="rounded-none">
               <CardContent className="pt-6">
                 <div className="text-center">
                   <div className="text-sm text-muted-foreground">Total Outstanding</div>
