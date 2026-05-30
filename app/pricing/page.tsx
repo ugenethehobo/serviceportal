@@ -69,21 +69,7 @@ function SubscribeButton({ plan, label }: { plan: 'monthly' | 'annual'; label: s
 
 export default function PricingPage() {
   return (
-    <div className="relative min-h-screen bg-background text-foreground">
-      {/* Moving background texture layer - placed at root level so it can't be clipped or stacked behind */}
-      <div className="absolute inset-x-0 top-0 h-[100dvh] -z-10 pointer-events-none bg-red-500/20 dark:bg-cyan-400/25">
-        {/* Base wash */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-muted/[0.05] dark:from-white/[0.03] dark:to-white/[0.04]" />
-
-        {/* Drifting blobs - now safely inside the layer */}
-        <div className="absolute -top-24 -left-32 h-[580px] w-[580px] rounded-full bg-primary/20 blur-[110px] dark:bg-white/12 dark:blur-[130px] animate-[drift_32s_ease-in-out_infinite]" />
-        <div className="absolute top-[10%] -right-40 h-[620px] w-[620px] rounded-full bg-muted-foreground/15 blur-[120px] dark:bg-white/8 dark:blur-[140px] animate-[drift_38s_ease-in-out_infinite_8s]" />
-        <div className="absolute bottom-[-80px] left-[15%] h-[480px] w-[480px] rounded-full bg-primary/15 blur-[100px] dark:bg-white/7 dark:blur-[115px] animate-[drift_27s_ease-in-out_infinite_13s]" />
-
-        {/* Dot texture */}
-        <div className="absolute inset-0 bg-[radial-gradient(currentColor_1px,transparent_1.5px)] bg-[length:5px_5px] opacity-[0.07] text-foreground dark:opacity-[0.13] dark:text-white" />
-      </div>
-
+    <div className="min-h-screen bg-background text-foreground">
       {/* Top Nav */}
       <nav className="border-b">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -110,8 +96,23 @@ export default function PricingPage() {
       </nav>
 
       {/* Full-screen Modern Hero */}
-      <section className="min-h-screen flex flex-col items-center justify-center relative pt-16 pb-16 md:pb-24">
-        <div className="max-w-5xl mx-auto px-6 text-center">
+      <section className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden isolate pt-16 pb-16 md:pb-24">
+        {/* Texture layer lives at the back of this local stacking context */}
+        <div className="absolute inset-0 z-0 bg-red-500/20 dark:bg-cyan-400/25">
+          {/* Base subtle wash */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-muted/[0.05] dark:from-white/[0.025] dark:to-white/[0.035]" />
+
+          {/* Drifting soft blobs (now safely in local z-0 layer) */}
+          <div className="absolute -top-20 -left-24 h-[520px] w-[520px] rounded-full bg-primary/25 blur-[100px] dark:bg-white/10 dark:blur-[120px] animate-[drift_30s_ease-in-out_infinite]" />
+          <div className="absolute top-[8%] -right-32 h-[560px] w-[560px] rounded-full bg-muted-foreground/20 blur-[110px] dark:bg-white/7 dark:blur-[130px] animate-[drift_36s_ease-in-out_infinite_6s]" />
+          <div className="absolute bottom-[-60px] left-[12%] h-[440px] w-[440px] rounded-full bg-primary/20 blur-[90px] dark:bg-white/6 dark:blur-[105px] animate-[drift_25s_ease-in-out_infinite_11s]" />
+
+          {/* Moving dot texture */}
+          <div className="absolute inset-0 bg-[radial-gradient(currentColor_1px,transparent_1.5px)] bg-[length:4px_4px] opacity-[0.08] text-foreground dark:opacity-[0.14] dark:text-white" />
+        </div>
+
+        {/* All hero content sits in front at z-10 */}
+        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs tracking-[2px] uppercase mb-6 text-muted-foreground">
             Built for field service professionals
           </div>
@@ -143,8 +144,8 @@ export default function PricingPage() {
           </p>
         </div>
 
-        {/* Scroll hint - now in flow so it's always visible within the hero */}
-        <div className="mt-auto pt-12 md:pt-16 hidden md:flex flex-col items-center text-center">
+        {/* Scroll hint also in front */}
+        <div className="relative z-10 mt-auto pt-12 md:pt-16 hidden md:flex flex-col items-center text-center">
           <div className="text-xs tracking-[2px] uppercase text-muted-foreground">Scroll to see pricing</div>
           <div className="mt-1.5 h-px w-8 bg-muted-foreground/40" />
         </div>
