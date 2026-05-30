@@ -96,19 +96,19 @@ export default function PricingPage() {
       </nav>
 
       {/* Full-screen Modern Hero */}
-      <section className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden pt-16 pb-16 md:pb-24">
-        {/* Moving texture background - blurred gradients + dots (dark mode aware) */}
-        <div className="absolute inset-0 -z-10">
-          {/* Base subtle wash */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.035] via-transparent to-muted/[0.04] dark:from-white/[0.02] dark:to-white/[0.03]" />
+      <section className="min-h-screen flex flex-col items-center justify-center relative pt-16 pb-16 md:pb-24">
+        {/* Moving texture background — diagnostic version with visible debug layer */}
+        <div className="absolute inset-0 -z-10 pointer-events-none bg-red-500/10 dark:bg-cyan-400/10">
+          {/* Base wash */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-muted/[0.05] dark:from-white/[0.025] dark:to-white/[0.035]" />
 
-          {/* Soft drifting gradient blobs — stronger & using light values in dark mode so they actually show up */}
-          <div className="absolute -top-40 -left-48 h-[620px] w-[620px] rounded-full bg-primary/15 blur-[130px] dark:bg-white/9 dark:blur-[145px] animate-[drift_32s_ease-in-out_infinite]" />
-          <div className="absolute top-1/4 -right-56 h-[680px] w-[680px] rounded-full bg-muted-foreground/12 blur-[150px] dark:bg-white/6 dark:blur-[160px] animate-[drift_38s_ease-in-out_infinite_7s]" />
-          <div className="absolute bottom-[-160px] left-[20%] h-[540px] w-[540px] rounded-full bg-primary/10 blur-[110px] dark:bg-white/5 dark:blur-[125px] animate-[drift_26s_ease-in-out_infinite_12s]" />
+          {/* Blobs positioned mostly inside the viewport so they aren't clipped */}
+          <div className="absolute -top-24 -left-32 h-[580px] w-[580px] rounded-full bg-primary/20 blur-[110px] dark:bg-white/12 dark:blur-[130px] animate-[drift_32s_ease-in-out_infinite]" />
+          <div className="absolute top-[10%] -right-40 h-[620px] w-[620px] rounded-full bg-muted-foreground/15 blur-[120px] dark:bg-white/8 dark:blur-[140px] animate-[drift_38s_ease-in-out_infinite_8s]" />
+          <div className="absolute bottom-[-80px] left-[15%] h-[480px] w-[480px] rounded-full bg-primary/15 blur-[100px] dark:bg-white/7 dark:blur-[115px] animate-[drift_27s_ease-in-out_infinite_13s]" />
 
-          {/* Moving dot texture — more visible in dark */}
-          <div className="absolute inset-0 bg-[radial-gradient(currentColor_0.7px,transparent_1px)] bg-[length:4px_4px] opacity-[0.055] text-foreground dark:opacity-[0.10] dark:text-white" />
+          {/* Dot texture - larger and more visible for testing */}
+          <div className="absolute inset-0 bg-[radial-gradient(currentColor_1px,transparent_1.5px)] bg-[length:5px_5px] opacity-[0.07] text-foreground dark:opacity-[0.13] dark:text-white" />
         </div>
 
         <div className="max-w-5xl mx-auto px-6 text-center">
