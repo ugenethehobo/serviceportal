@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         name: intakeData?.company_name || 'Untitled Company',
         owner_user_id: userId,
         stripe_customer_id: typeof session.customer === 'string' ? session.customer : session.customer?.id,
-        subscription_status: 'trialing', // or 'active' depending on payment
+        subscription_status: 'active', // Will be updated by webhook if trial is used; start as active for paid subs
         onboarding_completed_at: new Date().toISOString(),
       })
       .select()
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     const companyId = company?.id
 
     // 4. Create Subscription record (new schema)
-    let subscriptionStatus = 'trialing';
+    let subscriptionStatus = 'active';
     let plan = 'monthly';
     let currentPeriodEnd = null;
 

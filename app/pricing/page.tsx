@@ -4,30 +4,24 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Check, ArrowRight, Loader2 } from 'lucide-react'
+import { Check, Loader2 } from 'lucide-react'
 
 function SubscribeButton({ plan, label }: { plan: 'monthly' | 'annual'; label: string }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [debugClick, setDebugClick] = useState<string>('')
 
   const handleSubscribe = async () => {
-    console.log('%c[DEBUG] SubscribeButton clicked!', 'color: lime; font-size: 14px', { plan })
-    setDebugClick(`Clicked ${plan} at ${new Date().toLocaleTimeString()}`)
     setLoading(true)
     setError(null)
 
     try {
-      console.log('[DEBUG] Starting fetch to /api/create-subscription-checkout')
       const res = await fetch('/api/create-subscription-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan }),
       })
 
-      console.log('[DEBUG] Fetch response status:', res.status)
       const data = await res.json()
-      console.log('[DEBUG] Response data:', data)
 
       if (!res.ok) {
         throw new Error(data.error || 'Request failed')
@@ -39,7 +33,7 @@ function SubscribeButton({ plan, label }: { plan: 'monthly' | 'annual'; label: s
         throw new Error(data.error || 'No checkout URL returned')
       }
     } catch (err: any) {
-      console.error('[DEBUG] Checkout error:', err)
+      console.error('Checkout error:', err)
       setError(err.message || 'Failed to start checkout. Please try again.')
     } finally {
       setLoading(false)
@@ -48,25 +42,6 @@ function SubscribeButton({ plan, label }: { plan: 'monthly' | 'annual'; label: s
 
   return (
     <div>
-      {/* Temporary debug button using native <button> to test if handler fires */}
-      <button
-        onClick={handleSubscribe}
-        disabled={loading}
-        style={{
-          width: '100%',
-          padding: '12px',
-          backgroundColor: '#111',
-          color: 'white',
-          border: '1px solid #333',
-          fontSize: '14px',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          marginBottom: '8px'
-        }}
-      >
-        {loading ? 'Redirecting to checkout...' : `[TEST] ${label}`}
-      </button>
-
-      {/* Original styled button (for comparison) */}
       <Button
         onClick={handleSubscribe}
         className="w-full rounded-none h-12 text-base"
@@ -83,12 +58,6 @@ function SubscribeButton({ plan, label }: { plan: 'monthly' | 'annual'; label: s
         )}
       </Button>
 
-      {debugClick && (
-        <div className="mt-2 text-xs bg-yellow-100 text-yellow-800 p-2 border border-yellow-300 rounded-none font-mono">
-          DEBUG: {debugClick}
-        </div>
-      )}
-
       {error && (
         <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-none">
           {error}
@@ -101,7 +70,7 @@ function SubscribeButton({ plan, label }: { plan: 'monthly' | 'annual'; label: s
 export default function PricingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Top Nav - Sharp */}
+      {/* Top Nav */}
       <nav className="border-b">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -126,163 +95,177 @@ export default function PricingPage() {
         </div>
       </nav>
 
-      {/* Hero */}
-      <div className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
-        <div className="inline-block mb-4 px-3 py-1 text-xs font-semibold tracking-[2px] uppercase border">
-          Built for service companies
+      {/* Full-screen Modern Hero */}
+      <section className="min-h-screen flex items-center justify-center relative pt-16">
+        <div className="max-w-5xl mx-auto px-6 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs tracking-[2px] uppercase mb-6 text-muted-foreground">
+            Built for field service professionals
+          </div>
+
+          <h1 className="text-6xl md:text-7xl font-semibold tracking-[-3.5px] leading-[0.95] mb-6">
+            Client portals<br />that actually<br />feel professional.
+          </h1>
+
+          <p className="max-w-2xl mx-auto text-2xl text-muted-foreground mb-10 tracking-tight">
+            Start with your first <span className="font-semibold text-foreground">3 clients completely free</span>.<br />
+            No credit card required. Upgrade only when you grow.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <a href="#pricing">
+              <Button size="lg" className="rounded-none px-10 text-base h-14 w-full sm:w-auto">
+                Start for free
+              </Button>
+            </a>
+            <a href="#pricing">
+              <Button variant="outline" size="lg" className="rounded-none px-10 text-base h-14 w-full sm:w-auto">
+                See plans &amp; pricing
+              </Button>
+            </a>
+          </div>
+
+          <p className="text-sm text-muted-foreground mt-8">
+            No hidden fees • Cancel anytime • Instant setup
+          </p>
         </div>
 
-        <h1 className="text-5xl md:text-6xl font-semibold tracking-tighter leading-[1.05] mb-6">
-          Professional client portal<br />and job management.
-        </h1>
-
-        <p className="max-w-2xl mx-auto text-xl text-muted-foreground mb-10">
-          The complete toolkit for plumbers, electricians, HVAC, and field service businesses.
-          Branded client experience. Online payments. Zero complexity.
-        </p>
-
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-          <a href="#pricing">
-            <Button size="lg" className="rounded-none px-8 text-base w-full sm:w-auto">
-              View pricing <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </a>
-          <Link href="/login">
-            <Button variant="outline" size="lg" className="rounded-none px-8 text-base">
-              Log in to existing account
-            </Button>
-          </Link>
+        {/* Scroll hint */}
+        <div className="absolute bottom-10 left-1/2 hidden md:block -translate-x-1/2 text-center">
+          <div className="text-xs tracking-[2px] uppercase text-muted-foreground">Scroll to see pricing</div>
+          <div className="mt-1 h-px w-8 bg-muted-foreground/40 mx-auto" />
         </div>
-      </div>
-
-      {/* Trust / Trial Banner */}
-      <div className="border-y bg-muted/40">
-        <div className="max-w-5xl mx-auto px-6 py-5 text-center text-sm">
-          <span className="font-semibold">Start with your first 3 clients completely free.</span> No time limit. Upgrade only when you need more.
-        </div>
-      </div>
+      </section>
 
       {/* Pricing Section */}
-      <div id="pricing" className="max-w-5xl mx-auto px-6 pt-16 pb-24">
-        <div className="text-center mb-12">
-          <div className="text-xs tracking-[3px] font-semibold uppercase mb-2 text-muted-foreground">Simple pricing</div>
-          <h2 className="text-4xl font-semibold tracking-tighter">Choose the plan that fits your business</h2>
+      <div id="pricing" className="max-w-6xl mx-auto px-6 pb-20">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-semibold tracking-tighter">Choose your plan</h2>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-          {/* Monthly Plan */}
+          {/* Free Starter */}
           <Card className="rounded-none border-2 flex flex-col">
-            <CardHeader className="pb-8">
-              <CardTitle className="text-2xl tracking-tight">Monthly</CardTitle>
-              <CardDescription className="text-base mt-1">Billed monthly. Cancel anytime.</CardDescription>
-              <div className="mt-6 flex items-baseline">
-                <span className="text-5xl sm:text-6xl font-semibold tracking-tighter">$60</span>
-                <span className="text-muted-foreground ml-2 text-lg">/ month</span>
+            <CardHeader>
+              <CardTitle className="text-2xl">Free</CardTitle>
+              <CardDescription className="text-base">Perfect to get started</CardDescription>
+              <div className="mt-6">
+                <span className="text-5xl font-semibold tracking-tighter">$0</span>
               </div>
+              <div className="text-sm text-muted-foreground mt-1">3 clients included</div>
             </CardHeader>
-
             <CardContent className="flex-1 flex flex-col">
-              <div className="space-y-3 mb-8 text-sm">
+              <div className="space-y-3 mb-8 text-sm flex-1">
                 <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
-                  <span>Unlimited clients &amp; jobs after trial</span>
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>Up to 3 clients</span>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>Unlimited jobs for those clients</span>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>Branded client portal</span>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
-                  <span>Stripe online payments</span>
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>Basic online payments</span>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
-                  <span>Contracts with e-signature</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
-                  <span>Photos, documents &amp; route planning</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
-                  <span>Custom branding (logo + color)</span>
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>Photos &amp; documents</span>
                 </div>
               </div>
-
               <div className="mt-auto">
-                <SubscribeButton plan="monthly" label="Subscribe monthly" />
+                <Link href="/login" className="block">
+                  <Button className="w-full rounded-none h-12 text-base" size="lg">
+                    Get started for free
+                  </Button>
+                </Link>
                 <p className="text-center text-xs text-muted-foreground mt-3">
-                  First 3 clients free
+                  No credit card required
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Annual Plan - Recommended */}
+          {/* Paid Plans */}
+          <div className="space-y-6">
+            {/* Monthly */}
+            <Card className="rounded-none border-2 flex flex-col">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-2xl">Monthly</CardTitle>
+                <div className="mt-4 flex items-baseline">
+                  <span className="text-5xl font-semibold tracking-tighter">$60</span>
+                  <span className="text-muted-foreground ml-2">/ month</span>
+                </div>
+              </CardHeader>
+            <CardContent className="flex-1 flex flex-col">
+              <div className="space-y-3 mb-8 text-sm flex-1">
+                <div className="flex items-start gap-3">
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>Unlimited clients &amp; jobs</span>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>Everything in Free</span>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>Priority email support</span>
+                </div>
+              </div>
+              <div className="mt-auto">
+                <SubscribeButton plan="monthly" label="Subscribe monthly" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Annual - Recommended */}
           <Card className="rounded-none border-2 border-primary flex flex-col relative">
-            <div className="absolute -top-3 right-6 bg-primary text-primary-foreground text-[10px] font-semibold tracking-widest px-4 py-1 rounded-none">
+            <div className="absolute -top-3 right-6 bg-primary text-primary-foreground text-[10px] font-semibold tracking-widest px-3 py-0.5">
               BEST VALUE
             </div>
 
-            <CardHeader className="pb-8">
-              <CardTitle className="text-2xl tracking-tight">Annual</CardTitle>
-              <CardDescription className="text-base mt-1">Billed yearly. Save two months.</CardDescription>
+            <CardHeader>
+              <CardTitle className="text-2xl">Annual</CardTitle>
+              <CardDescription className="text-base">Billed yearly. Save 2 months.</CardDescription>
               <div className="mt-6 flex items-baseline">
-                <span className="text-5xl sm:text-6xl font-semibold tracking-tighter">$600</span>
-                <span className="text-muted-foreground ml-2 text-lg">/ year</span>
+                <span className="text-5xl font-semibold tracking-tighter">$600</span>
+                <span className="text-muted-foreground ml-2">/ year</span>
               </div>
-              <div className="text-sm text-emerald-600 font-medium mt-1">Equivalent to $50/month — save $120</div>
+              <div className="text-sm text-emerald-600 font-medium mt-1">$50/month • Save $120/year</div>
             </CardHeader>
 
             <CardContent className="flex-1 flex flex-col">
-              <div className="space-y-3 mb-8 text-sm">
+              <div className="space-y-3 mb-8 text-sm flex-1">
                 <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>Everything in Monthly</span>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>Priority support</span>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
+                  <Check className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>Early access to new features</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
-                  <span>Unlimited clients &amp; jobs after trial</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
-                  <span>Branded client portal + payments</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Check className="h-4 w-4 mt-1 shrink-0" />
-                  <span>Custom branding &amp; route planning</span>
                 </div>
               </div>
 
               <div className="mt-auto">
                 <SubscribeButton plan="annual" label="Subscribe annually" />
-                <p className="text-center text-xs text-muted-foreground mt-3">
-                  First 3 clients free
-                </p>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Trial explanation */}
         <div className="max-w-2xl mx-auto mt-12 text-center text-sm text-muted-foreground">
-          <p>
-            Start today with your first <span className="font-semibold text-foreground">3 clients completely free</span>. 
-            No credit card required until you want to add more. 
-            Upgrade anytime to unlock unlimited clients and the full feature set.
-          </p>
+          All plans include unlimited users, branded client portal, online payments, contracts, photos, and route planning.
+          <br />Cancel or downgrade anytime.
         </div>
       </div>
 
-      {/* Simple footer */}
       <footer className="border-t py-8">
         <div className="max-w-5xl mx-auto px-6 text-center text-xs text-muted-foreground tracking-widest">
           © {new Date().getFullYear()} ServicePortal — Built for service professionals

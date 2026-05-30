@@ -47,11 +47,8 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      // Point to a fast, lightweight success page first.
-      // This avoids long spinners after Stripe payment because the onboarding wizard is heavy.
       success_url: `${publicBaseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${publicBaseUrl}/pricing?canceled=true`,
-      // We will collect the customer's email and create their account after successful payment
       allow_promotion_codes: true,
       metadata: {
         plan,
