@@ -259,8 +259,9 @@ export default function PricingPage() {
             </CardContent>
           </Card>
         </div>
+      </div>
 
-        <div className="max-w-2xl mx-auto mt-12 text-center text-sm text-muted-foreground">
+      <div className="max-w-2xl mx-auto mt-12 text-center text-sm text-muted-foreground">
           All plans include unlimited users, branded client portal, online payments, contracts, photos, and route planning.
           <br />Cancel or downgrade anytime.
         </div>
