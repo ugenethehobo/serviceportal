@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { getAppBaseUrl } from '@/lib/url'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,11 +13,14 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient()
 
     // Generate link ourselves (bypasses Supabase rate limits)
+    const appBaseUrl = getAppBaseUrl();
+    console.log('[auth/resend-magic-link] Generating magic link with redirectTo base:', appBaseUrl);
+
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: 'recovery',
       email,
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/dashboard`,
+        redirectTo: `${appBaseUrl}/auth/callback?next=/dashboard`,
       },
     })
 

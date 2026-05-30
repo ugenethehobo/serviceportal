@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { getAppBaseUrl } from '@/lib/url'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,42 +27,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Determine the correct base URL for Stripe redirects.
-    // 
-    // For Vercel deployments (Preview or Production), we strongly prefer VERCEL_URL.
-    // This prevents the common problem of stale NEXT_PUBLIC_* URLs causing 404s on redirects.
-    //
-    // Priority (highest first):
-    // 1. NEXT_PUBLIC_PUBLIC_URL  → only for local ngrok testing. Should be empty in Vercel.
-    // 2. VERCEL_URL              → injected by Vercel for the current deployment (best for previews)
-    // 3. NEXT_PUBLIC_APP_URL     → only really needed for Production custom domains
-    // 4. localhost
-    const vercelUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : null;
-
-    let publicBaseUrl = 
-      process.env.NEXT_PUBLIC_PUBLIC_URL || 
-      vercelUrl || 
-      process.env.NEXT_PUBLIC_APP_URL || 
-      'http://localhost:3000';
-
-    // Strong safety net for Vercel: If we're on Vercel and the resolved URL looks like
-    // an old/stale value (ngrok, localhost, or a previous preview), prefer VERCEL_URL.
-    const isOnVercel = !!process.env.VERCEL_ENV;
-    const looksStale = 
-      publicBaseUrl.includes('ngrok') || 
-      publicBaseUrl.includes('localhost') ||
-      (isOnVercel && !publicBaseUrl.includes(process.env.VERCEL_URL || ''));
-
-    if (isOnVercel && looksStale && vercelUrl) {
-      console.warn(
-        `⚠️ Resolved publicBaseUrl looks stale ("${publicBaseUrl}"). ` +
-        `Falling back to current Vercel deployment URL.`
-      );
-      publicBaseUrl = vercelUrl;
-    }
-
+    // Use centralized URL resolver (handles production custom domain, previews, ngrok, localhost)
+    const publicBaseUrl = getAppBaseUrl();
     console.log('[create-subscription-checkout] Using publicBaseUrl:', publicBaseUrl);
 
     const fullSuccessUrl = `${publicBaseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
@@ -69,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     // Helpful log for debugging preview vs production issues
     if (process.env.VERCEL_ENV) {
-      console.log(`[create-subscription-checkout] VERCEL_ENV=${process.env.VERCEL_ENV}, VERCEL_URL=${process.env.VERCEL_URL}`);
+      console.log(`[create-subscription-checkout] VERCEL_ENV=${process.env.VERCEL_ENV}`);
     }
 
     const session = await stripe.checkout.sessions.create({

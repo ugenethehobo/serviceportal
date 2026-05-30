@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient } from '@/lib/supabase/server'
+import { getAppBaseUrl } from '@/lib/url'
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,32 +45,8 @@ export async function POST(request: NextRequest) {
     // Initialize Stripe with platform key
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
-    // Same robust base URL logic as the subscription checkout
-    const vercelUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : null;
-
-    let publicBaseUrl = 
-      process.env.NEXT_PUBLIC_PUBLIC_URL || 
-      vercelUrl || 
-      process.env.NEXT_PUBLIC_APP_URL || 
-      'http://localhost:3000';
-
-    // Strong safety net for Vercel deployments
-    const isOnVercel = !!process.env.VERCEL_ENV;
-    const looksStale = 
-      publicBaseUrl.includes('ngrok') || 
-      publicBaseUrl.includes('localhost') ||
-      (isOnVercel && !publicBaseUrl.includes(process.env.VERCEL_URL || ''));
-
-    if (isOnVercel && looksStale && vercelUrl) {
-      console.warn(
-        `⚠️ Resolved publicBaseUrl looks stale ("${publicBaseUrl}"). ` +
-        `Falling back to current Vercel deployment URL.`
-      );
-      publicBaseUrl = vercelUrl;
-    }
-
+    // Use centralized URL resolver (handles production custom domain, previews, ngrok, localhost)
+    const publicBaseUrl = getAppBaseUrl();
     console.log('[create-checkout] Using publicBaseUrl:', publicBaseUrl);
 
     // Fetch the bills

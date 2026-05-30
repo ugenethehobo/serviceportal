@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import { getAppBaseUrl } from '@/lib/url'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
@@ -58,11 +59,14 @@ export async function POST(request: NextRequest) {
     const userId = authUser.user.id
 
     // Generate the magic link ourselves using the Admin API (bypasses Supabase email rate limits)
+    const appBaseUrl = getAppBaseUrl();
+    console.log('[onboarding/complete] Generating magic link with redirectTo base:', appBaseUrl);
+
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery', // This gives a "set password" style magic link
       email: customerEmail,
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/dashboard`,
+        redirectTo: `${appBaseUrl}/auth/callback?next=/dashboard`,
       },
     })
 
