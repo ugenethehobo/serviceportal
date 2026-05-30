@@ -587,7 +587,6 @@ export default async function Dashboard() {
         overdueJobsCount={overdueJobsCount}
         totalOutstanding={totalOutstanding}
         customColorMap={customColorMap}
-        getStatusColor={getStatusColor}
       />
 
       {/* Bottom actions row — professional and minimal (desktop + mobile) */}

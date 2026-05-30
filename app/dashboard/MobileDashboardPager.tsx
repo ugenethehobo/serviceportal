@@ -7,6 +7,7 @@ import Link from "next/link"
 import { CalendarDays, Map, AlertCircle } from "lucide-react"
 import { DashboardCharts } from './DashboardCharts'
 import RoutePlannerPreviewWrapper from './RoutePlannerPreviewWrapper'
+import { getStatusColor } from '@/lib/status-colors'
 
 interface MobileDashboardPagerProps {
   todayJobs: any[]
@@ -27,7 +28,6 @@ interface MobileDashboardPagerProps {
   overdueJobsCount: number
   totalOutstanding: number
   customColorMap: Record<string, string>
-  getStatusColor: (status: string) => string
 }
 
 export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
@@ -50,7 +50,6 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
     overdueJobsCount,
     totalOutstanding,
     customColorMap,
-    getStatusColor,
   } = props
 
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -259,7 +258,8 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
           <button
             key={index}
             onClick={() => {
-              const scroller = document.querySelector('.lg\\:hidden .flex.overflow-x-auto') as HTMLDivElement
+              setCurrentPage(index)
+              const scroller = scrollerRef.current
               if (scroller) {
                 const pageWidth = scroller.clientWidth * 0.92 + 16
                 scroller.scrollTo({
