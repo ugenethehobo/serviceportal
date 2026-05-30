@@ -108,7 +108,7 @@ export default function SignUp() {
                 {error}
               </div>
             )}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full min-h-[44px]" disabled={loading}>
               {loading ? 'Creating account...' : 'Create Account'}
             </Button>
           </form>

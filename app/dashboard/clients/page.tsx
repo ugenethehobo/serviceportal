@@ -131,18 +131,18 @@ export default function ClientsPage() {
   }
 
   if (loading) {
-    return <div className="p-8">Loading clients...</div>
+    return <div className="p-4 sm:p-6 md:p-8">Loading clients...</div>
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
       <SubscriptionStatus />
       <TrialStatusBanner />
 
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight">Clients</h1>
-          <p className="text-muted-foreground mt-2">Your main command center</p>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Clients</h1>
+          <p className="text-muted-foreground mt-1 sm:mt-2">Your main command center</p>
         </div>
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogTrigger asChild>

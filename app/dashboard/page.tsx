@@ -301,7 +301,7 @@ export default async function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Clean professional header */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Welcome back — here's your business at a glance.</p>
@@ -354,9 +354,9 @@ export default async function Dashboard() {
               </Button>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Left third - Today */}
-                <div className="col-span-1 border-r pr-4">
+                <div className="md:col-span-1 md:border-r md:pr-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-sm font-medium">Today</div>
                     <div className="text-xs text-muted-foreground">{todayJobs.length} jobs</div>
@@ -391,7 +391,7 @@ export default async function Dashboard() {
                 </div>
 
                 {/* Right two thirds - Upcoming (more compact) */}
-                <div className="col-span-2">
+                <div className="md:col-span-2">
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-sm font-medium">Upcoming (Next 7 Days)</div>
                     <div className="text-xs text-muted-foreground">{upcomingJobs.length} jobs</div>

@@ -231,7 +231,7 @@ export default function SettingsPage() {
   ]
 
   if (loading) {
-    return <div className="p-8">Loading settings...</div>
+    return <div className="p-4 sm:p-6 md:p-8">Loading settings...</div>
   }
 
   return (
@@ -375,7 +375,7 @@ export default function SettingsPage() {
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between border p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border p-4">
               <div>
                 <div className="font-medium">Route Planner</div>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -508,7 +508,7 @@ export default function SettingsPage() {
         {/* Job Statuses */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <CardTitle>Job Statuses</CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -533,7 +533,7 @@ export default function SettingsPage() {
           <CardContent>
             <div className="space-y-3">
               {statuses.map((status, index) => (
-                <div key={status.key} className="flex items-center gap-3 rounded-2xl border p-3">
+                <div key={status.key} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 rounded-2xl border p-3">
                   <Input
                     type="color"
                     value={status.color}
@@ -542,7 +542,7 @@ export default function SettingsPage() {
                       newStatuses[index].color = e.target.value
                       setStatuses(newStatuses)
                     }}
-                    className="h-9 w-14 p-1 flex-shrink-0"
+                    className="h-9 w-14 p-1 flex-shrink-0 self-center"
                   />
                   <Input
                     value={status.label}
@@ -557,6 +557,7 @@ export default function SettingsPage() {
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="self-center sm:self-auto ml-auto sm:ml-0"
                     onClick={() => {
                       if (statuses.length === 1) {
                         setConfirmDialog({

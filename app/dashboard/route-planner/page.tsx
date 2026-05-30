@@ -635,11 +635,11 @@ export default function RoutePlannerPage() {
                   <div className="font-medium">{job.title}</div>
                   <div className="text-xs text-muted-foreground">{job.clients?.address}</div>
                   
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="text"
                       placeholder="Latitude"
-                      className="border p-1 text-xs flex-1"
+                      className="border p-2 text-sm flex-1 rounded"
                       value={manualCoords[job.id]?.lat || ''}
                       onChange={(e) => setManualCoords(prev => ({
                         ...prev,
@@ -649,7 +649,7 @@ export default function RoutePlannerPage() {
                     <input
                       type="text"
                       placeholder="Longitude"
-                      className="border p-1 text-xs flex-1"
+                      className="border p-2 text-sm flex-1 rounded"
                       value={manualCoords[job.id]?.lng || ''}
                       onChange={(e) => setManualCoords(prev => ({
                         ...prev,
@@ -677,21 +677,21 @@ export default function RoutePlannerPage() {
           {orderedStops.length > 0 && (
             <div className="border p-4">
               <div className="text-sm font-medium mb-3">Optimized Stop Order</div>
-              <ol className="space-y-2 text-sm">
+              <ol className="space-y-1.5 text-sm">
                 {orderedStops.map((stop, index) => {
                   const legTime = index > 0 && legDurations[index - 1] != null 
                     ? legDurations[index - 1] 
                     : null
 
                   return (
-                    <li key={index} className="flex gap-3 border p-2 items-center">
-                      <div className="font-mono text-xs w-5 text-muted-foreground">{index + 1}.</div>
+                    <li key={index} className="flex gap-2 sm:gap-3 border p-2.5 sm:p-2 items-center rounded">
+                      <div className="font-mono text-xs w-5 text-muted-foreground shrink-0">{index + 1}.</div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{stop.job.title}</div>
-                        <div className="text-xs text-muted-foreground truncate">{stop.address}</div>
+                        <div className="font-medium truncate text-sm">{stop.job.title}</div>
+                        <div className="text-[10px] sm:text-xs text-muted-foreground truncate">{stop.address}</div>
                         {legTime !== null && (
                           <div className="text-[10px] text-blue-600 mt-0.5">
-                            ~{legTime} min from previous stop
+                            ~{legTime} min from previous
                           </div>
                         )}
                       </div>
@@ -715,7 +715,7 @@ export default function RoutePlannerPage() {
 
         {/* Map */}
         <div className="lg:col-span-8 border">
-          <div className="h-[620px] w-full">
+          <div className="h-[420px] sm:h-[520px] lg:h-[620px] w-full">
             {stops.length > 0 ? (
               <RouteMap 
                 stops={orderedStops} 

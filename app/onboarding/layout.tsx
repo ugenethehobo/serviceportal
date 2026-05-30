@@ -10,7 +10,7 @@ export default function OnboardingLayout({
     <div className="min-h-screen bg-background">
       {/* Simple top bar for onboarding */}
       <div className="border-b bg-card">
-        <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold text-lg tracking-[-1px]">SP</span>
@@ -21,7 +21,7 @@ export default function OnboardingLayout({
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
         {children}
       </div>
     </div>

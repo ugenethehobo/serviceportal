@@ -1390,11 +1390,11 @@ export default function ClientDetailPage() {
   }
 
   if (loading) {
-    return <div className="p-8">Loading client...</div>
+    return <div className="p-4 sm:p-6 md:p-8">Loading client...</div>
   }
 
   if (!client) {
-    return <div className="p-8">Client not found</div>
+    return <div className="p-4 sm:p-6 md:p-8">Client not found</div>
   }
 
   // Timeline uses expanded recurring instances
@@ -1409,7 +1409,7 @@ export default function ClientDetailPage() {
   })
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
       {/* Notification Toast */}
       {showNotification && (
         <div className="fixed top-4 right-4 z-[300] bg-black text-white px-6 py-3 xl shadow-lg flex items-center gap-3">
@@ -1418,47 +1418,48 @@ export default function ClientDetailPage() {
         </div>
       )}
 
-      {/* Header with Stats */}
-      <div className="flex items-start justify-between gap-6 mb-10 border-b pb-8">
+      {/* Header with Stats - mobile friendly */}
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 lg:gap-6 mb-6 lg:mb-10 border-b pb-6 lg:pb-8">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <Button variant="outline" size="icon" onClick={() => router.push('/dashboard/clients')}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-4xl font-bold tracking-tight">{client.name}</h1>
-                <Button variant="outline" size="sm" onClick={openEditClient}>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-3xl sm:text-4xl font-bold tracking-tight truncate">{client.name}</h1>
+                <Button variant="outline" size="sm" onClick={openEditClient} className="shrink-0">
                   Edit
                 </Button>
               </div>
-              <p className="text-lg text-muted-foreground">{client.address}</p>
+              <p className="text-sm sm:text-lg text-muted-foreground mt-1 truncate">{client.address}</p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-5 px-6 py-2 bg-muted/30 2xl mx-auto">
-          <div className="text-center px-3">
-            <div className="text-2xl font-bold">{jobs.length}</div>
-            <div className="text-xs text-muted-foreground -mt-1">Total Jobs</div>
+        {/* Stats - stack on mobile, row on larger */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:flex lg:items-center lg:gap-4 lg:px-4 lg:py-2 bg-muted/30 rounded-lg w-full lg:w-auto">
+          <div className="text-center px-2 py-1">
+            <div className="text-xl sm:text-2xl font-bold">{jobs.length}</div>
+            <div className="text-[10px] text-muted-foreground -mt-0.5">Total Jobs</div>
           </div>
-          <div className="text-center px-3">
-            <div className="text-2xl font-bold text-emerald-600">
+          <div className="text-center px-2 py-1">
+            <div className="text-xl sm:text-2xl font-bold text-emerald-600">
               ${jobs.reduce((sum, job) => sum + (job.bills?.filter((b: any) => b.status === 'pending').reduce((s: number, b: any) => s + Number(b.amount), 0) || 0), 0)}
             </div>
-            <div className="text-xs text-muted-foreground -mt-1">Outstanding</div>
+            <div className="text-[10px] text-muted-foreground -mt-0.5">Outstanding</div>
           </div>
-          <div className="text-center px-3">
-            <div className="text-2xl font-bold">
+          <div className="text-center px-2 py-1">
+            <div className="text-xl sm:text-2xl font-bold">
               {jobs.filter(j => ['scheduled', 'in_progress', 'quote_sent'].includes(j.status)).length}
             </div>
-            <div className="text-xs text-muted-foreground -mt-1">Active Jobs</div>
+            <div className="text-[10px] text-muted-foreground -mt-0.5">Active Jobs</div>
           </div>
-          <div className="text-center px-3">
-            <div className="text-2xl font-bold">
+          <div className="text-center px-2 py-1">
+            <div className="text-xl sm:text-2xl font-bold">
               {client.created_at ? new Date(client.created_at).toLocaleDateString() : 'N/A'}
             </div>
-            <div className="text-xs text-muted-foreground -mt-1">Client Since</div>
+            <div className="text-[10px] text-muted-foreground -mt-0.5">Since</div>
           </div>
         </div>
 
@@ -1508,17 +1509,17 @@ export default function ClientDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* LEFT: Jobs Grid - ONLY ORIGINAL JOBS (one card per job) */}
         <div className="lg:col-span-8">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
             <div>
-              <div className="font-semibold text-3xl">Jobs, Bills & Photos</div>
+              <div className="font-semibold text-2xl sm:text-3xl">Jobs, Bills & Photos</div>
               <div className="text-sm text-muted-foreground">All projects for this client</div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowMessagesModal(true)}
-                className="relative"
+                className="relative min-h-[36px]"
               >
                 <MessageCircle className="mr-2 h-4 w-4" />
                 Messages
@@ -1628,20 +1629,20 @@ export default function ClientDetailPage() {
                         )}
                       </div>
 
-                      {/* Stats pill */}
+                      {/* Stats pill - mobile friendly */}
                       <div className="px-2">
-                        <div className="flex items-center justify-between bg-muted/30 px-6 py-3 2xl w-full">
-                          <div className="text-center flex-1">
-                            <div className="text-xl font-semibold">{safeBills.length}</div>
-                            <div className="text-xs text-muted-foreground -mt-1">Bills</div>
+                        <div className="grid grid-cols-3 gap-1 bg-muted/30 rounded px-3 py-2 w-full">
+                          <div className="text-center">
+                            <div className="text-lg font-semibold">{safeBills.length}</div>
+                            <div className="text-[10px] text-muted-foreground -mt-0.5">Bills</div>
                           </div>
-                          <div className="text-center flex-1">
-                            <div className="text-xl font-semibold text-emerald-600">${totalDue}</div>
-                            <div className="text-xs text-muted-foreground -mt-1">Due</div>
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-emerald-600">${totalDue}</div>
+                            <div className="text-[10px] text-muted-foreground -mt-0.5">Due</div>
                           </div>
-                          <div className="text-center flex-1">
-                            <div className="text-xl font-semibold">{safePhotos.length}</div>
-                            <div className="text-xs text-muted-foreground -mt-1">Photos</div>
+                          <div className="text-center">
+                            <div className="text-lg font-semibold">{safePhotos.length}</div>
+                            <div className="text-[10px] text-muted-foreground -mt-0.5">Photos</div>
                           </div>
                         </div>
                       </div>
@@ -1926,7 +1927,7 @@ export default function ClientDetailPage() {
 
       {/* Job Full Detail Modal */}
       <Dialog open={!!selectedJobDetail} onOpenChange={() => setSelectedJobDetail(null)}>
-        <DialogContent className="max-w-[1400px] w-[96vw]" style={{ maxWidth: '1400px', width: '96vw' }}>
+        <DialogContent className="max-w-[1400px] w-[98vw] sm:w-[96vw] max-h-[95vh] overflow-y-auto" style={{ maxWidth: '1400px' }}>
           {selectedJobDetail && (() => {
             const job = {
               ...selectedJobDetail,
@@ -2172,7 +2173,7 @@ export default function ClientDetailPage() {
                         })
                       }}>Edit</Button>
                     </div>
-                    <div className="bg-muted/30 p-4 xl text-muted-foreground min-h-[120px]">
+                    <div className="bg-muted/30 p-4 xl text-muted-foreground min-h-[80px] sm:min-h-[120px]">
                       {job.description || "No comments added yet."}
                     </div>
                   </div>
@@ -2294,7 +2295,7 @@ export default function ClientDetailPage() {
           setAvailabilityDateKey(null)
         }
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-lg w-[96vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Job</DialogTitle>
           </DialogHeader>
@@ -2346,7 +2347,7 @@ export default function ClientDetailPage() {
           setShowCreateEstimate(open)
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl w-[96vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingEstimate ? "Edit Estimate" : "Create New Estimate"}
@@ -2468,7 +2469,7 @@ export default function ClientDetailPage() {
 
       {/* Add Bill Modal */}
       <Dialog open={showAddBill} onOpenChange={setShowAddBill}>
-        <DialogContent>
+        <DialogContent className="max-w-lg w-[96vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Bill to {selectedJobForBill?.title}</DialogTitle>
           </DialogHeader>
@@ -2691,7 +2692,7 @@ export default function ClientDetailPage() {
           <DialogHeader>
             <DialogTitle>Messages with {client.name}</DialogTitle>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto p-6 border 2xl bg-muted/10 min-h-[400px]">
+          <div className="flex-1 overflow-y-auto p-6 border 2xl bg-muted/10 min-h-[300px] sm:min-h-[400px]">
             {messages.length > 0 ? (
               <div className="space-y-4">
                 {messages.map((msg: any) => (
@@ -2770,7 +2771,7 @@ export default function ClientDetailPage() {
 
       {/* Category Photos Viewer (for viewing the stack of photos in one category) */}
       <Dialog open={selectedCategoryPhotos.length > 0} onOpenChange={() => { setSelectedCategoryPhotos([]); setSelectedCategoryName(""); }}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl w-[96vw] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Photos — {selectedCategoryName} ({selectedCategoryPhotos.length})</DialogTitle>
           </DialogHeader>
@@ -2797,7 +2798,7 @@ export default function ClientDetailPage() {
 
       {/* Updated Create Contract Modal - fixed Select + job linking */}
       <Dialog open={showCreateContract} onOpenChange={setShowCreateContract}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl w-[96vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create New Contract</DialogTitle>
           </DialogHeader>

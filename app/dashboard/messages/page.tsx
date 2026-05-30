@@ -74,9 +74,9 @@ export default function MessagesPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight">Messages</h1>
-        <p className="text-muted-foreground mt-2">Communicate with your clients</p>
+      <div className="mb-6">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Messages</h1>
+        <p className="text-muted-foreground mt-1 sm:mt-2">Communicate with your clients</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -129,7 +129,7 @@ export default function MessagesPage() {
           <CardContent>
             {selectedClientId ? (
               <>
-                <div className="max-h-[500px] overflow-y-auto mb-6 space-y-4 pr-2 border rounded-xl p-4">
+                <div className="max-h-[400px] sm:max-h-[500px] overflow-y-auto mb-6 space-y-4 pr-2 border rounded-xl p-4">
                   {groupedMessages[Object.keys(groupedMessages).find(name =>
                     groupedMessages[name][0].client_id === selectedClientId
                   ) || '']?.map((msg, index) => (
@@ -145,7 +145,7 @@ export default function MessagesPage() {
                   ))}
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                   <Input
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
@@ -153,13 +153,13 @@ export default function MessagesPage() {
                     placeholder="Type your reply..."
                     className="flex-1"
                   />
-                  <Button onClick={sendReply} disabled={!replyText.trim()}>
+                  <Button onClick={sendReply} disabled={!replyText.trim()} className="w-full sm:w-auto">
                     Send
                   </Button>
                 </div>
               </>
             ) : (
-              <div className="flex items-center justify-center h-96 text-muted-foreground">
+              <div className="flex items-center justify-center h-64 sm:h-96 text-muted-foreground">
                 Select a conversation to view messages
               </div>
             )}

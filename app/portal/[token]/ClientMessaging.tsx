@@ -50,7 +50,7 @@ export default function ClientMessaging({ clientId }: { clientId: string }) {
 
   return (
     <div>
-      <div className="max-h-80 overflow-y-auto mb-6 space-y-4 pr-2 border rounded-2xl p-4">
+      <div className="max-h-[280px] sm:max-h-80 overflow-y-auto mb-6 space-y-4 pr-2 border rounded-2xl p-4">
         {messages.length > 0 ? (
           messages.map((msg, index) => (
             <div key={index} className={`flex ${msg.is_from_client ? 'justify-end' : 'justify-start'}`}>
@@ -64,7 +64,7 @@ export default function ClientMessaging({ clientId }: { clientId: string }) {
         )}
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <input
           type="text"
           value={newMessage}
@@ -76,7 +76,7 @@ export default function ClientMessaging({ clientId }: { clientId: string }) {
         <button
           onClick={sendMessage}
           disabled={sending || !newMessage.trim()}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-8 rounded-2xl text-sm font-medium"
+          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-8 rounded-2xl text-sm font-medium w-full sm:w-auto min-h-[44px]"
         >
           {sending ? '...' : 'Send'}
         </button>

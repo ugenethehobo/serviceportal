@@ -304,15 +304,15 @@ export default function OnboardingWizard() {
               <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium mb-1.5">Primary Brand Color</label>
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                     <input
                       type="color"
                       className="h-12 w-20 border rounded-none p-1 bg-background"
                       value={intakeData.primary_color || '#000000'}
                       onChange={(e) => updateData({ primary_color: e.target.value })}
                     />
-                    <div className="text-sm text-muted-foreground">
-                      This will be used for buttons, accents, and PDF headers.
+                    <div className="text-xs sm:text-sm text-muted-foreground">
+                      Used for buttons, accents, and PDF headers.
                     </div>
                   </div>
                 </div>
@@ -400,7 +400,7 @@ export default function OnboardingWizard() {
                 {/* Business Hours */}
                 <div>
                   <label className="block text-sm font-medium mb-1.5">Business Hours (Weekdays)</label>
-                  <div className="flex gap-4">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                     <div className="flex-1">
                       <div className="text-xs text-muted-foreground mb-1">Start</div>
                       <input
@@ -615,18 +615,18 @@ export default function OnboardingWizard() {
               </div>
             )}
 
-            {/* Step 6: Create Password (replaces magic link) */}
+            {/* Step 6: Create Password (replaces magic link) - mobile friendly */}
             {currentStep === 6 && (
-              <div className="space-y-5">
+              <div className="space-y-4">
                 <div className="text-sm text-muted-foreground">
                   Choose a secure password for your account. You will use this email and password to log in.
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1.5">Password *</label>
+                  <label className="block text-sm font-medium mb-1">Password *</label>
                   <input
                     type="password"
-                    className="w-full border rounded-none p-3 text-sm"
+                    className="w-full border rounded-none p-3 text-base"
                     placeholder="At least 8 characters"
                     value={password}
                     onChange={(e) => {
@@ -638,10 +638,10 @@ export default function OnboardingWizard() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1.5">Confirm Password *</label>
+                  <label className="block text-sm font-medium mb-1">Confirm Password *</label>
                   <input
                     type="password"
-                    className="w-full border rounded-none p-3 text-sm"
+                    className="w-full border rounded-none p-3 text-base"
                     placeholder="Re-enter your password"
                     value={confirmPassword}
                     onChange={(e) => {
@@ -658,7 +658,7 @@ export default function OnboardingWizard() {
                   </div>
                 )}
 
-                <div className="text-xs text-muted-foreground pt-2">
+                <div className="text-xs text-muted-foreground pt-1">
                   Your password is stored securely. You can change it later in your account settings.
                 </div>
               </div>
@@ -723,7 +723,7 @@ export default function OnboardingWizard() {
                 </Button>
 
                 <Button
-                  className="rounded-none"
+                  className="rounded-none min-h-[44px] sm:min-h-[36px]"
                   onClick={nextStep}
                   disabled={currentStep === 1 && !intakeData.company_name || isCompleting}
                 >

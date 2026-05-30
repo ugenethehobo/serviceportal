@@ -214,7 +214,7 @@ export default function CalendarPage() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight">Calendar</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Calendar</h1>
           <p className="text-muted-foreground mt-2">View and manage your scheduled jobs</p>
         </div>
 
@@ -253,15 +253,15 @@ export default function CalendarPage() {
         <CardContent className="p-6">
           {view === 'month' ? (
             <>
-              <div className="grid grid-cols-7 gap-2 mb-2">
+              <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
+                  <div key={day} className="text-center text-[10px] sm:text-sm font-medium text-muted-foreground py-1 sm:py-2">
                     {day}
                   </div>
                 ))}
               </div>
 
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-7 gap-1 sm:gap-2">
                 {days.map((day, index) => {
                   const dayJobs = getJobsForDay(day)
                   const isCurrentMonth = day.getMonth() === currentDate.getMonth()
@@ -275,24 +275,24 @@ export default function CalendarPage() {
                       onClick={() => openDayModal(day)}
                       onDragOver={handleDragOver}
                       onDrop={handleDrop}
-                      className={`min-h-[120px] p-3 border rounded-2xl cursor-pointer transition-all hover:border-primary ${isCurrentMonth ? 'bg-background' : 'bg-muted/30 text-muted-foreground'} ${isToday ? 'border-primary bg-primary/5' : ''}`}
+                      className={`min-h-[70px] sm:min-h-[110px] p-1.5 sm:p-3 border rounded-xl sm:rounded-2xl cursor-pointer transition-all hover:border-primary ${isCurrentMonth ? 'bg-background' : 'bg-muted/30 text-muted-foreground'} ${isToday ? 'border-primary bg-primary/5' : ''}`}
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className={`text-sm font-medium ${isToday ? 'text-primary' : ''}`}>
+                      <div className="flex justify-between items-start mb-1">
+                        <div className={`text-xs sm:text-sm font-medium ${isToday ? 'text-primary' : ''}`}>
                           {format(day, 'd')}
                         </div>
                         {dayJobs.length > 0 && (
-                          <Badge variant="secondary" className="text-xs">{dayJobs.length}</Badge>
+                          <Badge variant="secondary" className="text-[9px] sm:text-xs px-1">{dayJobs.length}</Badge>
                         )}
                       </div>
 
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
                         {dayJobs.slice(0, 2).map((job, i) => (
                           <div
                             key={i}
                             draggable
                             onDragStart={(e) => handleDragStart(e, job.id)}
-                            className="text-xs p-1.5 rounded-lg text-white truncate cursor-move"
+                            className="text-[9px] sm:text-xs p-1 rounded-md text-white truncate cursor-move leading-tight"
                             style={{ backgroundColor: getStatusColor(job.status) }}
                           >
                             {job.title}

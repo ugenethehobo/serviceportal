@@ -23,7 +23,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <a 
               href="/dashboard" 
@@ -48,7 +48,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {children}
       </div>
     </div>

@@ -110,8 +110,8 @@ export function OwnerCustomersTable({ customers }: OwnerCustomersTableProps) {
         {filteredCustomers.length === 0 ? (
           <div className="text-muted-foreground py-8 text-center">No customers match your filters.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto -mx-1 px-1">
+            <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="py-3 pr-4">Company</th>
@@ -153,19 +153,21 @@ export function OwnerCustomersTable({ customers }: OwnerCustomersTableProps) {
                     <td className="py-3 pr-4 text-muted-foreground">
                       {new Date(customer.created_at).toLocaleDateString()}
                     </td>
-                    <td className="py-3 flex gap-3 text-sm">
-                      <a href={`/owner/customer/${customer.id}`} className="text-primary hover:underline">
-                        View Details
-                      </a>
-                      <a href={`/dashboard`} className="text-muted-foreground hover:underline">
-                        Impersonate
-                      </a>
-                      <button
-                        onClick={() => handleDeleteClick(customer)}
-                        className="text-red-600 hover:text-red-700 hover:underline"
-                      >
-                        Delete
-                      </button>
+                    <td className="py-3">
+                      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 text-sm">
+                        <a href={`/owner/customer/${customer.id}`} className="text-primary hover:underline whitespace-nowrap">
+                          View
+                        </a>
+                        <a href={`/dashboard`} className="text-muted-foreground hover:underline whitespace-nowrap">
+                          Impersonate
+                        </a>
+                        <button
+                          onClick={() => handleDeleteClick(customer)}
+                          className="text-red-600 hover:text-red-700 hover:underline text-left whitespace-nowrap"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

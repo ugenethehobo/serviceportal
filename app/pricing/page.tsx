@@ -103,7 +103,7 @@ export default function PricingPage() {
     <div className="min-h-screen bg-background text-foreground">
       {/* Top Nav - Sharp */}
       <nav className="border-b">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold text-lg tracking-[-1px]">SP</span>
@@ -141,9 +141,9 @@ export default function PricingPage() {
           Branded client experience. Online payments. Zero complexity.
         </p>
 
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
           <a href="#pricing">
-            <Button size="lg" className="rounded-none px-8 text-base">
+            <Button size="lg" className="rounded-none px-8 text-base w-full sm:w-auto">
               View pricing <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </a>
@@ -176,7 +176,7 @@ export default function PricingPage() {
               <CardTitle className="text-2xl tracking-tight">Monthly</CardTitle>
               <CardDescription className="text-base mt-1">Billed monthly. Cancel anytime.</CardDescription>
               <div className="mt-6 flex items-baseline">
-                <span className="text-6xl font-semibold tracking-tighter">$60</span>
+                <span className="text-5xl sm:text-6xl font-semibold tracking-tighter">$60</span>
                 <span className="text-muted-foreground ml-2 text-lg">/ month</span>
               </div>
             </CardHeader>
@@ -228,7 +228,7 @@ export default function PricingPage() {
               <CardTitle className="text-2xl tracking-tight">Annual</CardTitle>
               <CardDescription className="text-base mt-1">Billed yearly. Save two months.</CardDescription>
               <div className="mt-6 flex items-baseline">
-                <span className="text-6xl font-semibold tracking-tighter">$600</span>
+                <span className="text-5xl sm:text-6xl font-semibold tracking-tighter">$600</span>
                 <span className="text-muted-foreground ml-2 text-lg">/ year</span>
               </div>
               <div className="text-sm text-emerald-600 font-medium mt-1">Equivalent to $50/month — save $120</div>

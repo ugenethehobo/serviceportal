@@ -127,4 +127,15 @@
   html {
     @apply font-sans;
   }
+
+  /* Mobile touch target improvements - safe baseline (min 40px on interactive elements) */
+  @media (max-width: 640px) {
+    button, a[role="button"], .cursor-pointer, input[type="button"], input[type="submit"] {
+      min-height: 40px;
+    }
+    .touch-target {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
 }

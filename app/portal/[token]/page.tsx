@@ -622,26 +622,26 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {currentPage === 1 && (
           <>
             {/* Hero Stats */}
             <div className="mb-10">
               <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div>
-                  <div className="text-4xl font-bold tracking-tight">Hi {client.name.split(' ')[0]},</div>
-                  <div className="text-xl text-muted-foreground mt-1">Here's everything happening with your projects</div>
+                  <div className="text-3xl sm:text-4xl font-bold tracking-tight">Hi {client.name.split(' ')[0]},</div>
+                  <div className="text-lg sm:text-xl text-muted-foreground mt-1">Here's everything happening with your projects</div>
                 </div>
-                <div className="flex gap-4">
-                  <div className="bg-card border rounded-none px-6 py-3 text-center">
-                    <div className="text-3xl font-semibold">{jobs.length}</div>
-                    <div className="text-xs text-muted-foreground">Total Jobs</div>
+                <div className="grid grid-cols-2 gap-3 sm:flex sm:gap-4">
+                  <div className="bg-card border rounded-none px-4 sm:px-6 py-2 sm:py-3 text-center">
+                    <div className="text-2xl sm:text-3xl font-semibold">{jobs.length}</div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground">Total Jobs</div>
                   </div>
-                  <div className="bg-card border rounded-none px-6 py-3 text-center">
-                    <div className="text-3xl font-semibold text-blue-600">
+                  <div className="bg-card border rounded-none px-4 sm:px-6 py-2 sm:py-3 text-center">
+                    <div className="text-2xl sm:text-3xl font-semibold text-blue-600">
                       {jobs.filter(j => j.scheduled_date && new Date(j.scheduled_date) > new Date()).length}
                     </div>
-                    <div className="text-xs text-muted-foreground">Upcoming</div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground">Upcoming</div>
                   </div>
                 </div>
               </div>
@@ -653,12 +653,12 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* TOP LEFT: Jobs + Estimates (Tabbed) */}
             <div className="bg-card border rounded-none p-6">
-              {/* Tab Headers */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex border-b">
+              {/* Tab Headers - mobile friendly */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                <div className="flex border-b overflow-x-auto">
                   <button
                     onClick={() => setPortalRightPanel('jobs')}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                       portalRightPanel === 'jobs'
                         ? 'border-primary text-primary'
                         : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -668,7 +668,7 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
                   </button>
                   <button
                     onClick={() => setPortalRightPanel('estimates')}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                       portalRightPanel === 'estimates'
                         ? 'border-primary text-primary'
                         : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -689,10 +689,10 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
                         key={job.id}
                         className={`overflow-hidden border-2 transition-all ${getLightStatusColor(job.status)}`}
                       >
-                        <CardHeader className="pb-4">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <CardTitle className="text-xl">{job.title}</CardTitle>
+                        <CardHeader className="pb-3 sm:pb-4">
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                            <div className="min-w-0">
+                              <CardTitle className="text-lg sm:text-xl">{job.title}</CardTitle>
                               {job.scheduled_date && (
                                 <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
                                   <Clock className="w-4 h-4" />
@@ -700,7 +700,7 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
                                 </div>
                               )}
                             </div>
-                            <Badge className={getStatusInfo(job.status).color}>
+                            <Badge className={getStatusInfo(job.status).color + " shrink-0"}>
                               {getStatusInfo(job.status).label}
                             </Badge>
                           </div>
@@ -783,7 +783,7 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
 
                       return (
                         <div key={job.id} className="border-b pb-6 last:border-b-0 last:pb-0">
-                          <div className="flex justify-between items-start mb-4">
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-4">
                             <div>
                               <div className="font-semibold text-lg">{job.title}</div>
                               <div className="text-sm text-muted-foreground">
@@ -800,7 +800,7 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
 
                           <div className="space-y-3">
                             {jobBills.map((bill: any) => (
-                              <div key={bill.id} className="flex justify-between items-center text-sm">
+                              <div key={bill.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-sm">
                                 <div className="flex-1">
                                   <div>{bill.name}</div>
                                   {bill.notes && (
@@ -814,7 +814,7 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
                                       size="sm"
                                       disabled={isProcessingPayment}
                                       onClick={() => handlePayBill(bill, job)}
-                                      className="bg-emerald-600 hover:bg-emerald-700 h-7 px-3 text-xs"
+                                      className="bg-emerald-600 hover:bg-emerald-700 min-h-[36px] px-4 text-xs sm:text-sm"
                                     >
                                       {isProcessingPayment ? "..." : "Pay Now"}
                                     </Button>
@@ -831,7 +831,7 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
 
                     {/* Total Outstanding */}
                     <div className="pt-6 border-t">
-                      <div className="flex justify-between items-center mb-4">
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4">
                         <div className="font-semibold text-xl">Total Outstanding</div>
                         <div className="text-2xl font-semibold text-emerald-600">
                           ${jobs.reduce((sum: number, job: any) => {
@@ -1087,7 +1087,7 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
       {selectedPhoto && (
         <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center" onClick={() => setSelectedPhoto(null)}>
           <img src={selectedPhoto} className="max-w-[95%] max-h-[95%] object-contain rounded-none" onClick={(e) => e.stopPropagation()} />
-          <Button variant="ghost" size="icon" className="absolute top-6 right-6 bg-black/60 hover:bg-black/80 text-white rounded-full h-14 w-14 text-2xl z-50" onClick={() => setSelectedPhoto(null)}>
+          <Button variant="ghost" size="icon" className="absolute top-4 right-4 sm:top-6 sm:right-6 bg-black/60 hover:bg-black/80 text-white rounded-full h-12 w-12 sm:h-14 sm:w-14 text-2xl z-50" onClick={() => setSelectedPhoto(null)}>
             ✕
           </Button>
         </div>
@@ -1095,7 +1095,7 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
 
       {/* Category Photo Gallery Modal */}
       <Dialog open={selectedCategoryPhotos.length > 0} onOpenChange={() => { setSelectedCategoryPhotos([]); setSelectedCategoryName("") }}>
-        <DialogContent className="max-w-6xl">
+        <DialogContent className="max-w-6xl w-[98vw] sm:w-auto max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selectedCategoryName} Photos ({selectedCategoryPhotos.length})</DialogTitle>
           </DialogHeader>
@@ -1114,7 +1114,7 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
 
       {/* All Photos Gallery Modal */}
       <Dialog open={showAllPhotos} onOpenChange={setShowAllPhotos}>
-        <DialogContent className="max-w-6xl">
+        <DialogContent className="max-w-6xl w-[98vw] sm:w-auto max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>All Project Photos ({allPhotos.length})</DialogTitle>
           </DialogHeader>

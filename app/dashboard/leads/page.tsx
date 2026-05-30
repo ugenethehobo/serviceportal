@@ -300,18 +300,18 @@ export default function LeadsPage() {
   }
 
   if (loading) {
-    return <div className="p-8">Loading leads...</div>
+    return <div className="p-4 sm:p-6 md:p-8">Loading leads...</div>
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
       <SubscriptionStatus />
       <TrialStatusBanner />
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight">Leads</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Leads</h1>
           <p className="text-muted-foreground mt-2">Track potential clients before they become active customers</p>
         </div>
 

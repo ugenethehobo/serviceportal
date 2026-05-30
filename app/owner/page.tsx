@@ -57,7 +57,7 @@ export default async function OwnerDashboard() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Customers</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-semibold tracking-tight">{totalCustomers}</div>
+            <div className="text-3xl sm:text-4xl font-semibold tracking-tight">{totalCustomers}</div>
           </CardContent>
         </Card>
 
@@ -66,7 +66,7 @@ export default async function OwnerDashboard() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Recent Signups (30d)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-semibold tracking-tight">{recentSignups}</div>
+            <div className="text-3xl sm:text-4xl font-semibold tracking-tight">{recentSignups}</div>
           </CardContent>
         </Card>
 
@@ -75,7 +75,7 @@ export default async function OwnerDashboard() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Active / Trialing</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-semibold tracking-tight text-green-600">{activeOrTrialing}</div>
+            <div className="text-3xl sm:text-4xl font-semibold tracking-tight text-green-600">{activeOrTrialing}</div>
           </CardContent>
         </Card>
       </div>
