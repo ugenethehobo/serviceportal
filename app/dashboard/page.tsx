@@ -7,6 +7,7 @@ import { getStatusColor } from '@/lib/status-colors'
 import { DashboardCharts } from './DashboardCharts'
 import RoutePlannerPreviewWrapper from './RoutePlannerPreviewWrapper'
 import { SubscriptionStatus } from '@/components/subscription-status'
+import MobileDashboardPager from './MobileDashboardPager'
 import {
   Users,
   Briefcase,
@@ -337,8 +338,8 @@ export default async function Dashboard() {
         })}
       </div>
 
-      {/* Main professional widget area */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+      {/* Main professional widget area - Desktop only */}
+      <div className="hidden lg:block grid grid-cols-1 xl:grid-cols-12 gap-5">
         {/* Today Schedule + Revenue Trend (takes significant real estate) */}
         <div className="xl:col-span-7 space-y-5">
           {/* Today Hero */}
@@ -566,7 +567,30 @@ export default async function Dashboard() {
         </div>
       </div>
 
-      {/* Bottom actions row — professional and minimal */}
+      {/* Mobile Dashboard Pager with page indicator dots (mobile only) */}
+      <MobileDashboardPager
+        todayJobs={todayJobs}
+        upcomingJobs={upcomingJobs}
+        jobsDueThisWeekCount={jobsDueThisWeekCount}
+        revenueTrendData={revenueTrendData}
+        statusPieData={statusPieData}
+        primaryColor={primaryColor}
+        mtdRevenue={mtdRevenue}
+        totalLeads={totalLeads}
+        freshLeads={freshLeads}
+        agingLeads={agingLeads}
+        staleLeads={staleLeads}
+        routePlannerEnabled={routePlannerEnabled}
+        routableJobsToday={routableJobsToday}
+        roughDriveMinutes={roughDriveMinutes}
+        routePreviewPoints={routePreviewPoints}
+        overdueJobsCount={overdueJobsCount}
+        totalOutstanding={totalOutstanding}
+        customColorMap={customColorMap}
+        getStatusColor={getStatusColor}
+      />
+
+      {/* Bottom actions row — professional and minimal (desktop + mobile) */}
       <div className="flex flex-wrap items-center gap-2 pt-2">
         <span className="text-xs uppercase tracking-wider text-muted-foreground mr-1">Quick actions</span>
         {[
