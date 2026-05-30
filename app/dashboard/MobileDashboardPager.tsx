@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { CalendarDays, Map, AlertCircle } from "lucide-react"
+import { CalendarDays, Map, AlertCircle, Users, UserPlus, Briefcase, Calendar } from "lucide-react"
 import { DashboardCharts } from './DashboardCharts'
 import RoutePlannerPreviewWrapper from './RoutePlannerPreviewWrapper'
 import { getStatusColor } from '@/lib/status-colors'
