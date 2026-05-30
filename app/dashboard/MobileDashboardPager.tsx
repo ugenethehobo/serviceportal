@@ -94,11 +94,11 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
 
       <div 
         ref={scrollerRef}
-        className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-6 -mx-4 px-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="flex overflow-x-auto snap-x snap-mandatory pb-6 -mx-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         
         {/* Page 1: Today & Upcoming (pure - no stats) */}
-        <div className="min-w-[92vw] snap-start">
+        <div className="min-w-full snap-start px-4">
           <Card className="border-l-4 border-l-primary h-full rounded-none">
             <CardHeader className="flex flex-row items-center justify-between py-3">
               <div className="flex items-center gap-2">
@@ -176,7 +176,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
         </div>
 
         {/* Page 2: Leads Pipeline ONLY */}
-        <div className="min-w-[92vw] snap-start">
+        <div className="min-w-full snap-start px-4">
           <Card className="h-full rounded-none">
             <CardHeader>
               <CardTitle className="text-base">Leads Pipeline</CardTitle>
@@ -224,7 +224,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
         </div>
 
         {/* Page 3: Route Planner */}
-        <div className="min-w-[92vw] snap-start">
+        <div className="min-w-full snap-start px-4">
           <Card className="relative min-h-[320px] overflow-hidden p-0 rounded-none">
             <div className="absolute inset-0 z-0">
               <RoutePlannerPreviewWrapper points={routePreviewPoints} />
@@ -265,7 +265,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
         </div>
 
         {/* Page 4: Metrics + Outstanding */}
-        <div className="min-w-[92vw] snap-start">
+        <div className="min-w-full snap-start px-4">
           <div className="space-y-4">
             {/* Key Metrics */}
             <Card className="rounded-none">
@@ -322,7 +322,7 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
 
       </div>
 
-      {/* Page Indicator Dots */}
+      {/* Page Indicator Dots - strict circles, no stretching */}
       <div className="flex justify-center items-center gap-2 mt-3">
         {Array.from({ length: totalPages }).map((_, index) => (
           <div
@@ -338,10 +338,10 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                 })
               }
             }}
-            className={`rounded-full cursor-pointer transition-all ${
+            className={`rounded-full cursor-pointer flex-shrink-0 transition-all ${
               currentPage === index 
                 ? 'w-2 h-2 bg-primary' 
-                : 'w-[6px] h-[6px] bg-muted-foreground/40 hover:bg-muted-foreground/70'
+                : 'w-2 h-2 bg-muted-foreground/40 hover:bg-muted-foreground/70'
             }`}
           />
         ))}
