@@ -69,7 +69,21 @@ function SubscribeButton({ plan, label }: { plan: 'monthly' | 'annual'; label: s
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="relative min-h-screen bg-background text-foreground">
+      {/* Moving background texture layer - placed at root level so it can't be clipped or stacked behind */}
+      <div className="absolute inset-x-0 top-0 h-[100dvh] -z-10 pointer-events-none bg-red-500/20 dark:bg-cyan-400/25">
+        {/* Base wash */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-muted/[0.05] dark:from-white/[0.03] dark:to-white/[0.04]" />
+
+        {/* Drifting blobs - now safely inside the layer */}
+        <div className="absolute -top-24 -left-32 h-[580px] w-[580px] rounded-full bg-primary/20 blur-[110px] dark:bg-white/12 dark:blur-[130px] animate-[drift_32s_ease-in-out_infinite]" />
+        <div className="absolute top-[10%] -right-40 h-[620px] w-[620px] rounded-full bg-muted-foreground/15 blur-[120px] dark:bg-white/8 dark:blur-[140px] animate-[drift_38s_ease-in-out_infinite_8s]" />
+        <div className="absolute bottom-[-80px] left-[15%] h-[480px] w-[480px] rounded-full bg-primary/15 blur-[100px] dark:bg-white/7 dark:blur-[115px] animate-[drift_27s_ease-in-out_infinite_13s]" />
+
+        {/* Dot texture */}
+        <div className="absolute inset-0 bg-[radial-gradient(currentColor_1px,transparent_1.5px)] bg-[length:5px_5px] opacity-[0.07] text-foreground dark:opacity-[0.13] dark:text-white" />
+      </div>
+
       {/* Top Nav */}
       <nav className="border-b">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -97,20 +111,6 @@ export default function PricingPage() {
 
       {/* Full-screen Modern Hero */}
       <section className="min-h-screen flex flex-col items-center justify-center relative pt-16 pb-16 md:pb-24">
-        {/* Moving texture background — diagnostic version with visible debug layer */}
-        <div className="absolute inset-0 -z-10 pointer-events-none bg-red-500/10 dark:bg-cyan-400/10">
-          {/* Base wash */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-muted/[0.05] dark:from-white/[0.025] dark:to-white/[0.035]" />
-
-          {/* Blobs positioned mostly inside the viewport so they aren't clipped */}
-          <div className="absolute -top-24 -left-32 h-[580px] w-[580px] rounded-full bg-primary/20 blur-[110px] dark:bg-white/12 dark:blur-[130px] animate-[drift_32s_ease-in-out_infinite]" />
-          <div className="absolute top-[10%] -right-40 h-[620px] w-[620px] rounded-full bg-muted-foreground/15 blur-[120px] dark:bg-white/8 dark:blur-[140px] animate-[drift_38s_ease-in-out_infinite_8s]" />
-          <div className="absolute bottom-[-80px] left-[15%] h-[480px] w-[480px] rounded-full bg-primary/15 blur-[100px] dark:bg-white/7 dark:blur-[115px] animate-[drift_27s_ease-in-out_infinite_13s]" />
-
-          {/* Dot texture - larger and more visible for testing */}
-          <div className="absolute inset-0 bg-[radial-gradient(currentColor_1px,transparent_1.5px)] bg-[length:5px_5px] opacity-[0.07] text-foreground dark:opacity-[0.13] dark:text-white" />
-        </div>
-
         <div className="max-w-5xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs tracking-[2px] uppercase mb-6 text-muted-foreground">
             Built for field service professionals
