@@ -96,7 +96,18 @@ export default function PricingPage() {
       </nav>
 
       {/* Full-screen Modern Hero */}
-      <section className="min-h-screen flex items-center justify-center relative pt-16">
+      <section className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden pt-16 pb-16 md:pb-24">
+        {/* Moving texture background - subtle blurred gradients + dots */}
+        <div className="absolute inset-0 -z-10">
+          {/* Soft drifting gradient blobs (blurs + gradients) */}
+          <div className="absolute -top-32 -left-40 h-[520px] w-[520px] rounded-full bg-primary/10 blur-[120px] animate-[drift_32s_ease-in-out_infinite]" />
+          <div className="absolute top-1/3 -right-48 h-[620px] w-[620px] rounded-full bg-muted-foreground/10 blur-[140px] animate-[drift_38s_ease-in-out_infinite_8s]" />
+          <div className="absolute bottom-[-120px] left-1/3 h-[480px] w-[480px] rounded-full bg-primary/5 blur-[100px] animate-[drift_27s_ease-in-out_infinite_14s]" />
+
+          {/* Very faint moving dot texture for depth */}
+          <div className="absolute inset-0 bg-[radial-gradient(currentColor_0.6px,transparent_1px)] bg-[length:5px_5px] opacity-[0.035] text-foreground" />
+        </div>
+
         <div className="max-w-5xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs tracking-[2px] uppercase mb-6 text-muted-foreground">
             Built for field service professionals
@@ -129,10 +140,10 @@ export default function PricingPage() {
           </p>
         </div>
 
-        {/* Scroll hint */}
-        <div className="absolute bottom-10 left-1/2 hidden md:block -translate-x-1/2 text-center">
+        {/* Scroll hint - now in flow so it's always visible within the hero */}
+        <div className="mt-auto pt-12 md:pt-16 hidden md:flex flex-col items-center text-center">
           <div className="text-xs tracking-[2px] uppercase text-muted-foreground">Scroll to see pricing</div>
-          <div className="mt-1 h-px w-8 bg-muted-foreground/40 mx-auto" />
+          <div className="mt-1.5 h-px w-8 bg-muted-foreground/40" />
         </div>
       </section>
 
