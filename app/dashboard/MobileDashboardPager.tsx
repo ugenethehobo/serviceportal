@@ -311,10 +311,10 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
 
       </div>
 
-      {/* Page Indicator Dots - simple and clean */}
-      <div className="flex justify-center items-center gap-2 mt-2 h-5">
+      {/* Page Indicator Dots */}
+      <div className="flex justify-center items-center gap-2 mt-3">
         {Array.from({ length: totalPages }).map((_, index) => (
-          <button
+          <div
             key={index}
             onClick={() => {
               setCurrentPage(index)
@@ -327,12 +327,11 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                 })
               }
             }}
-            className={`rounded-full transition-all duration-200 ${
+            className={`rounded-full cursor-pointer transition-all ${
               currentPage === index 
                 ? 'w-2 h-2 bg-primary' 
-                : 'w-1.5 h-1.5 bg-muted-foreground/40 hover:bg-muted-foreground/70'
+                : 'w-[6px] h-[6px] bg-muted-foreground/40 hover:bg-muted-foreground/70'
             }`}
-            aria-label={`Go to page ${index + 1}`}
           />
         ))}
       </div>

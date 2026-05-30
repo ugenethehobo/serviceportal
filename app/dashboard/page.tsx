@@ -316,8 +316,8 @@ export default async function Dashboard() {
 
       <SubscriptionStatus />
 
-      {/* Top metrics row — more comfortable spacing on mobile */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+      {/* Top metrics row — hidden on mobile (moved into Page 4 of the swipe pager) */}
+      <div className="hidden lg:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         {compactMetrics.map((m, i) => {
           const Icon = m.icon
           const content = (
