@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       try {
         const resend = new (await import('resend')).Resend(process.env.RESEND_API_KEY!)
 
-        await resend.emails.send({
+        const { data: emailData, error: resendError } = await resend.emails.send({
           from: process.env.RESEND_FROM_EMAIL || 'ServicePortal <onboarding@resend.dev>',
           to: customerEmail,
           subject: 'Set up your ServicePortal account',
@@ -84,11 +84,17 @@ export async function POST(request: NextRequest) {
             <p><a href="${linkData.properties.action_link}">Set up my account →</a></p>
             <p>This link will expire in 24 hours.</p>
           `,
-        })
+        });
+
+        if (resendError) {
+          console.error('Resend send error during provisioning:', resendError);
+          // Do not throw — we still want to complete provisioning even if email fails
+        } else {
+          console.log('Initial magic link email sent via Resend. ID:', emailData?.id);
+        }
       } catch (emailError: any) {
-        console.error('Failed to send magic link email via Resend:', emailError)
+        console.error('Failed to send magic link email via Resend:', emailError);
         // Don't fail the whole provisioning if email sending fails
-        // In development, you might want to surface this
       }
     }
 

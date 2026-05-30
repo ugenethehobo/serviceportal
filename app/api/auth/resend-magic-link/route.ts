@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     try {
       const resend = new (await import('resend')).Resend(process.env.RESEND_API_KEY!)
 
-      await resend.emails.send({
+      const { data, error: resendError } = await resend.emails.send({
         from: process.env.RESEND_FROM_EMAIL || 'ServicePortal <onboarding@resend.dev>',
         to: email,
         subject: 'Set up your ServicePortal account',
@@ -37,16 +37,23 @@ export async function POST(request: NextRequest) {
           <p>Here's your magic link to access your ServicePortal account:</p>
           <p><a href="${linkData.properties.action_link}">Access my account →</a></p>
         `,
-      })
+      });
 
-      return NextResponse.json({ success: true })
+      if (resendError) {
+        console.error('Resend send error (full):', resendError);
+        return NextResponse.json({ 
+          error: resendError.message || 'Failed to send email via Resend' 
+        }, { status: 500 });
+      }
+
+      console.log('Resend email sent successfully. ID:', data?.id);
+      return NextResponse.json({ success: true });
     } catch (emailError: any) {
-      console.error('Failed to send resend email via Resend:', emailError)
-      // Return more details in development
+      console.error('Failed to send resend email via Resend:', emailError);
       const message = process.env.NODE_ENV === 'development' 
         ? `Resend error: ${emailError?.message || emailError}` 
         : 'Failed to send email';
-      return NextResponse.json({ error: message }, { status: 500 })
+      return NextResponse.json({ error: message }, { status: 500 });
     }
   } catch (error: any) {
     console.error('Resend magic link error:', error)
