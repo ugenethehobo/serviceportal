@@ -783,43 +783,45 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
 
                       return (
                         <div key={job.id} className="border-b pb-6 last:border-b-0 last:pb-0">
-                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-4">
-                            <div>
-                              <div className="font-semibold text-lg">{job.title}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {jobBills.length} charges
+                          <div className="flex flex-col gap-3 mb-4">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <div className="font-semibold text-lg">{job.title}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {jobBills.length} charges
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-2xl font-semibold text-emerald-600">
-                                ${totalDue.toFixed(2)}
+                              <div className="text-right">
+                                <div className="text-2xl font-semibold text-emerald-600">
+                                  ${totalDue.toFixed(2)}
+                                </div>
+                                <div className="text-xs text-muted-foreground">Total Due</div>
                               </div>
-                              <div className="text-xs text-muted-foreground">Total Due</div>
                             </div>
                           </div>
 
                           <div className="space-y-3">
                             {jobBills.map((bill: any) => (
-                              <div key={bill.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-sm">
-                                <div className="flex-1">
-                                  <div>{bill.name}</div>
+                              <div key={bill.id} className="flex flex-col gap-2 text-sm border-b pb-3 last:border-b-0 last:pb-0">
+                                <div>
+                                  <div className="font-medium">{bill.name}</div>
                                   {bill.notes && (
                                     <div className="text-xs text-muted-foreground mt-0.5">{bill.notes}</div>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-3">
-                                  <div className="font-medium">${Number(bill.amount).toFixed(2)}</div>
+                                <div className="flex items-center justify-between">
+                                  <div className="font-semibold text-base">${Number(bill.amount).toFixed(2)}</div>
                                   {bill.status === 'pending' ? (
                                     <Button
                                       size="sm"
                                       disabled={isProcessingPayment}
                                       onClick={() => handlePayBill(bill, job)}
-                                      className="bg-emerald-600 hover:bg-emerald-700 min-h-[36px] px-4 text-xs sm:text-sm"
+                                      className="bg-emerald-600 hover:bg-emerald-700 min-h-[40px] px-5 text-sm"
                                     >
                                       {isProcessingPayment ? "..." : "Pay Now"}
                                     </Button>
                                   ) : (
-                                    <Badge variant="default" className="bg-emerald-500 text-xs">Paid</Badge>
+                                    <Badge variant="default" className="bg-emerald-500">Paid</Badge>
                                   )}
                                 </div>
                               </div>

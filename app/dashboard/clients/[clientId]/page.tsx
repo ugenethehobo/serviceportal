@@ -904,7 +904,7 @@ export default function ClientDetailPage() {
 
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-foreground truncate leading-tight">{b.title}</div>
-                    <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+                    <div className="flex items-center gap-2 mt-1 text-xs sm:text-[10px] text-muted-foreground">
                       <span style={{ color }}>{statusLabel}</span>
                       {b.clients?.name && <span className="truncate opacity-70">· {b.clients.name}</span>}
                     </div>
@@ -1463,9 +1463,10 @@ export default function ClientDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 mt-2 lg:mt-0">
+        <div className="w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-t-0 mt-2 lg:mt-0">
           <Button
             variant="outline"
+            className="w-full lg:w-auto justify-center lg:justify-start"
             onClick={async () => {
               const token = crypto.randomUUID()
               const expiresAt = new Date()
@@ -1514,12 +1515,12 @@ export default function ClientDetailPage() {
               <div className="font-semibold text-2xl sm:text-3xl">Jobs, Bills & Photos</div>
               <div className="text-sm text-muted-foreground mt-1">All projects for this client</div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowMessagesModal(true)}
-                className="relative min-h-[36px]"
+                className="relative flex-1 sm:flex-none min-h-[40px] justify-center"
               >
                 <MessageCircle className="mr-2 h-4 w-4" />
                 Messages
@@ -1534,6 +1535,7 @@ export default function ClientDetailPage() {
                 variant={showFilters ? "default" : "outline"}
                 size="sm"
                 onClick={() => setShowFilters(!showFilters)}
+                className="min-h-[40px]"
               >
                 <Filter className="h-4 w-4" />
               </Button>
@@ -1542,13 +1544,14 @@ export default function ClientDetailPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowCreateEstimate(true)}
+                className="flex-1 sm:flex-none min-h-[40px] justify-center"
               >
                 <FileText className="mr-2 h-4 w-4" />
-                Create Estimate
+                Estimate
               </Button>
 
-              <Button size="sm" onClick={() => setShowAddJob(true)}>
-                + Add Job
+              <Button size="sm" onClick={() => setShowAddJob(true)} className="flex-1 sm:flex-none min-h-[40px] justify-center">
+                + Job
               </Button>
             </div>
           </div>
@@ -1672,11 +1675,11 @@ export default function ClientDetailPage() {
         {/* RIGHT PANEL: Timeline / Estimates / Contracts */}
         <div className="lg:col-span-4">
           <div className="sticky top-8">
-            {/* Tabs */}
-            <div className="flex border-b mb-4">
+            {/* Tabs - mobile friendly */}
+            <div className="flex border-b mb-4 overflow-x-auto">
               <button
                 onClick={() => setRightPanel('timeline')}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   rightPanel === 'timeline' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -1687,7 +1690,7 @@ export default function ClientDetailPage() {
                   setRightPanel('estimates')
                   if (estimates.length === 0) loadEstimates()
                 }}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   rightPanel === 'estimates' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >

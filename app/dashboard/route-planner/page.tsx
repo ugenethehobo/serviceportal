@@ -662,7 +662,8 @@ export default function RoutePlannerPage() {
 
               <Button 
                 onClick={applyManualCoordinates} 
-                size="sm" 
+                size="default" 
+                className="w-full sm:w-auto"
                 variant="outline"
                 disabled={Object.keys(manualCoords).length === 0}
               >
@@ -677,21 +678,21 @@ export default function RoutePlannerPage() {
           {orderedStops.length > 0 && (
             <div className="border p-4">
               <div className="text-sm font-medium mb-3">Optimized Stop Order</div>
-              <ol className="space-y-1.5 text-sm">
+              <ol className="space-y-2 text-sm">
                 {orderedStops.map((stop, index) => {
                   const legTime = index > 0 && legDurations[index - 1] != null 
                     ? legDurations[index - 1] 
                     : null
 
                   return (
-                    <li key={index} className="flex gap-2 sm:gap-3 border p-2.5 sm:p-2 items-center rounded">
-                      <div className="font-mono text-xs w-5 text-muted-foreground shrink-0">{index + 1}.</div>
+                    <li key={index} className="flex gap-3 border p-3 sm:p-2.5 items-center rounded bg-card">
+                      <div className="font-mono text-sm font-medium w-6 text-muted-foreground shrink-0">{index + 1}.</div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate text-sm">{stop.job.title}</div>
-                        <div className="text-[10px] sm:text-xs text-muted-foreground truncate">{stop.address}</div>
+                        <div className="font-medium truncate">{stop.job.title}</div>
+                        <div className="text-xs text-muted-foreground truncate mt-0.5">{stop.address}</div>
                         {legTime !== null && (
-                          <div className="text-[10px] text-blue-600 mt-0.5">
-                            ~{legTime} min from previous
+                          <div className="text-xs text-blue-600 mt-1 font-medium">
+                            ~{legTime} min drive from previous stop
                           </div>
                         )}
                       </div>

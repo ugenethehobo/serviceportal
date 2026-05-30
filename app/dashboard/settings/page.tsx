@@ -534,30 +534,32 @@ export default function SettingsPage() {
             <div className="space-y-3">
               {statuses.map((status, index) => (
                 <div key={status.key} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 rounded-2xl border p-3">
-                  <Input
-                    type="color"
-                    value={status.color}
-                    onChange={(e) => {
-                      const newStatuses = [...statuses]
-                      newStatuses[index].color = e.target.value
-                      setStatuses(newStatuses)
-                    }}
-                    className="h-9 w-14 p-1 flex-shrink-0 self-center"
-                  />
-                  <Input
-                    value={status.label}
-                    onChange={(e) => {
-                      const newStatuses = [...statuses]
-                      newStatuses[index].label = e.target.value
-                      setStatuses(newStatuses)
-                    }}
-                    className="flex-1"
-                    placeholder="Status name"
-                  />
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <Input
+                      type="color"
+                      value={status.color}
+                      onChange={(e) => {
+                        const newStatuses = [...statuses]
+                        newStatuses[index].color = e.target.value
+                        setStatuses(newStatuses)
+                      }}
+                      className="h-10 w-12 p-1 flex-shrink-0"
+                    />
+                    <Input
+                      value={status.label}
+                      onChange={(e) => {
+                        const newStatuses = [...statuses]
+                        newStatuses[index].label = e.target.value
+                        setStatuses(newStatuses)
+                      }}
+                      className="flex-1 sm:w-48"
+                      placeholder="Status name"
+                    />
+                  </div>
                   <Button
                     variant="ghost"
-                    size="icon"
-                    className="self-center sm:self-auto ml-auto sm:ml-0"
+                    size="sm"
+                    className="self-end sm:self-auto text-destructive hover:text-destructive ml-auto sm:ml-0"
                     onClick={() => {
                       if (statuses.length === 1) {
                         setConfirmDialog({
