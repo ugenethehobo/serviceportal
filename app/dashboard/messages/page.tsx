@@ -74,9 +74,9 @@ export default function MessagesPage() {
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-8">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Messages</h1>
-        <p className="text-muted-foreground mt-1 sm:mt-2">Communicate with your clients</p>
+        <p className="text-muted-foreground mt-2 leading-snug">Communicate with your clients</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

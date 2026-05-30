@@ -236,9 +236,9 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-8">
+      <div className="mb-10">
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground mt-2">Manage your company settings and preferences</p>
+        <p className="text-muted-foreground mt-2 leading-snug">Manage your company settings and preferences</p>
       </div>
 
       {showConnectionSuccess && (

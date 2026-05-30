@@ -625,14 +625,14 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {currentPage === 1 && (
           <>
-            {/* Hero Stats */}
-            <div className="mb-10">
+            {/* Hero Stats - more breathing room on mobile */}
+            <div className="mb-12">
               <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div>
                   <div className="text-3xl sm:text-4xl font-bold tracking-tight">Hi {client.name.split(' ')[0]},</div>
-                  <div className="text-lg sm:text-xl text-muted-foreground mt-1">Here's everything happening with your projects</div>
+                  <div className="text-lg sm:text-xl text-muted-foreground mt-2 leading-snug">Here's everything happening with your projects</div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 sm:flex sm:gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:flex sm:gap-4 mt-4 md:mt-0">
                   <div className="bg-card border rounded-none px-4 sm:px-6 py-2 sm:py-3 text-center">
                     <div className="text-2xl sm:text-3xl font-semibold">{jobs.length}</div>
                     <div className="text-[10px] sm:text-xs text-muted-foreground">Total Jobs</div>
@@ -647,7 +647,7 @@ export default function ClientPortal({ params }: { params: Promise<{ token: stri
               </div>
             </div>
 
-            <div className="border-b mb-10" />
+            <div className="border-b mb-12" />
 
             {/* 4-Grid Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

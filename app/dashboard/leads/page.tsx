@@ -308,11 +308,11 @@ export default function LeadsPage() {
       <SubscriptionStatus />
       <TrialStatusBanner />
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+      {/* Header - more breathing room */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-10">
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Leads</h1>
-          <p className="text-muted-foreground mt-2">Track potential clients before they become active customers</p>
+          <p className="text-muted-foreground mt-2 leading-snug">Track potential clients before they become active customers</p>
         </div>
 
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>

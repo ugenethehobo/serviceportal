@@ -1418,21 +1418,21 @@ export default function ClientDetailPage() {
         </div>
       )}
 
-      {/* Header with Stats - mobile friendly */}
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 lg:gap-6 mb-6 lg:mb-10 border-b pb-6 lg:pb-8">
+      {/* Header with Stats - more breathing room on mobile */}
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 lg:gap-6 mb-8 lg:mb-10 border-b pb-8 lg:pb-8">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3">
-            <Button variant="outline" size="icon" onClick={() => router.push('/dashboard/clients')}>
+          <div className="flex items-start gap-3">
+            <Button variant="outline" size="icon" onClick={() => router.push('/dashboard/clients')} className="mt-1">
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                 <h1 className="text-3xl sm:text-4xl font-bold tracking-tight truncate">{client.name}</h1>
-                <Button variant="outline" size="sm" onClick={openEditClient} className="shrink-0">
+                <Button variant="outline" size="sm" onClick={openEditClient} className="self-start sm:self-auto shrink-0">
                   Edit
                 </Button>
               </div>
-              <p className="text-sm sm:text-lg text-muted-foreground mt-1 truncate">{client.address}</p>
+              <p className="text-sm sm:text-base text-muted-foreground mt-1.5 truncate leading-snug">{client.address}</p>
             </div>
           </div>
         </div>
@@ -1463,7 +1463,7 @@ export default function ClientDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 mt-2 lg:mt-0">
           <Button
             variant="outline"
             onClick={async () => {
@@ -1509,10 +1509,10 @@ export default function ClientDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* LEFT: Jobs Grid - ONLY ORIGINAL JOBS (one card per job) */}
         <div className="lg:col-span-8">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
             <div>
               <div className="font-semibold text-2xl sm:text-3xl">Jobs, Bills & Photos</div>
-              <div className="text-sm text-muted-foreground">All projects for this client</div>
+              <div className="text-sm text-muted-foreground mt-1">All projects for this client</div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button

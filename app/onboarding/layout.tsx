@@ -21,7 +21,7 @@ export default function OnboardingLayout({
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-12">
         {children}
       </div>
     </div>

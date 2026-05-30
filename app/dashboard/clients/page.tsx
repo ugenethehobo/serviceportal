@@ -139,10 +139,10 @@ export default function ClientsPage() {
       <SubscriptionStatus />
       <TrialStatusBanner />
 
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 sm:mb-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8 sm:mb-10">
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Clients</h1>
-          <p className="text-muted-foreground mt-1 sm:mt-2">Your main command center</p>
+          <p className="text-muted-foreground mt-2">Your main command center</p>
         </div>
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogTrigger asChild>

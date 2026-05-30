@@ -46,9 +46,9 @@ export default async function OwnerDashboard() {
 
   return (
     <div>
-      <div className="mb-8">
+      <div className="mb-10">
         <h1 className="text-3xl font-semibold tracking-tight">Owner Dashboard</h1>
-        <p className="text-muted-foreground">Overview of customers, subscriptions, and platform activity</p>
+        <p className="text-muted-foreground mt-1 leading-snug">Overview of customers, subscriptions, and platform activity</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">

@@ -158,7 +158,7 @@ export default function DashboardShell({
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-auto">
-        <div className="p-4 sm:p-6 md:p-8">
+        <div className="p-5 sm:p-6 md:p-8">
           {children}
         </div>
       </div>

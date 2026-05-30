@@ -591,9 +591,9 @@ export default function RoutePlannerPage() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="mb-6">
+      <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">Route Planner</h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-2 leading-snug">
           Optimize driving routes for jobs scheduled today that have addresses on file.
         </p>
 

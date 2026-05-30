@@ -300,14 +300,14 @@ export default async function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Clean professional header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+      {/* Clean professional header - more breathing room on mobile */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 sm:gap-2">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Welcome back — here's your business at a glance.</p>
+          <p className="text-sm text-muted-foreground mt-1">Welcome back — here's your business at a glance.</p>
         </div>
         {primaryColor && (
-          <div className="text-xs px-2 py-1" style={{ backgroundColor: primaryColor + '20', color: primaryColor }}>
+          <div className="text-xs px-3 py-1.5 self-start sm:self-auto" style={{ backgroundColor: primaryColor + '20', color: primaryColor }}>
             Branded view
           </div>
         )}
@@ -315,16 +315,16 @@ export default async function Dashboard() {
 
       <SubscriptionStatus />
 
-      {/* Top metrics row — compact but substantial */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Top metrics row — more comfortable spacing on mobile */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         {compactMetrics.map((m, i) => {
           const Icon = m.icon
           const content = (
-            <div className="flex items-center gap-3 border bg-card px-4 py-3 hover:shadow-md transition-all">
+            <div className="flex items-center gap-3 border bg-card px-4 py-3.5 hover:shadow-md transition-all">
               <Icon className={`h-5 w-5 ${m.color} flex-shrink-0`} />
               <div className="min-w-0">
                 <div className="text-2xl font-semibold leading-none tracking-tighter">{m.value}</div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5 truncate">{m.label}</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-2 truncate">{m.label}</div>
                 <div className="text-xs text-muted-foreground -mt-0.5">{m.sub}</div>
               </div>
             </div>
