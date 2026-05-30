@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
-import { getAppBaseUrl } from '@/lib/url'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
@@ -14,7 +13,7 @@ const supabaseAdmin = createClient(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { sessionId, intakeData } = body
+    const { sessionId, intakeData, password } = body
 
     if (!sessionId) {
       return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 })
@@ -43,6 +42,7 @@ export async function POST(request: NextRequest) {
     // We will send a password reset / magic link instead of a random password
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: customerEmail,
+      password: password || undefined, // Use password chosen by user in the wizard
       email_confirm: true,
       user_metadata: {
         full_name: intakeData?.company_name || 'New User',
@@ -58,49 +58,9 @@ export async function POST(request: NextRequest) {
 
     const userId = authUser.user.id
 
-    // Generate the magic link ourselves using the Admin API (bypasses Supabase email rate limits)
-    const appBaseUrl = getAppBaseUrl();
-    console.log('[onboarding/complete] Generating magic link with redirectTo base:', appBaseUrl);
-
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'recovery', // This gives a "set password" style magic link
-      email: customerEmail,
-      options: {
-        redirectTo: `${appBaseUrl}/auth/callback?next=/dashboard`,
-      },
-    })
-
-    if (linkError || !linkData?.properties?.action_link) {
-      console.error('Failed to generate magic link:', linkError)
-      // Still continue — the user account exists, they can request a new link later
-    } else {
-      // Send the magic link via Resend (proper transactional email)
-      try {
-        const resend = new (await import('resend')).Resend(process.env.RESEND_API_KEY!)
-
-        const { data: emailData, error: resendError } = await resend.emails.send({
-          from: process.env.RESEND_FROM_EMAIL || 'ServicePortal <onboarding@resend.dev>',
-          to: customerEmail,
-          subject: 'Set up your ServicePortal account',
-          html: `
-            <p>Welcome to ServicePortal!</p>
-            <p>Click the link below to set your password and access your account:</p>
-            <p><a href="${linkData.properties.action_link}">Set up my account →</a></p>
-            <p>This link will expire in 24 hours.</p>
-          `,
-        });
-
-        if (resendError) {
-          console.error('Resend send error during provisioning:', resendError);
-          // Do not throw — we still want to complete provisioning even if email fails
-        } else {
-          console.log('Initial magic link email sent via Resend. ID:', emailData?.id);
-        }
-      } catch (emailError: any) {
-        console.error('Failed to send magic link email via Resend:', emailError);
-        // Don't fail the whole provisioning if email sending fails
-      }
-    }
+    // No more magic link. The user set their own password during the wizard.
+    // We can optionally send a simple welcome email here if desired (without auth links).
+    console.log('[onboarding/complete] User account created with password for:', customerEmail)
 
     // 3. Create Company record (new schema)
     const { data: company, error: companyError } = await supabaseAdmin
@@ -216,7 +176,7 @@ export async function POST(request: NextRequest) {
       userId,
       companyId,
       email: customerEmail,
-      message: 'Account created successfully. Password reset email sent.',
+      message: 'Account created successfully. You can now log in with your email and password.',
     })
 
   } catch (error: any) {

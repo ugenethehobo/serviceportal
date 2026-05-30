@@ -27,7 +27,7 @@ interface IntakeData {
   lead_stale_days?: number
 }
 
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 6
 
 const defaultJobStatuses = [
   { key: 'quote_sent', label: 'Quote Sent', color: '#eab308' },
@@ -51,17 +51,20 @@ export default function OnboardingWizard() {
   // Completion screen states — must be declared at the top (before any early returns)
   // to satisfy React's Rules of Hooks. These were previously declared after conditional
   // returns, causing "Rendered more hooks than during the previous render" (React #310).
-  const [resending, setResending] = useState(false)
-  const [resendMessage, setResendMessage] = useState<string | null>(null)
-  const [resendCooldown, setResendCooldown] = useState(0)
+  // Password collection (replaces magic link flow)
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
 
   const stepNumber = typeof currentStep === 'number' ? currentStep : 0
   const progress = stepNumber > 0 ? Math.round(((stepNumber - 1) / TOTAL_STEPS) * 100) : 0
 
   // Navigation helpers
   const goToStep = (step: number) => setCurrentStep(step)
+
   const nextStep = async () => {
-    if (typeof currentStep === 'number' && currentStep < TOTAL_STEPS) {
+    // Normal advance for steps 1-5 (up to Review)
+    if (typeof currentStep === 'number' && currentStep < 5) {
       const next = currentStep + 1;
 
       // Initialize job statuses when first entering step 3
@@ -73,8 +76,25 @@ export default function OnboardingWizard() {
       return;
     }
 
-    // Handle "Complete Setup" on the Review step (step 5)
+    // From Review (step 5) → go to Password step (step 6)
     if (currentStep === 5) {
+      setCurrentStep(6);
+      setPasswordError(null);
+      return;
+    }
+
+    // Handle final submit on the Password step (step 6)
+    if (currentStep === 6) {
+      // Validate password
+      if (password.length < 8) {
+        setPasswordError('Password must be at least 8 characters long.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setPasswordError('Passwords do not match.');
+        return;
+      }
+
       if (!sessionId) {
         setProvisioningError('Missing Stripe session ID. Please go back to the pricing page and try again.');
         return;
@@ -82,9 +102,10 @@ export default function OnboardingWizard() {
 
       setIsCompleting(true);
       setProvisioningError(null);
+      setPasswordError(null);
       setProvisioningStep(0);
 
-      // Start visual progress steps (these are optimistic but feel good)
+      // Start visual progress steps
       const stepInterval = setInterval(() => {
         setProvisioningStep(prev => Math.min(prev + 1, 3));
       }, 1100);
@@ -96,6 +117,7 @@ export default function OnboardingWizard() {
           body: JSON.stringify({
             sessionId: sessionId,
             intakeData: intakeData,
+            password: password, // Pass the password the user just chose
           }),
         });
 
@@ -111,17 +133,25 @@ export default function OnboardingWizard() {
         console.log('Provisioning result:', result);
         setCurrentStep('complete');
 
+        // Clear sensitive data from memory
+        setPassword('');
+        setConfirmPassword('');
+
       } catch (error: any) {
         clearInterval(stepInterval);
         console.error('Failed to complete onboarding:', error);
         setProvisioningError(error.message || 'Something went wrong. Please try again.');
-        setIsCompleting(false); // allow retry on error
+        setIsCompleting(false);
       }
     }
   }
   const prevStep = () => {
     if (typeof currentStep === 'number' && currentStep > 1) {
       setCurrentStep(currentStep - 1)
+      // Clear password error when going back
+      if (currentStep === 6) {
+        setPasswordError(null)
+      }
     } else {
       setCurrentStep('welcome')
     }
@@ -210,6 +240,7 @@ export default function OnboardingWizard() {
               {currentStep === 3 && "Operations Defaults"}
               {currentStep === 4 && "Integrations & Lead Settings"}
               {currentStep === 5 && "Review"}
+              {currentStep === 6 && "Secure Your Account"}
             </CardTitle>
             <CardDescription>
               {currentStep === 1 && "Basic details about your business"}
@@ -217,6 +248,7 @@ export default function OnboardingWizard() {
               {currentStep === 3 && "Timezone, job statuses, business hours & defaults"}
               {currentStep === 4 && "Mapbox, Route Planner & Lead thresholds"}
               {currentStep === 5 && "Review everything before finishing setup"}
+              {currentStep === 6 && "Choose a strong password for your new account"}
             </CardDescription>
           </CardHeader>
 
@@ -583,8 +615,57 @@ export default function OnboardingWizard() {
               </div>
             )}
 
-            {/* Step 5 specific error / completion states */}
-            {currentStep === 5 && provisioningError && (
+            {/* Step 6: Create Password (replaces magic link) */}
+            {currentStep === 6 && (
+              <div className="space-y-5">
+                <div className="text-sm text-muted-foreground">
+                  Choose a secure password for your account. You will use this email and password to log in.
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Password *</label>
+                  <input
+                    type="password"
+                    className="w-full border rounded-none p-3 text-sm"
+                    placeholder="At least 8 characters"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value)
+                      setPasswordError(null)
+                    }}
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">Confirm Password *</label>
+                  <input
+                    type="password"
+                    className="w-full border rounded-none p-3 text-sm"
+                    placeholder="Re-enter your password"
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value)
+                      setPasswordError(null)
+                    }}
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                {passwordError && (
+                  <div className="text-sm text-destructive border border-destructive/30 bg-destructive/5 p-3 rounded-none">
+                    {passwordError}
+                  </div>
+                )}
+
+                <div className="text-xs text-muted-foreground pt-2">
+                  Your password is stored securely. You can change it later in your account settings.
+                </div>
+              </div>
+            )}
+
+            {/* Step 5/6 specific error / completion states */}
+            {(currentStep === 5 || currentStep === 6) && provisioningError && (
               <div className="mt-6 border border-destructive bg-destructive/10 p-4 text-sm text-destructive rounded-none">
                 <strong>Failed to complete setup:</strong> {provisioningError}
                 <div className="mt-3">
@@ -599,8 +680,8 @@ export default function OnboardingWizard() {
               </div>
             )}
 
-            {/* Special Provisioning Loading State for Step 5 */}
-            {currentStep === 5 && isCompleting && !provisioningError && (
+            {/* Special Provisioning Loading State for final steps */}
+            {(currentStep === 5 || currentStep === 6) && isCompleting && !provisioningError && (
               <div className="py-8">
                 <div className="text-center mb-6">
                   <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -612,9 +693,8 @@ export default function OnboardingWizard() {
                 <div className="max-w-sm mx-auto space-y-2 text-sm">
                   {[
                     "Verifying payment with Stripe",
-                    "Creating your user account",
-                    "Applying your company settings & branding",
-                    "Sending your secure magic login link"
+                    "Creating your user account with your password",
+                    "Applying your company settings & branding"
                   ].map((label, index) => (
                     <div 
                       key={index}
@@ -630,8 +710,8 @@ export default function OnboardingWizard() {
               </div>
             )}
 
-            {/* Normal Navigation (hidden during active provisioning on step 5) */}
-            {!(currentStep === 5 && isCompleting && !provisioningError) && (
+            {/* Normal Navigation (hidden during active provisioning on final steps) */}
+            {!((currentStep === 5 || currentStep === 6) && isCompleting && !provisioningError) && (
               <div className="flex justify-between pt-6 border-t">
                 <Button
                   variant="outline"
@@ -647,8 +727,9 @@ export default function OnboardingWizard() {
                   onClick={nextStep}
                   disabled={currentStep === 1 && !intakeData.company_name || isCompleting}
                 >
-                  {isCompleting && currentStep === 5 ? 'Completing...' : 
-                   currentStep === 5 ? 'Complete Setup' : 
+                  {isCompleting && currentStep === 6 ? 'Creating Account...' : 
+                   currentStep === 6 ? 'Complete Setup & Create Account' : 
+                   currentStep === 5 ? 'Continue to Set Password' : 
                    currentStep === 4 ? 'Continue to Review' : 'Continue'}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -660,49 +741,11 @@ export default function OnboardingWizard() {
     )
   }
 
-  // ==================== COMPLETION SCREEN ====================
-  const handleResendMagicLink = async () => {
-    if (!intakeData.company_email || resendCooldown > 0) return
-
-    setResending(true)
-    setResendMessage(null)
-
-    try {
-      const res = await fetch('/api/auth/resend-magic-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: intakeData.company_email }),
-      })
-
-      const result = await res.json()
-
-      if (result.success) {
-        setResendMessage('Magic link sent! Check your email.')
-        // Start a 60-second cooldown to avoid hitting Supabase rate limits
-        setResendCooldown(60)
-        const interval = setInterval(() => {
-          setResendCooldown((prev) => {
-            if (prev <= 1) {
-              clearInterval(interval)
-              return 0
-            }
-            return prev - 1
-          })
-        }, 1000)
-      } else {
-        setResendMessage(result.error || 'Failed to send magic link.')
-      }
-    } catch (e) {
-      setResendMessage('Something went wrong. Please try again.')
-    } finally {
-      setResending(false)
-    }
-  }
-
+  // ==================== COMPLETION SCREEN (Password-based flow) ====================
   return (
     <div className="max-w-md mx-auto text-center py-16">
       <CheckCircle className="h-16 w-16 mx-auto text-green-600 mb-6" />
-      <h1 className="text-3xl font-semibold tracking-tight mb-3">You're All Set!</h1>
+      <h1 className="text-3xl font-semibold tracking-tight mb-3">Your Account is Ready!</h1>
       
       <p className="text-muted-foreground mb-6">
         Your payment has been verified and your ServicePortal instance has been 
@@ -710,11 +753,14 @@ export default function OnboardingWizard() {
       </p>
 
       {intakeData.company_email && (
-        <p className="text-sm mb-8">
-          An account has been created for <strong>{intakeData.company_email}</strong>.
-          <br />
-          We sent a magic link to set your password.
-        </p>
+        <div className="mb-8 text-sm border p-4 rounded-none text-left">
+          <p className="mb-2">
+            An account has been created for <strong>{intakeData.company_email}</strong>.
+          </p>
+          <p>
+            You can now log in using the email above and the <strong>password you just created</strong>.
+          </p>
+        </div>
       )}
 
       <div className="space-y-4">
@@ -723,31 +769,12 @@ export default function OnboardingWizard() {
           size="lg"
           onClick={() => window.location.href = '/login'}
         >
-          Go to Login
+          Log in to ServicePortal
         </Button>
 
-        {intakeData.company_email && (
-          <Button 
-            variant="outline"
-            className="rounded-none w-full"
-            onClick={handleResendMagicLink}
-            disabled={resending || resendCooldown > 0}
-          >
-            {resending 
-              ? 'Sending...' 
-              : resendCooldown > 0 
-                ? `Resend Magic Link (${resendCooldown}s)` 
-                : 'Resend Magic Link'
-            }
-          </Button>
-        )}
-
-        {resendMessage && (
-          <p className="text-sm text-green-600">{resendMessage}</p>
-        )}
-
         <p className="text-xs text-muted-foreground pt-4">
-          You can change any of your settings after logging in.
+          You can change any of your settings after logging in. 
+          Use the password you chose during setup.
         </p>
       </div>
     </div>

@@ -10,6 +10,14 @@
  * ending up in customer-facing links and emails.
  */
 export function getAppBaseUrl(): string {
+  // Diagnostic logging - this will appear in every Vercel function log when URLs are resolved
+  console.log('[getAppBaseUrl] raw envs:', {
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    VERCEL_URL: process.env.VERCEL_URL,
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_PUBLIC_URL: process.env.NEXT_PUBLIC_PUBLIC_URL,
+  });
+
   const vercelUrl = process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : null;
@@ -20,43 +28,54 @@ export function getAppBaseUrl(): string {
   // 1. Explicit ngrok / tunnel override (only for local testing).
   //    This should normally be empty or unset in Vercel.
   if (ngrokOverride && (ngrokOverride.includes('ngrok') || ngrokOverride.includes('localhost:3000'))) {
-    return ngrokOverride.replace(/\/$/, '');
+    const result = ngrokOverride.replace(/\/$/, '');
+    console.log('[getAppBaseUrl] → using ngrok override:', result);
+    return result;
   }
 
   const isOnVercel = !!process.env.VERCEL_ENV;
 
   // 2. When running on Vercel, prefer the current deployment URL for previews.
-  //    On Production deploys with a custom domain, we prefer an explicitly
-  //    configured production URL (see recommendation below).
+  //    On Production deploys, we are extremely strict about never using localhost.
   if (isOnVercel && vercelUrl) {
     if (process.env.VERCEL_ENV === 'production') {
-      // In production, if NEXT_PUBLIC_APP_URL is set to a real custom domain, use it.
+      // In production: only trust an explicitly configured custom domain if it looks real.
+      // Otherwise force servport.pro (our canonical production domain).
       if (configuredUrl &&
+          configuredUrl.startsWith('https://') &&
           !configuredUrl.includes('localhost') &&
           !configuredUrl.includes('127.0.0.1') &&
           !configuredUrl.includes('vercel.app')) {
-        return configuredUrl.replace(/\/$/, '');
+        const result = configuredUrl.replace(/\/$/, '');
+        console.log('[getAppBaseUrl] → using configured prod URL:', result);
+        return result;
       }
-      // Stable production fallback now that we own servport.pro
+      console.log('[getAppBaseUrl] → forcing production domain for safety: https://servport.pro');
       return 'https://servport.pro';
     }
-    // Previews / other Vercel environments → use the current deployment
+    // Previews → current Vercel deployment is correct
+    console.log('[getAppBaseUrl] → using current Vercel deployment:', vercelUrl);
     return vercelUrl;
   }
 
-  // 3. Non-Vercel or fallback: use configured URL if it looks like a real domain
+  // 3. Non-Vercel or fallback
   if (configuredUrl &&
+      configuredUrl.startsWith('https://') &&
       !configuredUrl.includes('localhost') &&
       !configuredUrl.includes('127.0.0.1')) {
-    return configuredUrl.replace(/\/$/, '');
+    const result = configuredUrl.replace(/\/$/, '');
+    console.log('[getAppBaseUrl] → using configured URL (non-vercel):', result);
+    return result;
   }
 
-  // 4. Final production safety net (in case env vars are missing on a prod deploy)
+  // 4. Final production safety net
   if (process.env.VERCEL_ENV === 'production') {
+    console.log('[getAppBaseUrl] → final safety net, using https://servport.pro');
     return 'https://servport.pro';
   }
 
-  // 5. Local development
+  // 5. Local development default
+  console.log('[getAppBaseUrl] → defaulting to localhost (dev)');
   return 'http://localhost:3000';
 }
 
