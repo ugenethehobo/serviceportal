@@ -28,6 +28,7 @@ interface MobileDashboardPagerProps {
   overdueJobsCount: number
   totalOutstanding: number
   customColorMap: Record<string, string>
+  activeJobs: number
 }
 
 export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
@@ -50,13 +51,14 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
     overdueJobsCount,
     totalOutstanding,
     customColorMap,
+    activeJobs,
   } = props
 
   const scrollerRef = useRef<HTMLDivElement>(null)
   const [currentPage, setCurrentPage] = useState(0)
 
-  // Calculate number of pages
-  const totalPages = routePlannerEnabled ? 4 : 3
+  // Always 4 pages as per new structure
+  const totalPages = 4
 
   // Track current page on scroll
   useEffect(() => {
@@ -89,16 +91,13 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
 
   return (
     <div className="lg:hidden">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2 px-1">
-        Swipe to explore →
-      </div>
 
       <div 
         ref={scrollerRef}
         className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-6 -mx-4 px-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         
-        {/* Page 1: Today & Upcoming */}
+        {/* Page 1: Today & Upcoming (pure - no stats) */}
         <div className="min-w-[92vw] snap-start">
           <Card className="border-l-4 border-l-primary h-full">
             <CardHeader className="flex flex-row items-center justify-between py-3">
@@ -111,19 +110,19 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
               </Button>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {/* Today */}
                 <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="font-medium">Today</span>
-                    <span className="text-xs text-muted-foreground">{todayJobs.length} jobs</span>
+                  <div className="flex justify-between items-baseline mb-2">
+                    <div className="text-sm font-semibold">Today</div>
+                    <div className="text-xs text-muted-foreground">{todayJobs.length} jobs</div>
                   </div>
                   {todayJobs.length > 0 ? (
                     <div className="space-y-2">
-                      {todayJobs.slice(0, 3).map((job: any) => {
+                      {todayJobs.slice(0, 4).map((job: any) => {
                         const color = customColorMap[job.status] || getStatusColor(job.status);
                         return (
-                          <div key={job.id} className="border p-2.5 text-sm rounded-lg">
+                          <div key={job.id} className="border p-3 text-sm rounded-xl">
                             <div className="font-medium truncate">{job.title || 'Untitled job'}</div>
                             <div className="text-xs text-muted-foreground mt-1">
                               {new Date(job.scheduled_date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
@@ -133,127 +132,187 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                       })}
                     </div>
                   ) : (
-                    <div className="text-xs text-muted-foreground py-4">No jobs today</div>
+                    <div className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-xl">
+                      No jobs scheduled for today
+                    </div>
                   )}
                 </div>
 
                 {/* Upcoming */}
                 <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="font-medium">Next 7 Days</span>
-                    <span className="text-xs text-muted-foreground">{upcomingJobs.length} jobs</span>
+                  <div className="flex justify-between items-baseline mb-2">
+                    <div className="text-sm font-semibold">Next 7 Days</div>
+                    <div className="text-xs text-muted-foreground">{upcomingJobs.length} jobs</div>
                   </div>
-                  <div className="flex gap-2 overflow-x-auto">
-                    {upcomingJobs.slice(0, 4).map((job: any) => (
-                      <div key={job.id} className="min-w-[140px] border p-2.5 text-sm rounded-lg flex-shrink-0">
-                        <div className="font-medium truncate">{job.title}</div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {new Date(job.scheduled_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  {upcomingJobs.length > 0 ? (
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {upcomingJobs.slice(0, 5).map((job: any) => (
+                        <div key={job.id} className="min-w-[150px] flex-shrink-0 border p-3 text-sm rounded-xl">
+                          <div className="font-medium truncate leading-tight">{job.title}</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {new Date(job.scheduled_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Page 2: Performance Analytics */}
-        <div className="min-w-[92vw] snap-start">
-          <Card className="h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Performance Analytics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DashboardCharts
-                revenueTrendData={revenueTrendData}
-                statusPieData={statusPieData}
-                primaryColor={primaryColor}
-                mtdRevenue={mtdRevenue}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Page 3: Pipeline & Needs Attention */}
-        <div className="min-w-[92vw] snap-start space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Pipeline</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm">
-                <span className="font-semibold">{totalLeads}</span> leads
-                <div className="text-xs mt-1">
-                  <span className="text-green-600">{freshLeads} fresh</span> • 
-                  <span className="text-amber-600 mx-1">{agingLeads} aging</span> • 
-                  <span className="text-red-600">{staleLeads} stale</span>
-                </div>
-              </div>
-              <Link href="/dashboard/leads" className="text-xs text-primary mt-2 inline-block">Manage leads →</Link>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2 text-rose-600">
-                <AlertCircle className="h-4 w-4" /> Needs Attention
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {overdueJobsCount > 0 && (
-                <div className="flex justify-between bg-red-50 px-3 py-2 text-red-700 rounded">
-                  <span>{overdueJobsCount} overdue</span>
-                  <Link href="/dashboard/calendar" className="text-xs hover:underline">Review</Link>
-                </div>
-              )}
-              {staleLeads > 0 && (
-                <div className="flex justify-between bg-amber-50 px-3 py-2 text-amber-700 rounded">
-                  <span>{staleLeads} stale leads</span>
-                  <Link href="/dashboard/leads" className="text-xs hover:underline">Follow up</Link>
-                </div>
-              )}
-              {totalOutstanding > 0 && (
-                <div className="flex justify-between px-1">
-                  <span>${totalOutstanding.toLocaleString()} outstanding</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Page 4: Route Planner (if enabled) */}
-        {routePlannerEnabled && (
-          <div className="min-w-[92vw] snap-start">
-            <Card className="relative min-h-[220px] overflow-hidden p-0 rounded-2xl">
-              <div className="absolute inset-0 z-0">
-                <RoutePlannerPreviewWrapper points={routePreviewPoints} />
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/60 z-10" />
-              <div className="absolute inset-0 flex flex-col justify-between p-5 z-20 text-white">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Map className="h-5 w-5" />
-                    <span className="font-semibold text-lg">Route Planner</span>
-                  </div>
-                  <div className="mt-3 text-3xl font-semibold">{routableJobsToday} stops</div>
-                  {roughDriveMinutes !== null && (
-                    <div className="text-sm opacity-90">~{roughDriveMinutes} min total drive</div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground py-4">No upcoming jobs</div>
                   )}
                 </div>
-                <Button asChild size="lg" className="bg-white text-black hover:bg-white/90 rounded-xl">
-                  <Link href="/dashboard/route-planner">Open Route Planner →</Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Page 2: Leads Pipeline ONLY */}
+        <div className="min-w-[92vw] snap-start">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle className="text-base">Leads Pipeline</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="text-center">
+                <div className="text-6xl font-semibold tabular-nums tracking-tighter">{totalLeads}</div>
+                <div className="text-sm text-muted-foreground mt-1">total leads in pipeline</div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border p-4 rounded-2xl">
+                  <div>
+                    <div className="font-medium">Fresh</div>
+                    <div className="text-xs text-muted-foreground">High priority</div>
+                  </div>
+                  <div className="text-3xl font-semibold text-green-600">{freshLeads}</div>
+                </div>
+
+                <div className="flex items-center justify-between border p-4 rounded-2xl">
+                  <div>
+                    <div className="font-medium">Aging</div>
+                    <div className="text-xs text-muted-foreground">Needs attention</div>
+                  </div>
+                  <div className="text-3xl font-semibold text-amber-600">{agingLeads}</div>
+                </div>
+
+                <div className="flex items-center justify-between border p-4 rounded-2xl">
+                  <div>
+                    <div className="font-medium">Stale</div>
+                    <div className="text-xs text-muted-foreground">Follow up urgently</div>
+                  </div>
+                  <div className="text-3xl font-semibold text-red-600">{staleLeads}</div>
+                </div>
+              </div>
+
+              <Link 
+                href="/dashboard/leads" 
+                className="block w-full text-center py-3 text-sm font-medium border rounded-2xl hover:bg-muted"
+              >
+                Manage Leads →
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Page 3: Route Planner */}
+        <div className="min-w-[92vw] snap-start">
+          <Card className="relative min-h-[320px] overflow-hidden p-0 rounded-2xl">
+            <div className="absolute inset-0 z-0">
+              <RoutePlannerPreviewWrapper points={routePreviewPoints} />
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/70 z-10" />
+            
+            <div className="absolute inset-0 z-20 flex flex-col justify-between p-6 text-white">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Map className="h-5 w-5" />
+                  <span className="font-semibold text-xl tracking-tight">Route Planner</span>
+                </div>
+                <div className="mt-6">
+                  <div className="text-7xl font-semibold tabular-nums tracking-[-4px]">{routableJobsToday}</div>
+                  <div className="text-sm -mt-1 text-white/80">stops to optimize today</div>
+                </div>
+              </div>
+
+              <div>
+                {roughDriveMinutes !== null && (
+                  <div className="text-sm mb-4 text-white/80">
+                    ~{roughDriveMinutes} min total driving time
+                  </div>
+                )}
+                <Button 
+                  asChild 
+                  size="lg" 
+                  className="w-full bg-white text-black hover:bg-white/95 rounded-2xl h-12 text-base font-medium"
+                  disabled={!routePlannerEnabled}
+                >
+                  <Link href="/dashboard/route-planner">
+                    Open Route Planner →
+                  </Link>
                 </Button>
               </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Page 4: Metrics + Outstanding */}
+        <div className="min-w-[92vw] snap-start">
+          <div className="space-y-4">
+            {/* Key Metrics */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Key Metrics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="border p-4 rounded-2xl">
+                    <div className="text-xs text-muted-foreground">Today</div>
+                    <div className="text-3xl font-semibold mt-1 tabular-nums">{jobsDueThisWeekCount}</div>
+                  </div>
+                  <div className="border p-4 rounded-2xl">
+                    <div className="text-xs text-muted-foreground">Active Jobs</div>
+                    <div className="text-3xl font-semibold mt-1 tabular-nums">{activeJobs}</div>
+                  </div>
+                  <div className="border p-4 rounded-2xl">
+                    <div className="text-xs text-muted-foreground">MTD Revenue</div>
+                    <div className="text-2xl font-semibold mt-1 tabular-nums text-emerald-600">
+                      ${mtdRevenue.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="border p-4 rounded-2xl">
+                    <div className="text-xs text-muted-foreground">Outstanding</div>
+                    <div className="text-2xl font-semibold mt-1 tabular-nums text-rose-600">
+                      ${totalOutstanding.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Outstanding Summary */}
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <div className="text-sm text-muted-foreground">Total Outstanding</div>
+                  <div className="text-6xl font-semibold tabular-nums tracking-tighter mt-1 text-rose-600">
+                    ${totalOutstanding.toLocaleString()}
+                  </div>
+                  <div className="mt-4">
+                    <Link 
+                      href="/dashboard/clients" 
+                      className="text-sm font-medium inline-flex items-center gap-1 text-primary"
+                    >
+                      View clients with outstanding bills →
+                    </Link>
+                  </div>
+                </div>
+              </CardContent>
             </Card>
           </div>
-        )}
+        </div>
 
       </div>
 
-      {/* Page Indicator Dots */}
-      <div className="flex justify-center gap-2 mt-1">
+      {/* Page Indicator Dots - simple and clean */}
+      <div className="flex justify-center items-center gap-2 mt-2 h-5">
         {Array.from({ length: totalPages }).map((_, index) => (
           <button
             key={index}
@@ -268,10 +327,10 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                 })
               }
             }}
-            className={`h-2 rounded-full transition-all ${
+            className={`rounded-full transition-all duration-200 ${
               currentPage === index 
-                ? 'w-6 bg-primary' 
-                : 'w-2 bg-muted-foreground/40 hover:bg-muted-foreground/60'
+                ? 'w-2 h-2 bg-primary' 
+                : 'w-1.5 h-1.5 bg-muted-foreground/40 hover:bg-muted-foreground/70'
             }`}
             aria-label={`Go to page ${index + 1}`}
           />
