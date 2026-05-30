@@ -146,18 +146,18 @@
   }
 }
 
-/* Subtle drifting animation used for pricing hero moving texture background */
+/* Drifting animation for pricing hero moving texture background */
 @keyframes drift {
   0%, 100% {
     transform: translate(0, 0);
   }
   25% {
-    transform: translate(4%, -5%);
+    transform: translate(6%, -7%);
   }
   50% {
-    transform: translate(-3%, 6%);
+    transform: translate(-5%, 8%);
   }
   75% {
-    transform: translate(5%, 2%);
+    transform: translate(7%, 3%);
   }
 }

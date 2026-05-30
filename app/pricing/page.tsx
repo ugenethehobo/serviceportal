@@ -97,15 +97,18 @@ export default function PricingPage() {
 
       {/* Full-screen Modern Hero */}
       <section className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden pt-16 pb-16 md:pb-24">
-        {/* Moving texture background - subtle blurred gradients + dots */}
+        {/* Moving texture background - blurred gradients + dots */}
         <div className="absolute inset-0 -z-10">
-          {/* Soft drifting gradient blobs (blurs + gradients) */}
-          <div className="absolute -top-32 -left-40 h-[520px] w-[520px] rounded-full bg-primary/10 blur-[120px] animate-[drift_32s_ease-in-out_infinite]" />
-          <div className="absolute top-1/3 -right-48 h-[620px] w-[620px] rounded-full bg-muted-foreground/10 blur-[140px] animate-[drift_38s_ease-in-out_infinite_8s]" />
-          <div className="absolute bottom-[-120px] left-1/3 h-[480px] w-[480px] rounded-full bg-primary/5 blur-[100px] animate-[drift_27s_ease-in-out_infinite_14s]" />
+          {/* Base subtle wash for better visibility of the texture */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] via-transparent to-muted/[0.035]" />
 
-          {/* Very faint moving dot texture for depth */}
-          <div className="absolute inset-0 bg-[radial-gradient(currentColor_0.6px,transparent_1px)] bg-[length:5px_5px] opacity-[0.035] text-foreground" />
+          {/* Soft drifting gradient blobs (blurs + gradients) */}
+          <div className="absolute -top-40 -left-48 h-[620px] w-[620px] rounded-full bg-primary/20 blur-[130px] animate-[drift_32s_ease-in-out_infinite]" />
+          <div className="absolute top-1/4 -right-56 h-[680px] w-[680px] rounded-full bg-muted-foreground/15 blur-[150px] animate-[drift_38s_ease-in-out_infinite_7s]" />
+          <div className="absolute bottom-[-160px] left-[20%] h-[540px] w-[540px] rounded-full bg-primary/12 blur-[110px] animate-[drift_26s_ease-in-out_infinite_12s]" />
+
+          {/* Faint moving dot texture for added life */}
+          <div className="absolute inset-0 bg-[radial-gradient(currentColor_0.7px,transparent_1px)] bg-[length:4px_4px] opacity-[0.065] text-foreground" />
         </div>
 
         <div className="max-w-5xl mx-auto px-6 text-center">
