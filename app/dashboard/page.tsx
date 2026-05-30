@@ -590,8 +590,8 @@ export default async function Dashboard() {
         activeJobs={activeJobs}
       />
 
-      {/* Bottom actions row — professional and minimal (desktop + mobile) */}
-      <div className="flex flex-wrap items-center gap-2 pt-2">
+      {/* Bottom actions row — desktop only. On mobile these are integrated into the last page of the swipe pager */}
+      <div className="hidden lg:flex flex-wrap items-center gap-2 pt-2">
         <span className="text-xs uppercase tracking-wider text-muted-foreground mr-1">Quick actions</span>
         {[
           { label: "Clients", href: "/dashboard/clients", icon: Users },

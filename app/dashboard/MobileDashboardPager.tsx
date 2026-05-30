@@ -317,6 +317,30 @@ export default function MobileDashboardPager(props: MobileDashboardPagerProps) {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Quick Actions - compact horizontal scroller, integrated into Page 4 on mobile */}
+            <div className="mt-2">
+              <div className="text-[10px] uppercase tracking-[1px] text-muted-foreground mb-1.5 px-1">Quick actions</div>
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                {[
+                  { label: "Clients", href: "/dashboard/clients", icon: Users },
+                  { label: "Leads", href: "/dashboard/leads", icon: UserPlus },
+                  { label: "New Job", href: "/dashboard/clients", icon: Briefcase },
+                  { label: "Calendar", href: "/dashboard/calendar", icon: Calendar },
+                ].map((a, i) => {
+                  const Icon = a.icon;
+                  return (
+                    <Link 
+                      key={i} 
+                      href={a.href} 
+                      className="flex items-center gap-2 border bg-card px-4 py-2.5 rounded-none text-sm whitespace-nowrap flex-shrink-0 min-h-[44px] active:bg-muted"
+                    >
+                      <Icon className="h-4 w-4" /> {a.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 
