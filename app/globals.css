@@ -161,3 +161,36 @@
     transform: translate(7%, 3%);
   }
 }
+
+/* Pricing hero — fine animated grain texture */
+@keyframes grain {
+  0%   { transform: translate(0, 0); }
+  100% { transform: translate(-3px, -3px); }
+}
+
+/* Pricing hero — slow elegant light sweep across the background */
+@keyframes lightSweep {
+  0%, 100% { transform: translateX(-40%); }
+  50%      { transform: translateX(40%); }
+}
+
+/* Gold edge light — bounces exactly corner-to-corner on each side (larger lines with good movement) */
+@keyframes edgeGoldTop {
+  0%, 100% { transform: translateX(-22.5%); }
+  50%      { transform: translateX(22.5%); }
+}
+
+@keyframes edgeGoldRight {
+  0%, 100% { transform: translateY(-22.5%); }
+  50%      { transform: translateY(22.5%); }
+}
+
+@keyframes edgeGoldBottom {
+  0%, 100% { transform: translateX(22.5%); }
+  50%      { transform: translateX(-22.5%); }
+}
+
+@keyframes edgeGoldLeft {
+  0%, 100% { transform: translateY(22.5%); }
+  50%      { transform: translateY(-22.5%); }
+}

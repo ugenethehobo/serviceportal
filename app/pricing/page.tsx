@@ -95,59 +95,92 @@ export default function PricingPage() {
         </div>
       </nav>
 
-      {/* Full-screen Modern Hero */}
-      <section className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden isolate pt-16 pb-16 md:pb-24">
-        {/* Texture layer lives at the back of this local stacking context */}
-        <div className="absolute inset-0 z-0 bg-red-500/20 dark:bg-cyan-400/25">
-          {/* Base subtle wash */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-muted/[0.05] dark:from-white/[0.025] dark:to-white/[0.035]" />
+      {/* Full-screen Modern Hero with Striking Glassmorphism */}
+      <section className="min-h-screen flex flex-col relative overflow-hidden pt-16">
+        {/* Rich dark base background */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,#0f1115_0%,#050607_60%,#000000_100%)]" />
 
-          {/* Drifting soft blobs (now safely in local z-0 layer) */}
-          <div className="absolute -top-20 -left-24 h-[520px] w-[520px] rounded-full bg-primary/25 blur-[100px] dark:bg-white/10 dark:blur-[120px] animate-[drift_30s_ease-in-out_infinite]" />
-          <div className="absolute top-[8%] -right-32 h-[560px] w-[560px] rounded-full bg-muted-foreground/20 blur-[110px] dark:bg-white/7 dark:blur-[130px] animate-[drift_36s_ease-in-out_infinite_6s]" />
-          <div className="absolute bottom-[-60px] left-[12%] h-[440px] w-[440px] rounded-full bg-primary/20 blur-[90px] dark:bg-white/6 dark:blur-[105px] animate-[drift_25s_ease-in-out_infinite_11s]" />
 
-          {/* Moving dot texture */}
-          <div className="absolute inset-0 bg-[radial-gradient(currentColor_1px,transparent_1.5px)] bg-[length:4px_4px] opacity-[0.08] text-foreground dark:opacity-[0.14] dark:text-white" />
+
+        {/* Subtle moving texture layer (fine animated grain + soft light movement) */}
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Animated fine grain for texture */}
+          <div 
+            className="absolute inset-0 opacity-[0.035] dark:opacity-[0.06]"
+            style={{
+              backgroundImage: 'radial-gradient(#fff 0.5px, transparent 1px)',
+              backgroundSize: '3px 3px',
+              animation: 'grain 7s linear infinite'
+            }}
+          />
+
+          {/* Very subtle moving light sweep for life */}
+          <div className="absolute inset-0 bg-[linear-gradient(115deg,transparent_30%,rgba(255,255,255,0.035)_48%,transparent_65%)] animate-[lightSweep_18s_ease-in-out_infinite]" />
         </div>
 
-        {/* All hero content sits in front at z-10 */}
-        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border text-xs tracking-[2px] uppercase mb-6 text-muted-foreground">
-            Built for field service professionals
+        {/* Main Glass Panel — the striking centerpiece */}
+        <div className="relative z-10 flex flex-1 items-center justify-center px-6 py-12">
+          <div className="w-full max-w-5xl">
+            {/* The Glass Surface — exact liquid glassmorphism / frosted glass style from the reference */}
+            <div className="relative mx-auto max-w-[920px] rounded-3xl border border-white/20 bg-white/5 shadow-2xl backdrop-blur-3xl p-12 md:p-16">
+              {/* Subtle top-left to bottom-right gradient for thickness and light play (standard in the reference) */}
+              <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-white/15 via-transparent to-black/10 pointer-events-none" />
+                
+
+
+
+
+                <div className="relative z-10 text-center">
+                  {/* Badge */}
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 border border-white/20 bg-white/5 text-xs tracking-[2px] uppercase mb-8 text-white/70">
+                    Built for field service professionals
+                  </div>
+
+                  {/* Headline — bold and immediate */}
+                  <h1 className="text-6xl md:text-7xl font-semibold tracking-[-4.5px] leading-[0.92] mb-6 text-white">
+                    Client portals<br />that actually<br />feel professional.
+                  </h1>
+
+                  {/* Subheadline */}
+                  <p className="max-w-2xl mx-auto text-2xl text-white/70 mb-10 tracking-tight">
+                    Start with your first <span className="font-semibold text-white">3 clients completely free</span>.<br />
+                    No credit card required. Upgrade only when you grow.
+                  </p>
+
+                  {/* CTAs */}
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <a href="#pricing">
+                      <Button size="lg" className="rounded-none px-10 text-base h-14 w-full sm:w-auto bg-white text-black hover:bg-white/90 transition-all active:scale-[0.985]">
+                        Start for free
+                      </Button>
+                    </a>
+                    <a href="#pricing">
+                      <Button 
+                        variant="outline" 
+                        size="lg" 
+                        className="rounded-none px-10 text-base h-14 w-full sm:w-auto border-white/30 bg-white/5 text-white hover:bg-white/10 hover:border-white/40 transition-all"
+                      >
+                        See plans &amp; pricing
+                      </Button>
+                    </a>
+                  </div>
+
+                  {/* Trust line */}
+                  <p className="text-sm text-white/50 mt-8 tracking-wider">
+                    No hidden fees • Cancel anytime • Instant setup
+                  </p>
+                </div>
+              </div>
+
+
+            </div>
           </div>
-
-          <h1 className="text-6xl md:text-7xl font-semibold tracking-[-3.5px] leading-[0.95] mb-6">
-            Client portals<br />that actually<br />feel professional.
-          </h1>
-
-          <p className="max-w-2xl mx-auto text-2xl text-muted-foreground mb-10 tracking-tight">
-            Start with your first <span className="font-semibold text-foreground">3 clients completely free</span>.<br />
-            No credit card required. Upgrade only when you grow.
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a href="#pricing">
-              <Button size="lg" className="rounded-none px-10 text-base h-14 w-full sm:w-auto">
-                Start for free
-              </Button>
-            </a>
-            <a href="#pricing">
-              <Button variant="outline" size="lg" className="rounded-none px-10 text-base h-14 w-full sm:w-auto">
-                See plans &amp; pricing
-              </Button>
-            </a>
+        {/* Scroll prompt — subtle, below the glass */}
+        <div className="relative z-10 pb-10 text-center hidden md:block">
+          <div className="inline-flex flex-col items-center gap-1.5 text-white/40 text-xs tracking-[3px] uppercase">
+            Scroll to see pricing
+            <div className="h-px w-6 bg-white/20" />
           </div>
-
-          <p className="text-sm text-muted-foreground mt-8">
-            No hidden fees • Cancel anytime • Instant setup
-          </p>
-        </div>
-
-        {/* Scroll hint also in front */}
-        <div className="relative z-10 mt-auto pt-12 md:pt-16 hidden md:flex flex-col items-center text-center">
-          <div className="text-xs tracking-[2px] uppercase text-muted-foreground">Scroll to see pricing</div>
-          <div className="mt-1.5 h-px w-8 bg-muted-foreground/40" />
         </div>
       </section>
 
