@@ -1,12 +1,13 @@
 'use client'
 
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
 import {
   getAppleMapsNavigationUrl,
   getGoogleMapsNavigationUrl,
@@ -27,6 +28,19 @@ interface MapsNavigateButtonProps {
 function hasNavigableAddress(address: string) {
   const trimmed = address.trim()
   return Boolean(trimmed) && trimmed !== 'No address on file'
+}
+
+function splitButtonDividerClass(variant: MapsNavigateButtonProps['variant']) {
+  switch (variant) {
+    case 'outline':
+      return 'border-l border-border'
+    case 'secondary':
+      return 'border-l border-secondary-foreground/15'
+    case 'ghost':
+      return 'border-l border-border/60'
+    default:
+      return 'border-l border-primary-foreground/20'
+  }
 }
 
 export function MapsNavigateButton({
@@ -56,30 +70,27 @@ export function MapsNavigateButton({
   }
 
   return (
-    <div className={`flex ${className || ''}`}>
+    <div className={cn('inline-flex w-full min-w-0', className)}>
       <Button
         type="button"
         size={size}
         variant={variant}
-        className="rounded-r-none flex-1"
+        className="min-w-0 flex-1 rounded-r-none"
         onClick={() => openNavigation(address)}
       >
-        <Navigation className="size-4" />
-        {primaryLabel}
+        <Navigation className="size-4 shrink-0" />
+        <span className="truncate">{primaryLabel}</span>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger
-          className={[
-            'inline-flex items-center justify-center rounded-l-none border-l border-primary-foreground/20 px-2',
-            size === 'lg' ? 'h-10' : size === 'sm' ? 'h-8' : 'h-9',
-            variant === 'default'
-              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-              : variant === 'outline'
-                ? 'border border-input bg-background hover:bg-accent hover:text-accent-foreground'
-                : 'hover:bg-accent hover:text-accent-foreground',
-          ].join(' ')}
+          className={cn(
+            buttonVariants({ variant, size }),
+            'shrink-0 rounded-l-none px-2',
+            splitButtonDividerClass(variant)
+          )}
         >
           <ChevronDown className="size-4" />
+          <span className="sr-only">Choose maps app</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem

@@ -4,67 +4,24 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import {
-  LayoutDashboard,
-  Users,
-  UserPlus,
-  CheckSquare,
-  BarChart3,
-  Route,
-  Settings,
-  LogOut,
-  CalendarDays,
-} from 'lucide-react'
+import { LogOut, Menu } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getDashboardUserDataAction } from '@/app/action'
 import { CompanyLogoImage } from '@/components/dashboard/company-logo-image'
 import { subscribeCompanyBrandingUpdates } from '@/lib/company-branding'
-
-const adminNavItems = [
-  {
-    href: '/dashboard',
-    label: 'Dashboard',
-    icon: LayoutDashboard,
-  },
-  {
-    href: '/dashboard/clients',
-    label: 'Clients',
-    icon: Users,
-  },
-  {
-    href: '/dashboard/leads',
-    label: 'Leads',
-    icon: UserPlus,
-  },
-  {
-    href: '/dashboard/crews',
-    label: 'Crews',
-    icon: CheckSquare,
-  },
-  {
-    href: '/dashboard/routes',
-    label: 'Routes',
-    icon: Route,
-  },
-  {
-    href: '/dashboard/reports',
-    label: 'Reports',
-    icon: BarChart3,
-  },
-  {
-    href: '/dashboard/settings',
-    label: 'Settings',
-    icon: Settings,
-  },
-]
-
-const teamNavItems = [
-  {
-    href: '/dashboard/team',
-    label: 'My Day',
-    icon: CalendarDays,
-  },
-]
+import {
+  getDashboardNavItems,
+  isDashboardNavItemActive,
+  type DashboardNavItem,
+} from '@/lib/dashboard-nav'
+import { Button } from '@/components/ui/button'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import { cn } from '@/lib/utils'
 
 interface UserProfile {
   id: string
@@ -80,10 +37,9 @@ interface Company {
   logo_url?: string | null
 }
 
-export function Sidebar() {
+function useDashboardNav() {
   const router = useRouter()
   const supabase = createClient()
-  const [isExpanded, setIsExpanded] = useState(false)
   const pathname = usePathname()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [company, setCompany] = useState<Company | null>(null)
@@ -147,24 +103,218 @@ export function Sidebar() {
         : userProfile?.role || 'Member'
   const companyName = company?.name || 'Your Company'
   const companyLogoRef = company?.logo_url
-  const visibleNavItems =
-    userProfile?.role === 'team_member' ? teamNavItems : adminNavItems
+  const visibleNavItems = getDashboardNavItems(userProfile?.role)
+
+  return {
+    pathname,
+    userProfile,
+    displayName,
+    displayRole,
+    companyName,
+    companyLogoRef,
+    visibleNavItems,
+    isLoggingOut,
+    handleLogout,
+  }
+}
+
+function UserAvatar({
+  displayName,
+  avatarUrl,
+  className,
+}: {
+  displayName: string
+  avatarUrl?: string | null
+  className?: string
+}) {
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={displayName}
+        className={cn('rounded-full object-cover ring-1 ring-border', className)}
+      />
+    )
+  }
 
   return (
     <div
-      className={`flex h-screen flex-shrink-0 flex-col bg-background transition-all duration-300 ${
+      className={cn(
+        'rounded-full bg-muted ring-1 ring-border flex items-center justify-center',
+        className
+      )}
+    >
+      <span className="text-xs font-medium">{displayName.slice(0, 2).toUpperCase()}</span>
+    </div>
+  )
+}
+
+function DashboardNavLinks({
+  items,
+  pathname,
+  expanded = true,
+  onNavigate,
+}: {
+  items: DashboardNavItem[]
+  pathname: string
+  expanded?: boolean
+  onNavigate?: () => void
+}) {
+  return (
+    <nav className="flex flex-col gap-1">
+      {items.map((item) => {
+        const isActive = isDashboardNavItemActive(pathname, item.href)
+        const Icon = item.icon
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onNavigate}
+            className={cn(
+              'flex items-center rounded-lg font-medium transition-colors',
+              expanded ? 'px-3 py-2.5 text-sm' : 'px-3 py-2 text-sm justify-center',
+              isActive
+                ? 'bg-accent text-accent-foreground'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            )}
+          >
+            <Icon className="h-5 w-5 shrink-0" />
+            {expanded && <span className="ml-3 truncate">{item.label}</span>}
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
+
+function MobileDashboardHeader({
+  pathname,
+  displayName,
+  displayRole,
+  companyName,
+  companyLogoRef,
+  visibleNavItems,
+  userProfile,
+  isLoggingOut,
+  handleLogout,
+}: ReturnType<typeof useDashboardNav>) {
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [pathname])
+
+  return (
+    <header className="flex md:hidden shrink-0 z-40 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[padding:max(0px)]:pt-[max(0px,env(safe-area-inset-top))] min-h-14">
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Open menu"
+          onClick={() => setMenuOpen(true)}
+        >
+          <Menu className="size-5" />
+        </Button>
+
+        <SheetContent side="left" className="w-[min(85vw,18rem)] gap-0 p-0">
+          <SheetHeader className="border-b p-4 text-left">
+            <div className="flex items-center gap-3 pr-8">
+              <CompanyLogoImage
+                logoRef={companyLogoRef}
+                companyName={companyName}
+                imageClassName="h-9 w-9 rounded-lg ring-1 ring-border"
+                fallbackClassName="h-9 w-9 rounded-lg text-sm ring-1 ring-border"
+              />
+              <div className="min-w-0">
+                <SheetTitle className="truncate text-base">{companyName}</SheetTitle>
+                <p className="text-xs text-muted-foreground truncate">{displayRole}</p>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <div className="p-4 border-b">
+            <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-3">
+              <UserAvatar
+                displayName={displayName}
+                avatarUrl={userProfile?.avatar_url}
+                className="h-10 w-10 shrink-0"
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{displayName}</p>
+                <p className="truncate text-xs text-muted-foreground">{displayRole}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3">
+            <DashboardNavLinks
+              items={visibleNavItems}
+              pathname={pathname}
+              onNavigate={() => setMenuOpen(false)}
+            />
+          </div>
+
+          <div className="mt-auto border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full justify-start gap-3 px-3"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+            >
+              <LogOut className="size-5 shrink-0" />
+              {isLoggingOut ? 'Logging out…' : 'Logout'}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <CompanyLogoImage
+        logoRef={companyLogoRef}
+        companyName={companyName}
+        imageClassName="h-8 w-8 rounded-lg ring-1 ring-border shrink-0"
+        fallbackClassName="h-8 w-8 rounded-lg text-sm ring-1 ring-border shrink-0"
+      />
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold tracking-tight">{companyName}</p>
+        <p className="truncate text-xs text-muted-foreground">{displayName}</p>
+      </div>
+    </header>
+  )
+}
+
+function DesktopSidebar({
+  pathname,
+  displayName,
+  displayRole,
+  companyName,
+  companyLogoRef,
+  visibleNavItems,
+  userProfile,
+  isLoggingOut,
+  handleLogout,
+}: ReturnType<typeof useDashboardNav>) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  return (
+    <aside
+      className={cn(
+        'hidden md:flex h-full shrink-0 flex-col bg-background transition-[width] duration-300',
         isExpanded ? 'w-64' : 'w-16'
-      }`}
+      )}
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
       <div className="flex h-16 items-center px-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <CompanyLogoImage
             logoRef={companyLogoRef}
             companyName={companyName}
-            imageClassName="h-8 w-8 rounded-lg ring-1 ring-border"
-            fallbackClassName="h-8 w-8 rounded-lg text-sm ring-1 ring-border"
+            imageClassName="h-8 w-8 rounded-lg ring-1 ring-border shrink-0"
+            fallbackClassName="h-8 w-8 rounded-lg text-sm ring-1 ring-border shrink-0"
           />
 
           {isExpanded && (
@@ -177,24 +327,17 @@ export function Sidebar() {
 
       <div className="mx-2 mb-2">
         <div
-          className={`rounded-lg bg-muted/50 p-2 transition-all ${
+          className={cn(
+            'rounded-lg bg-muted/50 p-2 transition-all',
             isExpanded ? '' : 'flex justify-center'
-          }`}
+          )}
         >
           <div className="flex items-center gap-3">
-            {userProfile?.avatar_url ? (
-              <img
-                src={userProfile.avatar_url}
-                alt={displayName}
-                className="h-8 w-8 flex-shrink-0 rounded-full object-cover ring-1 ring-border"
-              />
-            ) : (
-              <div className="h-8 w-8 flex-shrink-0 rounded-full bg-muted ring-1 ring-border flex items-center justify-center">
-                <span className="text-xs font-medium">
-                  {displayName.slice(0, 2).toUpperCase()}
-                </span>
-              </div>
-            )}
+            <UserAvatar
+              displayName={displayName}
+              avatarUrl={userProfile?.avatar_url}
+              className="h-8 w-8 shrink-0"
+            />
 
             {isExpanded && (
               <div className="min-w-0 flex-1 overflow-hidden">
@@ -206,56 +349,43 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex flex-col gap-1 p-2">
-        {visibleNavItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`))
-          const Icon = item.icon
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-              }`}
-            >
-              <Icon className="h-5 w-5 flex-shrink-0" />
-              <span
-                className={`ml-3 overflow-hidden whitespace-nowrap transition-all duration-150 ${
-                  isExpanded
-                    ? 'max-w-[180px] opacity-100'
-                    : 'max-w-0 opacity-0'
-                }`}
-              >
-                {item.label}
-              </span>
-            </Link>
-          )
-        })}
-      </nav>
+      <div className="flex flex-col gap-1 p-2 flex-1 min-h-0">
+        <DashboardNavLinks
+          items={visibleNavItems}
+          pathname={pathname}
+          expanded={isExpanded}
+        />
+      </div>
 
       <div className="mt-auto p-2">
         <button
+          type="button"
           onClick={handleLogout}
           disabled={isLoggingOut}
           className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         >
-          <LogOut className="h-5 w-5 flex-shrink-0" />
+          <LogOut className="h-5 w-5 shrink-0" />
           <span
-            className={`ml-3 overflow-hidden whitespace-nowrap transition-all duration-150 ${
-              isExpanded
-                ? 'max-w-[180px] opacity-100'
-                : 'max-w-0 opacity-0'
-            }`}
+            className={cn(
+              'ml-3 overflow-hidden whitespace-nowrap transition-all duration-150',
+              isExpanded ? 'max-w-[180px] opacity-100' : 'max-w-0 opacity-0'
+            )}
           >
-            Logout
+            {isLoggingOut ? 'Logging out…' : 'Logout'}
           </span>
         </button>
       </div>
-    </div>
+    </aside>
+  )
+}
+
+export function Sidebar() {
+  const nav = useDashboardNav()
+
+  return (
+    <>
+      <MobileDashboardHeader {...nav} />
+      <DesktopSidebar {...nav} />
+    </>
   )
 }
