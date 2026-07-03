@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSessionProfile, createSupabaseAdmin } from '@/lib/portal-auth'
 import { PortalSidebar } from '@/components/portal/portal-sidebar'
+import { PortalScrollMain } from '@/components/portal/portal-scroll-main'
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await getSessionProfile()
@@ -50,15 +51,15 @@ export default async function PortalLayout({ children }: { children: React.React
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen bg-background overflow-hidden">
       <PortalSidebar
         clientName={client.name}
         companyName={companyName}
         companyLogo={companyLogo}
       />
-      <main className="flex-1 min-h-screen overflow-auto">
+      <PortalScrollMain>
         <div className="h-full p-6 flex flex-col min-h-0">{children}</div>
-      </main>
+      </PortalScrollMain>
     </div>
   )
 }

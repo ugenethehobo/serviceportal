@@ -1,4 +1,5 @@
 import { Sidebar } from '@/components/dashboard/sidebar'
+import { DashboardScrollMain } from '@/components/dashboard/dashboard-scroll-main'
 
 export default function DashboardLayout({
   children,
@@ -6,11 +7,9 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar />
-      <main className="flex-1 min-h-screen overflow-auto">
-        {children}
-      </main>
+      <DashboardScrollMain>{children}</DashboardScrollMain>
     </div>
   )
 }

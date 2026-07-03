@@ -10,7 +10,11 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import type { ThemePreference } from '@/lib/theme'
 
-export function AppearanceSettings() {
+interface AppearanceSettingsProps {
+  embedded?: boolean
+}
+
+export function AppearanceSettings({ embedded = false }: AppearanceSettingsProps) {
   const { resolvedTheme, setTheme } = useTheme()
   const [isMounted, setIsMounted] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -37,9 +41,9 @@ export function AppearanceSettings() {
     }
   }
 
-  return (
-    <Card className="p-6">
-      <div className="space-y-4">
+  const content = (
+    <div className="space-y-4">
+      {!embedded && (
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Appearance</h2>
           <p className="text-sm text-muted-foreground mt-1">
@@ -47,8 +51,9 @@ export function AppearanceSettings() {
             the dashboard, client portal, and admin.
           </p>
         </div>
+      )}
 
-        <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+      <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
           <div className="flex items-start gap-3 min-w-0">
             <div className="mt-0.5 text-muted-foreground">
               {isDark ? <Moon className="size-4" /> : <Sun className="size-4" />}
@@ -68,8 +73,11 @@ export function AppearanceSettings() {
             onCheckedChange={handleToggle}
             disabled={!isMounted || isSaving}
           />
-        </div>
       </div>
-    </Card>
+    </div>
   )
+
+  if (embedded) return content
+
+  return <Card className="p-6">{content}</Card>
 }

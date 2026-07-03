@@ -5,6 +5,7 @@ import { PortalPageHeader } from '@/components/portal/portal-page-header'
 import { PortalJobsList, type PortalJobListItem } from '@/components/portal/portal-jobs-list'
 import { SearchBar } from '@/components/search-bar'
 import { Card } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { matchesSearch } from '@/lib/search'
 
 function partitionJobs(jobs: PortalJobListItem[]) {
@@ -73,9 +74,9 @@ export function PortalJobsPageClient({ jobs }: { jobs: PortalJobListItem[] }) {
                 {upcoming.length} scheduled {upcoming.length === 1 ? 'job' : 'jobs'}
               </p>
             </div>
-            <div className="scroll-fade overflow-auto flex-1">
+            <ScrollArea className="flex-1" viewportClassName="scroll-fade">
               <PortalJobsList jobs={upcoming} emptyMessage="No upcoming jobs scheduled." />
-            </div>
+            </ScrollArea>
           </Card>
 
           {past.length > 0 && (
@@ -84,9 +85,9 @@ export function PortalJobsPageClient({ jobs }: { jobs: PortalJobListItem[] }) {
                 <h2 className="font-semibold">History</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">Completed and past jobs</p>
               </div>
-              <div className="scroll-fade overflow-auto flex-1">
+              <ScrollArea className="flex-1" viewportClassName="scroll-fade">
                 <PortalJobsList jobs={past} emptyMessage="No past jobs." />
-              </div>
+              </ScrollArea>
             </Card>
           )}
         </>

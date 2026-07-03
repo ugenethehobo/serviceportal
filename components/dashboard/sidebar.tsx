@@ -7,16 +7,20 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
+  UserPlus,
   CheckSquare,
   BarChart3,
   Route,
   Settings,
   LogOut,
+  CalendarDays,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getDashboardUserDataAction } from '@/app/action'
+import { CompanyLogoImage } from '@/components/dashboard/company-logo-image'
+import { subscribeCompanyBrandingUpdates } from '@/lib/company-branding'
 
-const navItems = [
+const adminNavItems = [
   {
     href: '/dashboard',
     label: 'Dashboard',
@@ -26,6 +30,11 @@ const navItems = [
     href: '/dashboard/clients',
     label: 'Clients',
     icon: Users,
+  },
+  {
+    href: '/dashboard/leads',
+    label: 'Leads',
+    icon: UserPlus,
   },
   {
     href: '/dashboard/crews',
@@ -46,6 +55,14 @@ const navItems = [
     href: '/dashboard/settings',
     label: 'Settings',
     icon: Settings,
+  },
+]
+
+const teamNavItems = [
+  {
+    href: '/dashboard/team',
+    label: 'My Day',
+    icon: CalendarDays,
   },
 ]
 
@@ -96,6 +113,19 @@ export function Sidebar() {
     fetchUserData()
   }, [])
 
+  useEffect(() => {
+    return subscribeCompanyBrandingUpdates((update) => {
+      setCompany((current) => {
+        if (!current) return current
+        return {
+          ...current,
+          ...(update.name !== undefined ? { name: update.name } : {}),
+          ...(update.logo_url !== undefined ? { logo_url: update.logo_url } : {}),
+        }
+      })
+    })
+  }, [])
+
   const handleLogout = async () => {
     setIsLoggingOut(true)
     try {
@@ -109,9 +139,16 @@ export function Sidebar() {
   }
 
   const displayName = userProfile?.full_name || 'User'
-  const displayRole = userProfile?.role || 'Member'
+  const displayRole =
+    userProfile?.role === 'team_member'
+      ? 'Team Member'
+      : userProfile?.role === 'company_admin'
+        ? 'Admin'
+        : userProfile?.role || 'Member'
   const companyName = company?.name || 'Your Company'
-  const companyLogo = company?.logo_url
+  const companyLogoRef = company?.logo_url
+  const visibleNavItems =
+    userProfile?.role === 'team_member' ? teamNavItems : adminNavItems
 
   return (
     <div
@@ -123,19 +160,12 @@ export function Sidebar() {
     >
       <div className="flex h-16 items-center px-4">
         <div className="flex items-center gap-3">
-          {companyLogo ? (
-            <img
-              src={companyLogo}
-              alt={companyName}
-              className="h-8 w-8 rounded-lg object-cover ring-1 ring-border"
-            />
-          ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-              <span className="text-sm font-bold">
-                {companyName.slice(0, 2).toUpperCase()}
-              </span>
-            </div>
-          )}
+          <CompanyLogoImage
+            logoRef={companyLogoRef}
+            companyName={companyName}
+            imageClassName="h-8 w-8 rounded-lg ring-1 ring-border"
+            fallbackClassName="h-8 w-8 rounded-lg text-sm ring-1 ring-border"
+          />
 
           {isExpanded && (
             <span className="text-lg font-semibold tracking-tight text-muted-foreground truncate">
@@ -177,8 +207,10 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-col gap-1 p-2">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href
+        {visibleNavItems.map((item) => {
+          const isActive =
+            pathname === item.href ||
+            (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`))
           const Icon = item.icon
 
           return (

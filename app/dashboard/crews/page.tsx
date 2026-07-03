@@ -15,6 +15,7 @@ import { createCrew, updateCrew, deleteCrew } from '@/app/action'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { X } from 'lucide-react'
 
 interface Profile {
@@ -218,7 +219,7 @@ export default function CrewsPage() {
 
       {/* Main Scrollable Card */}
       <Card className="flex-1 flex flex-col overflow-hidden p-6">
-        <div className="scroll-fade flex-1 overflow-auto pr-2">
+        <ScrollArea className="flex-1 pr-2" viewportClassName="scroll-fade">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {crews.length > 0 ? (
               crews.map((crew) => {
@@ -265,7 +266,7 @@ export default function CrewsPage() {
               </div>
             )}
           </div>
-        </div>
+        </ScrollArea>
       </Card>
 
       {/* Add Crew Modal */}
@@ -287,7 +288,8 @@ export default function CrewsPage() {
 
             <div>
               <Label>Select Team Members</Label>
-              <div className="scroll-fade mt-2 max-h-52 overflow-y-auto border rounded-md p-2 space-y-1">
+              <ScrollArea className="mt-2 max-h-52 border rounded-md" viewportClassName="scroll-fade">
+                <div className="p-2 space-y-1">
                 {availableMembers.length > 0 ? (
                   availableMembers.map((member) => (
                     <div key={member.id} className="flex items-center justify-between p-2 hover:bg-muted rounded">
@@ -321,7 +323,8 @@ export default function CrewsPage() {
                 ) : (
                   <p className="text-sm text-muted-foreground p-2">No available team members.</p>
                 )}
-              </div>
+                </div>
+              </ScrollArea>
             </div>
           </div>
 
@@ -352,7 +355,8 @@ export default function CrewsPage() {
             {/* Current Members */}
             <div>
               <Label>Current Members</Label>
-              <div className="scroll-fade mt-2 space-y-2 max-h-40 overflow-auto border rounded p-2">
+              <ScrollArea className="mt-2 max-h-40 border rounded" viewportClassName="scroll-fade">
+                <div className="p-2 space-y-2">
                 {editingCrew?.members.length ? (
                   editingCrew.members.map((member) => (
                     <div key={member.id} className="flex items-center justify-between">
@@ -404,13 +408,15 @@ export default function CrewsPage() {
                 ) : (
                   <p className="text-sm text-muted-foreground">No members</p>
                 )}
-              </div>
+                </div>
+              </ScrollArea>
             </div>
 
             {/* Add New Members */}
             <div>
               <Label>Add Team Members</Label>
-              <div className="scroll-fade mt-2 max-h-40 overflow-auto border rounded p-2 space-y-1">
+              <ScrollArea className="mt-2 max-h-40 border rounded" viewportClassName="scroll-fade">
+                <div className="p-2 space-y-1">
                   {editAvailableMembers.map((member) => (
                     <label key={member.id} className="flex items-center gap-2 p-1 hover:bg-muted rounded cursor-pointer">
                       <input
@@ -427,7 +433,8 @@ export default function CrewsPage() {
                       <span>{member.full_name}</span>
                     </label>
                   ))}
-              </div>
+                </div>
+              </ScrollArea>
             </div>
 
             {/* Change Crew Lead */}

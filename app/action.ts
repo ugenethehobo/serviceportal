@@ -37,6 +37,40 @@ import {
 } from '@/lib/dashboard-overview'
 import { buildDashboardMapData, type DashboardMapData } from '@/lib/dashboard-map'
 import { buildRoutePlannerData, type RoutePlannerData } from '@/lib/route-planner'
+import {
+  LEAD_SOURCES,
+  LEAD_STATUSES,
+  LEAD_PRIORITIES,
+  type Lead,
+  type LeadActivity,
+  type LeadPriority,
+  type LeadSource,
+  type LeadStatus,
+} from '@/lib/leads'
+import {
+  buildReportsData,
+  getReportsPeriodStart,
+  type ReportsData,
+  type ReportsPeriod,
+} from '@/lib/reports'
+import {
+  buildTeamMemberJobs,
+  buildTeamMemberRouteData,
+  structuredAddressFromCompany,
+  type TeamMemberDashboardData,
+} from '@/lib/team-dashboard'
+import {
+  normalizeJobPhotoCategories,
+  normalizePhotoCategory,
+  validateJobPhotoCategories,
+  type JobPhotoCategory,
+} from '@/lib/job-photo-categories'
+import {
+  JOB_PHOTO_ACCEPTED_TYPES,
+  JOB_PHOTO_BUCKET,
+  JOB_PHOTO_MAX_BYTES,
+  type JobPhotoWithUrl,
+} from '@/lib/job-photos'
 import { geocodeStructuredAddress } from '@/lib/geocoding'
 import {
   buildStructuredAddressDbFields,
@@ -563,6 +597,77 @@ export async function updateClientAction(data: {
   }
 }
 
+async function verifyClientForStaff(clientId: string) {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return check
+
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data: client, error } = await supabaseAdmin
+    .from('clients')
+    .select('id, status, name')
+    .eq('id', clientId)
+    .eq('company_id', check.companyId)
+    .single()
+
+  if (error || !client) {
+    return { ok: false as const, error: 'Client not found' }
+  }
+
+  return { ...check, client }
+}
+
+export async function archiveClientAction(clientId: string) {
+  try {
+    const check = await verifyClientForStaff(clientId)
+    if (!check.ok) return { success: false as const, error: check.error }
+
+    if (check.client.status === 'archived') {
+      return { success: false as const, error: 'Client is already archived' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { error } = await supabaseAdmin
+      .from('clients')
+      .update({ status: 'archived' })
+      .eq('id', clientId)
+
+    if (error) throw error
+
+    revalidatePath('/dashboard/clients')
+    revalidatePath(`/dashboard/clients/${clientId}`)
+    return { success: true as const }
+  } catch (error: any) {
+    console.error('archiveClientAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to archive client' }
+  }
+}
+
+export async function restoreClientAction(clientId: string) {
+  try {
+    const check = await verifyClientForStaff(clientId)
+    if (!check.ok) return { success: false as const, error: check.error }
+
+    if (check.client.status !== 'archived') {
+      return { success: false as const, error: 'Client is not archived' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { error } = await supabaseAdmin
+      .from('clients')
+      .update({ status: 'active' })
+      .eq('id', clientId)
+
+    if (error) throw error
+
+    revalidatePath('/dashboard/clients')
+    revalidatePath(`/dashboard/clients/${clientId}`)
+    return { success: true as const }
+  } catch (error: any) {
+    console.error('restoreClientAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to restore client' }
+  }
+}
+
 export async function createJobAction(data: {
   clientId: string
   crewId?: string | null
@@ -868,7 +973,16 @@ export async function getJobAction(jobId: string, clientId: string) {
       .select(`
         *,
         crew:crews!crew_id (id, name),
-        client:clients!client_id (id, name)
+        client:clients!client_id (
+          id,
+          name,
+          address,
+          address_street,
+          address_unit,
+          address_city,
+          address_state,
+          address_zip
+        )
       `)
       .eq('id', jobId)
       .eq('client_id', clientId)
@@ -995,7 +1109,16 @@ export async function cancelJobAction(jobId: string, clientId: string) {
       .update({ status: 'cancelled' })
       .eq('id', jobId)
 
-    if (error) throw error
+    if (error) {
+      if (error.code === '23514' && error.message?.includes('schedules_status_check')) {
+        return {
+          success: false,
+          error:
+            'Job cancellation is not enabled in the database yet. Run supabase/schedules-cancelled-status.sql in the Supabase SQL editor.',
+        }
+      }
+      throw error
+    }
 
     revalidatePath(`/dashboard/clients/${clientId}`)
     revalidatePath(`/dashboard/clients/${clientId}/jobs/${jobId}`)
@@ -1097,6 +1220,281 @@ async function getCompanyIdForClient(clientId: string) {
     .eq('id', clientId)
     .single()
   return data?.company_id ?? null
+}
+
+async function verifyScheduleCompanyAccess(scheduleId: string, clientId: string) {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return check
+
+  const companyId = await getCompanyIdForClient(clientId)
+  if (!companyId || companyId !== check.companyId) {
+    return { ok: false as const, error: 'Job not found' }
+  }
+
+  const schedule = await verifyScheduleOwnership(scheduleId, clientId)
+  if (!schedule) {
+    return { ok: false as const, error: 'Job not found' }
+  }
+
+  return { ...check, schedule, companyId }
+}
+
+export async function getJobPhotosAction(
+  scheduleId: string,
+  clientId: string
+): Promise<
+  { success: true; photos: JobPhotoWithUrl[] } | { success: false; error: string }
+> {
+  try {
+    const access = await verifyScheduleCompanyAccess(scheduleId, clientId)
+    if (!access.ok) return { success: false, error: access.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: photos, error } = await supabaseAdmin
+      .from('job_photos')
+      .select('*')
+      .eq('schedule_id', scheduleId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      if (error.code === '42P01') {
+        return { success: true, photos: [] }
+      }
+      throw error
+    }
+
+    const withUrls: JobPhotoWithUrl[] = []
+    for (const photo of photos || []) {
+      const { data: signed, error: signedError } = await supabaseAdmin.storage
+        .from(JOB_PHOTO_BUCKET)
+        .createSignedUrl(photo.storage_path, 60 * 60)
+
+      if (signedError || !signed?.signedUrl) continue
+
+      withUrls.push({ ...photo, url: signed.signedUrl })
+    }
+
+    return { success: true, photos: withUrls }
+  } catch (error: any) {
+    console.error('getJobPhotosAction error:', error)
+    return { success: false, error: error.message || 'Failed to load photos' }
+  }
+}
+
+export async function uploadJobPhotoAction(
+  scheduleId: string,
+  clientId: string,
+  formData: FormData
+): Promise<{ success: true; photo: JobPhotoWithUrl } | { success: false; error: string }> {
+  try {
+    const access = await verifyScheduleCompanyAccess(scheduleId, clientId)
+    if (!access.ok) return { success: false, error: access.error }
+
+    const file = formData.get('file') as File | null
+    const caption = String(formData.get('caption') || '').trim() || null
+    const categoryRaw = String(formData.get('category') || '').trim() || null
+
+    if (!file || typeof file.size !== 'number' || file.size === 0) {
+      return { success: false, error: 'No image file provided' }
+    }
+
+    if (!JOB_PHOTO_ACCEPTED_TYPES.includes(file.type as (typeof JOB_PHOTO_ACCEPTED_TYPES)[number])) {
+      return { success: false, error: 'Use a JPG, PNG, or WebP image' }
+    }
+
+    if (file.size > JOB_PHOTO_MAX_BYTES) {
+      return { success: false, error: 'Image must be 10 MB or smaller' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+
+    const { data: companyRow } = await supabaseAdmin
+      .from('companies')
+      .select('job_photo_categories')
+      .eq('id', access.companyId)
+      .single()
+
+    const availableCategories = normalizeJobPhotoCategories(
+      companyRow?.job_photo_categories
+    )
+    const category = normalizePhotoCategory(categoryRaw, availableCategories)
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const storagePath = `${access.companyId}/${scheduleId}/${Date.now()}.${fileExt}`
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from(JOB_PHOTO_BUCKET)
+      .upload(storagePath, fileBuffer, {
+        contentType: file.type,
+        upsert: false,
+      })
+
+    if (uploadError) {
+      return { success: false, error: uploadError.message }
+    }
+
+    const { data: photo, error: insertError } = await supabaseAdmin
+      .from('job_photos')
+      .insert({
+        schedule_id: scheduleId,
+        client_id: clientId,
+        company_id: access.companyId,
+        storage_path: storagePath,
+        file_name: file.name,
+        content_type: file.type,
+        file_size: file.size,
+        caption,
+        category,
+        uploaded_by: access.userId,
+      })
+      .select('*')
+      .single()
+
+    if (insertError) {
+      await supabaseAdmin.storage.from(JOB_PHOTO_BUCKET).remove([storagePath])
+      if (insertError.code === '42P01') {
+        return {
+          success: false,
+          error: 'Job photos are not enabled yet. Run supabase/job-photos-schema.sql and create the job-photos storage bucket.',
+        }
+      }
+      throw insertError
+    }
+
+    const { data: signed, error: signedError } = await supabaseAdmin.storage
+      .from(JOB_PHOTO_BUCKET)
+      .createSignedUrl(storagePath, 60 * 60)
+
+    if (signedError || !signed?.signedUrl) {
+      return { success: false, error: 'Photo uploaded but could not be displayed' }
+    }
+
+    revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+
+    return { success: true, photo: { ...photo, url: signed.signedUrl } }
+  } catch (error: any) {
+    console.error('uploadJobPhotoAction error:', error)
+    return { success: false, error: error.message || 'Failed to upload photo' }
+  }
+}
+
+export async function getJobPhotoCategoriesAction(): Promise<
+  { success: true; categories: JobPhotoCategory[] } | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: company, error } = await supabaseAdmin
+      .from('companies')
+      .select('job_photo_categories')
+      .eq('id', check.companyId)
+      .single()
+
+    if (error) {
+      if (error.code === '42703') {
+        return { success: true, categories: normalizeJobPhotoCategories(null) }
+      }
+      throw error
+    }
+
+    return {
+      success: true,
+      categories: normalizeJobPhotoCategories(company?.job_photo_categories),
+    }
+  } catch (error: any) {
+    console.error('getJobPhotoCategoriesAction error:', error)
+    return { success: false, error: error.message || 'Failed to load photo categories' }
+  }
+}
+
+export async function updateJobPhotoCategoriesAction(
+  categories: JobPhotoCategory[]
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const session = await getSessionProfile()
+    if (!session?.profile?.company_id) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    if (session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can update photo categories' }
+    }
+
+    const normalized = categories
+      .map((category) => category.trim())
+      .filter(Boolean)
+
+    const validation = validateJobPhotoCategories(normalized)
+    if (!validation.valid) {
+      return { success: false, error: validation.error }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .update({ job_photo_categories: normalized })
+      .eq('id', session.profile.company_id)
+
+    if (error) {
+      if (error.code === '42703') {
+        return {
+          success: false,
+          error: 'Photo categories are not enabled yet. Run supabase/job-photo-categories.sql.',
+        }
+      }
+      return { success: false, error: error.message }
+    }
+
+    revalidatePath('/dashboard/settings')
+    return { success: true }
+  } catch (error: any) {
+    console.error('updateJobPhotoCategoriesAction error:', error)
+    return { success: false, error: error.message || 'Failed to save photo categories' }
+  }
+}
+
+export async function deleteJobPhotoAction(
+  photoId: string,
+  scheduleId: string,
+  clientId: string
+) {
+  try {
+    const access = await verifyScheduleCompanyAccess(scheduleId, clientId)
+    if (!access.ok) return { success: false, error: access.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: photo, error: photoError } = await supabaseAdmin
+      .from('job_photos')
+      .select('id, storage_path, company_id')
+      .eq('id', photoId)
+      .eq('schedule_id', scheduleId)
+      .single()
+
+    if (photoError || !photo) {
+      return { success: false, error: 'Photo not found' }
+    }
+
+    if (photo.company_id !== access.companyId) {
+      return { success: false, error: 'Photo not found' }
+    }
+
+    const { error: deleteRowError } = await supabaseAdmin
+      .from('job_photos')
+      .delete()
+      .eq('id', photoId)
+
+    if (deleteRowError) throw deleteRowError
+
+    await supabaseAdmin.storage.from(JOB_PHOTO_BUCKET).remove([photo.storage_path])
+
+    revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error('deleteJobPhotoAction error:', error)
+    return { success: false, error: error.message || 'Failed to delete photo' }
+  }
 }
 
 async function assertBillingEnabled(companyId: string) {
@@ -2222,7 +2620,7 @@ export async function getDashboardUserDataAction() {
     const supabaseAdmin = createSupabaseAdmin()
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, avatar_url, role, company_id')
+      .select('id, full_name, avatar_url, role, company_id, crew_id')
       .eq('id', session.userId)
       .single()
 
@@ -2244,6 +2642,183 @@ export async function getDashboardUserDataAction() {
   } catch (error: any) {
     console.error('getDashboardUserDataAction error:', error)
     return { success: false as const, error: error.message || 'Failed to load user data' }
+  }
+}
+
+export async function getTeamMemberDashboardAction(): Promise<
+  { success: true; data: TeamMemberDashboardData } | { success: false; error: string }
+> {
+  try {
+    const session = await getSessionProfile()
+    if (!session?.profile?.company_id) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    if (session.profile.role !== 'team_member') {
+      return { success: false, error: 'This view is for team members only' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('crew_id')
+      .eq('id', session.userId)
+      .single()
+
+    if (profileError || !profile) {
+      return { success: false, error: 'Profile not found' }
+    }
+
+    const { data: companyDetails, error: companyDetailsError } = await supabaseAdmin
+      .from('companies')
+      .select(`
+        name,
+        timezone,
+        address,
+        address_street,
+        address_unit,
+        address_city,
+        address_state,
+        address_zip
+      `)
+      .eq('id', session.profile.company_id)
+      .single()
+
+    if (companyDetailsError || !companyDetails) {
+      return { success: false, error: 'Company not found' }
+    }
+
+    const timezone = companyDetails.timezone || 'America/Chicago'
+    const now = new Date()
+    const dateLabel = formatCompanyDateLabel(timezone, now, 0)
+
+    const emptyRouteData = {
+      crewName: null as string | null,
+      crewId: null as string | null,
+      companyName: companyDetails.name || 'Company',
+      dateLabel,
+      jobs: [] as TeamMemberDashboardData['jobs'],
+      hasCrew: false,
+      route: null,
+      companyLocation: null,
+      invalidAddresses: [] as TeamMemberDashboardData['invalidAddresses'],
+    }
+
+    if (!profile.crew_id) {
+      return {
+        success: true,
+        data: emptyRouteData,
+      }
+    }
+
+    const { data: crew, error: crewError } = await supabaseAdmin
+      .from('crews')
+      .select('id, name')
+      .eq('id', profile.crew_id)
+      .eq('company_id', session.profile.company_id)
+      .single()
+
+    if (crewError || !crew) {
+      return {
+        success: true,
+        data: emptyRouteData,
+      }
+    }
+
+    const { startIso, endIso } = getCompanyDayBounds(timezone, now, 0)
+
+    const { data: schedules, error: scheduleError } = await supabaseAdmin
+      .from('schedules')
+      .select(`
+        id,
+        title,
+        start_time,
+        end_time,
+        status,
+        client_id,
+        client:clients!client_id (
+          name,
+          address,
+          address_street,
+          address_unit,
+          address_city,
+          address_state,
+          address_zip
+        )
+      `)
+      .eq('crew_id', profile.crew_id)
+      .neq('status', 'cancelled')
+      .lt('start_time', endIso)
+      .gt('end_time', startIso)
+      .order('start_time', { ascending: true })
+
+    if (scheduleError) {
+      return { success: false, error: scheduleError.message }
+    }
+
+    const clientIds = [...new Set((schedules || []).map((schedule) => schedule.client_id))]
+    for (const clientId of clientIds) {
+      await syncScheduleStatusesForClient(supabaseAdmin, clientId)
+    }
+
+    let refreshedSchedules = schedules || []
+    if (clientIds.length > 0) {
+      const { data: latestSchedules, error: refreshError } = await supabaseAdmin
+        .from('schedules')
+        .select(`
+          id,
+          title,
+          start_time,
+          end_time,
+          status,
+          client_id,
+          client:clients!client_id (
+            name,
+            address,
+            address_street,
+            address_unit,
+            address_city,
+            address_state,
+            address_zip
+          )
+        `)
+        .eq('crew_id', profile.crew_id)
+        .neq('status', 'cancelled')
+        .lt('start_time', endIso)
+        .gt('end_time', startIso)
+        .order('start_time', { ascending: true })
+
+      if (!refreshError && latestSchedules) {
+        refreshedSchedules = latestSchedules
+      }
+    }
+
+    const jobs = buildTeamMemberJobs(refreshedSchedules, timezone, now)
+    const routeData = await buildTeamMemberRouteData({
+      companyName: companyDetails.name || 'Company',
+      companyAddress: companyDetails.address,
+      companyStructuredAddress: structuredAddressFromCompany(companyDetails),
+      crew,
+      schedules: refreshedSchedules,
+    })
+
+    return {
+      success: true,
+      data: {
+        crewName: crew.name,
+        crewId: crew.id,
+        companyName: companyDetails.name || 'Company',
+        dateLabel,
+        jobs,
+        hasCrew: true,
+        route: routeData.route,
+        companyLocation: routeData.companyLocation,
+        invalidAddresses: routeData.invalidAddresses,
+      },
+    }
+  } catch (error: any) {
+    console.error('getTeamMemberDashboardAction error:', error)
+    return { success: false, error: error.message || 'Failed to load team dashboard' }
   }
 }
 
@@ -2623,10 +3198,124 @@ export async function updateUserThemeAction(theme: ThemePreference) {
   }
 }
 
+export async function getCompanyLogoDisplayUrlAction(
+  logoRef: string | null | undefined
+): Promise<{ success: true; url: string | null } | { success: false; error: string }> {
+  try {
+    const { getCompanyLogoStoragePath } = await import('@/lib/company-logo')
+    const storagePath = getCompanyLogoStoragePath(logoRef)
+
+    if (!storagePath) {
+      return { success: true, url: null }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data, error } = await supabaseAdmin.storage
+      .from('company-logos')
+      .createSignedUrl(storagePath, 60 * 60 * 24 * 7)
+
+    if (error || !data?.signedUrl) {
+      if (logoRef?.startsWith('http')) {
+        return { success: true, url: logoRef }
+      }
+      return { success: false, error: error?.message || 'Could not load logo' }
+    }
+
+    return { success: true, url: data.signedUrl }
+  } catch (error: any) {
+    console.error('getCompanyLogoDisplayUrlAction error:', error)
+    return { success: false, error: error.message || 'Could not load logo' }
+  }
+}
+
+export async function uploadCompanyLogoAction(
+  formData: FormData | null
+): Promise<
+  | { success: true; logoUrl: string | null; logoPath?: string | null }
+  | { success: false; error: string }
+> {
+  try {
+    const session = await getSessionProfile()
+    if (!session?.profile?.company_id) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    const companyId = session.profile.company_id
+    const supabaseAdmin = createSupabaseAdmin()
+
+    if (!formData) {
+      const { error } = await supabaseAdmin
+        .from('companies')
+        .update({ logo_url: null })
+        .eq('id', companyId)
+
+      if (error) return { success: false, error: error.message }
+
+      revalidatePath('/dashboard/settings')
+      return { success: true, logoUrl: null }
+    }
+
+    const file = formData.get('file') as File | null
+    if (!file || typeof file.size !== 'number' || file.size === 0) {
+      return { success: false, error: 'No image file provided' }
+    }
+
+    const acceptedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    if (!acceptedTypes.includes(file.type)) {
+      return { success: false, error: 'Use a JPG, PNG, WebP, or GIF image' }
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return { success: false, error: 'Image must be 5 MB or smaller' }
+    }
+
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png'
+    const fileName = `${companyId}/${Date.now()}.${fileExt}`
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('company-logos')
+      .upload(fileName, fileBuffer, {
+        contentType: file.type,
+        upsert: true,
+      })
+
+    if (uploadError) {
+      return { success: false, error: uploadError.message }
+    }
+
+    const logoPath = uploadData.path
+
+    const { error: updateError } = await supabaseAdmin
+      .from('companies')
+      .update({ logo_url: logoPath })
+      .eq('id', companyId)
+
+    if (updateError) {
+      return { success: false, error: updateError.message }
+    }
+
+    const { data: signed, error: signedError } = await supabaseAdmin.storage
+      .from('company-logos')
+      .createSignedUrl(logoPath, 60 * 60 * 24 * 7)
+
+    if (signedError || !signed?.signedUrl) {
+      return { success: false, error: signedError?.message || 'Logo uploaded but could not be displayed' }
+    }
+
+    revalidatePath('/dashboard/settings')
+    return { success: true, logoUrl: signed.signedUrl, logoPath }
+  } catch (error: any) {
+    console.error('uploadCompanyLogoAction error:', error)
+    return { success: false, error: error.message || 'Failed to upload logo' }
+  }
+}
+
 export async function updateCompanySettingsAction(data: {
   timezone: string
   businessHours: BusinessHours
   companyAddress?: StructuredAddress
+  companyName?: string
 }) {
   try {
     const session = await getSessionProfile()
@@ -2649,10 +3338,16 @@ export async function updateCompanySettingsAction(data: {
       return { success: false, error: firstError || 'Company address is invalid' }
     }
 
+    const companyName = data.companyName?.trim()
+    if (companyName !== undefined && !companyName) {
+      return { success: false, error: 'Company name is required' }
+    }
+
     const supabaseAdmin = createSupabaseAdmin()
     const { error } = await supabaseAdmin
       .from('companies')
       .update({
+        ...(companyName !== undefined ? { name: companyName } : {}),
         timezone: data.timezone,
         business_hours_start: data.businessHours.start,
         business_hours_end: data.businessHours.end,
@@ -2676,6 +3371,7 @@ export async function updateCompanySettingsAction(data: {
 
     return {
       success: true,
+      companyName: companyName,
       mapReady: geocodeResult.success,
       mapWarning: geocodeResult.success
         ? undefined
@@ -2684,5 +3380,552 @@ export async function updateCompanySettingsAction(data: {
   } catch (error: any) {
     console.error('updateCompanySettingsAction error:', error)
     return { success: false, error: error.message || 'Failed to save settings' }
+  }
+}
+
+async function verifyCompanyStaff() {
+  const session = await getSessionProfile()
+  if (!session) {
+    return { ok: false as const, error: 'Not authenticated' }
+  }
+  if (!session.profile.company_id) {
+    return { ok: false as const, error: 'No company associated with this account' }
+  }
+  if (!['company_admin', 'team_member'].includes(session.profile.role)) {
+    return { ok: false as const, error: 'Unauthorized' }
+  }
+  return {
+    ok: true as const,
+    session,
+    companyId: session.profile.company_id,
+    userId: session.userId,
+  }
+}
+
+async function verifyLeadOwnership(leadId: string) {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return check
+
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data: lead, error } = await supabaseAdmin
+    .from('leads')
+    .select('*')
+    .eq('id', leadId)
+    .eq('company_id', check.companyId)
+    .single()
+
+  if (error || !lead) {
+    return { ok: false as const, error: 'Lead not found' }
+  }
+
+  return { ...check, lead: lead as Lead }
+}
+
+async function insertLeadActivity(
+  supabaseAdmin: ReturnType<typeof createSupabaseAdmin>,
+  data: {
+    leadId: string
+    companyId: string
+    type: LeadActivity['type']
+    body?: string | null
+    createdBy?: string | null
+  }
+) {
+  await supabaseAdmin.from('lead_activities').insert({
+    lead_id: data.leadId,
+    company_id: data.companyId,
+    type: data.type,
+    body: data.body ?? null,
+    created_by: data.createdBy ?? null,
+  })
+}
+
+export async function getLeadsAction(options?: { includeArchived?: boolean }) {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return { success: false as const, error: check.error }
+
+  const supabaseAdmin = createSupabaseAdmin()
+  let query = supabaseAdmin
+    .from('leads')
+    .select('*')
+    .eq('company_id', check.companyId)
+    .order('follow_up_at', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true })
+
+  if (!options?.includeArchived) {
+    query = query.neq('status', 'archived')
+  }
+
+  const { data, error } = await query
+  if (error) {
+    console.error('getLeadsAction error:', error)
+    return { success: false as const, error: error.message }
+  }
+
+  return { success: true as const, data: (data || []) as Lead[] }
+}
+
+export async function getLeadActivitiesAction(leadId: string) {
+  const check = await verifyLeadOwnership(leadId)
+  if (!check.ok) return { success: false as const, error: check.error }
+
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data, error } = await supabaseAdmin
+    .from('lead_activities')
+    .select('*, profiles:created_by(full_name)')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('getLeadActivitiesAction error:', error)
+    return { success: false as const, error: error.message }
+  }
+
+  const activities: LeadActivity[] = (data || []).map((row: any) => ({
+    id: row.id,
+    lead_id: row.lead_id,
+    company_id: row.company_id,
+    type: row.type,
+    body: row.body,
+    created_by: row.created_by,
+    created_at: row.created_at,
+    creator_name: row.profiles?.full_name ?? null,
+  }))
+
+  return { success: true as const, data: activities }
+}
+
+export async function createLeadAction(data: {
+  name: string
+  contact_name?: string
+  email?: string
+  phone?: string
+  leadAddress?: StructuredAddress
+  source?: LeadSource
+  status?: LeadStatus
+  priority?: LeadPriority
+  follow_up_at?: string | null
+  notes?: string
+  estimated_value?: number | null
+}) {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return { success: false as const, error: check.error }
+
+  if (!data.name.trim()) {
+    return { success: false as const, error: 'Lead name is required' }
+  }
+
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    let addressFields: ReturnType<typeof buildStructuredAddressDbFields> | null = null
+    if (data.leadAddress) {
+      const normalized = normalizeStructuredAddress(data.leadAddress)
+      const validation = validateStructuredAddressIfPresent(normalized)
+      if (!validation.valid) {
+        const firstError = Object.values(validation.errors)[0]
+        return { success: false as const, error: firstError || 'Address is invalid' }
+      }
+      addressFields = buildStructuredAddressDbFields(normalized)
+    }
+
+    const source = data.source && LEAD_SOURCES.includes(data.source) ? data.source : 'other'
+    const status = data.status && LEAD_STATUSES.includes(data.status) ? data.status : 'new'
+    const priority = data.priority && LEAD_PRIORITIES.includes(data.priority) ? data.priority : 'normal'
+
+    const { data: lead, error } = await supabaseAdmin
+      .from('leads')
+      .insert({
+        company_id: check.companyId,
+        name: data.name.trim(),
+        contact_name: data.contact_name?.trim() || null,
+        email: data.email?.trim() || null,
+        phone: data.phone?.trim() || null,
+        address: addressFields?.address ?? null,
+        address_street: addressFields?.address_street ?? null,
+        address_unit: addressFields?.address_unit ?? null,
+        address_city: addressFields?.address_city ?? null,
+        address_state: addressFields?.address_state ?? null,
+        address_zip: addressFields?.address_zip ?? null,
+        source,
+        status,
+        priority,
+        follow_up_at: data.follow_up_at ?? null,
+        notes: data.notes?.trim() || null,
+        estimated_value: data.estimated_value ?? null,
+      })
+      .select('*')
+      .single()
+
+    if (error) throw error
+
+    await insertLeadActivity(supabaseAdmin, {
+      leadId: lead.id,
+      companyId: check.companyId,
+      type: 'note',
+      body: 'Lead created',
+      createdBy: check.userId,
+    })
+
+    revalidatePath('/dashboard/leads')
+    return { success: true as const, data: lead as Lead }
+  } catch (error: any) {
+    console.error('createLeadAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to create lead' }
+  }
+}
+
+export async function updateLeadAction(data: {
+  id: string
+  name?: string
+  contact_name?: string
+  email?: string
+  phone?: string
+  leadAddress?: StructuredAddress
+  source?: LeadSource
+  status?: LeadStatus
+  priority?: LeadPriority
+  follow_up_at?: string | null
+  notes?: string
+  estimated_value?: number | null
+}) {
+  const check = await verifyLeadOwnership(data.id)
+  if (!check.ok) return { success: false as const, error: check.error }
+
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const updates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+
+    if (data.name !== undefined) updates.name = data.name.trim()
+    if (data.contact_name !== undefined) updates.contact_name = data.contact_name.trim() || null
+    if (data.email !== undefined) updates.email = data.email.trim() || null
+    if (data.phone !== undefined) updates.phone = data.phone.trim() || null
+    if (data.notes !== undefined) updates.notes = data.notes.trim() || null
+    if (data.estimated_value !== undefined) updates.estimated_value = data.estimated_value
+    if (data.follow_up_at !== undefined) updates.follow_up_at = data.follow_up_at
+
+    if (data.source && LEAD_SOURCES.includes(data.source)) updates.source = data.source
+    if (data.priority && LEAD_PRIORITIES.includes(data.priority)) updates.priority = data.priority
+
+    if (data.leadAddress) {
+      const normalized = normalizeStructuredAddress(data.leadAddress)
+      const validation = validateStructuredAddressIfPresent(normalized)
+      if (!validation.valid) {
+        const firstError = Object.values(validation.errors)[0]
+        return { success: false as const, error: firstError || 'Address is invalid' }
+      }
+      const addressFields = buildStructuredAddressDbFields(normalized)
+      updates.address = addressFields.address
+      updates.address_street = addressFields.address_street
+      updates.address_unit = addressFields.address_unit
+      updates.address_city = addressFields.address_city
+      updates.address_state = addressFields.address_state
+      updates.address_zip = addressFields.address_zip
+    }
+
+    if (data.status && LEAD_STATUSES.includes(data.status) && data.status !== check.lead.status) {
+      updates.status = data.status
+      if (data.status === 'archived') {
+        updates.archived_at = new Date().toISOString()
+      } else if (check.lead.status === 'archived') {
+        updates.archived_at = null
+      }
+    }
+
+    const { data: lead, error } = await supabaseAdmin
+      .from('leads')
+      .update(updates)
+      .eq('id', data.id)
+      .select('*')
+      .single()
+
+    if (error) throw error
+
+    if (data.status && data.status !== check.lead.status) {
+      await insertLeadActivity(supabaseAdmin, {
+        leadId: data.id,
+        companyId: check.companyId,
+        type: 'status_change',
+        body: `Status changed to ${data.status}`,
+        createdBy: check.userId,
+      })
+    }
+
+    if (data.follow_up_at !== undefined && data.follow_up_at !== check.lead.follow_up_at) {
+      await insertLeadActivity(supabaseAdmin, {
+        leadId: data.id,
+        companyId: check.companyId,
+        type: 'follow_up_set',
+        body: data.follow_up_at
+          ? `Follow-up set for ${new Date(data.follow_up_at).toLocaleString()}`
+          : 'Follow-up cleared',
+        createdBy: check.userId,
+      })
+    }
+
+    revalidatePath('/dashboard/leads')
+    return { success: true as const, data: lead as Lead }
+  } catch (error: any) {
+    console.error('updateLeadAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to update lead' }
+  }
+}
+
+export async function updateLeadStatusAction(leadId: string, status: LeadStatus) {
+  if (!LEAD_STATUSES.includes(status)) {
+    return { success: false as const, error: 'Invalid status' }
+  }
+  return updateLeadAction({ id: leadId, status })
+}
+
+export async function archiveLeadAction(leadId: string) {
+  return updateLeadAction({ id: leadId, status: 'archived' })
+}
+
+export async function restoreLeadAction(leadId: string) {
+  const check = await verifyLeadOwnership(leadId)
+  if (!check.ok) return { success: false as const, error: check.error }
+  if (check.lead.status !== 'archived') {
+    return { success: false as const, error: 'Lead is not archived' }
+  }
+
+  const restoredStatus: LeadStatus = check.lead.converted_client_id ? 'won' : 'new'
+  const result = await updateLeadAction({ id: leadId, status: restoredStatus })
+  if (!result.success) return result
+
+  const supabaseAdmin = createSupabaseAdmin()
+  await insertLeadActivity(supabaseAdmin, {
+    leadId,
+    companyId: check.companyId,
+    type: 'restored',
+    body: `Lead restored as ${restoredStatus}`,
+    createdBy: check.userId,
+  })
+
+  return result
+}
+
+export async function addLeadActivityAction(leadId: string, body: string) {
+  const check = await verifyLeadOwnership(leadId)
+  if (!check.ok) return { success: false as const, error: check.error }
+  if (!body.trim()) return { success: false as const, error: 'Note cannot be empty' }
+
+  const supabaseAdmin = createSupabaseAdmin()
+  await insertLeadActivity(supabaseAdmin, {
+    leadId,
+    companyId: check.companyId,
+    type: 'note',
+    body: body.trim(),
+    createdBy: check.userId,
+  })
+
+  revalidatePath('/dashboard/leads')
+  return { success: true as const }
+}
+
+export async function getReportsDataAction(
+  period: ReportsPeriod = '30d'
+): Promise<{ success: true; data: ReportsData } | { success: false; error: string }> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const companyId = check.companyId
+    const now = new Date()
+
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select('timezone')
+      .eq('id', companyId)
+      .single()
+
+    if (companyError || !company) {
+      return { success: false, error: 'Company not found' }
+    }
+
+    const timezone = company.timezone || 'America/Chicago'
+
+    const { data: clients, error: clientsError } = await supabaseAdmin
+      .from('clients')
+      .select('id, name, status')
+      .eq('company_id', companyId)
+
+    if (clientsError) throw clientsError
+
+    const clientIds = (clients || []).map((client) => client.id)
+
+    let lineItems: Array<{
+      id: string
+      client_id: string
+      schedule_id: string
+      amount: number
+      created_at: string
+    }> = []
+    let payments: Array<{
+      id: string
+      client_id: string
+      schedule_id: string
+      amount: number
+      payment_date: string
+    }> = []
+    let schedules: Array<{
+      id: string
+      client_id: string
+      status: string
+      start_time: string
+      end_time: string
+      price: number | null
+      recurring_rule_id: string | null
+    }> = []
+
+    if (clientIds.length > 0) {
+      const [linesResult, paymentsResult, schedulesResult] = await Promise.all([
+        supabaseAdmin
+          .from('billing_line_items')
+          .select('id, client_id, schedule_id, amount, created_at')
+          .eq('company_id', companyId),
+        supabaseAdmin
+          .from('billing_payments')
+          .select('id, client_id, schedule_id, amount, payment_date')
+          .eq('company_id', companyId),
+        supabaseAdmin
+          .from('schedules')
+          .select('id, client_id, status, start_time, end_time, price, recurring_rule_id')
+          .in('client_id', clientIds),
+      ])
+
+      if (linesResult.error) throw linesResult.error
+      if (paymentsResult.error) throw paymentsResult.error
+      if (schedulesResult.error) throw schedulesResult.error
+
+      lineItems = linesResult.data || []
+      payments = paymentsResult.data || []
+      schedules = schedulesResult.data || []
+    }
+
+    const periodStart = getReportsPeriodStart(period, timezone, now)
+    const periodStartIso = periodStart ? periodStart.toISOString() : null
+
+    let leadsConverted = 0
+    let estimatesSent = 0
+
+    const leadsQuery = supabaseAdmin
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .not('converted_at', 'is', null)
+
+    if (periodStartIso) {
+      leadsQuery.gte('converted_at', periodStartIso)
+    }
+
+    const { count: leadsConvertedCount, error: leadsError } = await leadsQuery
+    if (leadsError && leadsError.code !== '42P01') throw leadsError
+    if (!leadsError) leadsConverted = leadsConvertedCount || 0
+
+    const estimatesQuery = supabaseAdmin
+      .from('estimates')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .in('status', ['sent', 'accepted', 'declined', 'converted'])
+
+    if (periodStartIso) {
+      estimatesQuery.gte('updated_at', periodStartIso)
+    }
+
+    const { count: estimatesSentCount, error: estimatesError } = await estimatesQuery
+    if (estimatesError) throw estimatesError
+    estimatesSent = estimatesSentCount || 0
+
+    const data = buildReportsData({
+      period,
+      timezone,
+      lineItems,
+      payments,
+      schedules,
+      clients: clients || [],
+      leadsConverted,
+      estimatesSent,
+      now,
+    })
+
+    return { success: true, data }
+  } catch (error: any) {
+    console.error('getReportsDataAction error:', error)
+    return { success: false, error: error.message || 'Failed to load reports' }
+  }
+}
+
+export async function convertLeadToClientAction(leadId: string) {
+  const check = await verifyLeadOwnership(leadId)
+  if (!check.ok) return { success: false as const, error: check.error }
+
+  if (check.lead.converted_client_id) {
+    return {
+      success: true as const,
+      clientId: check.lead.converted_client_id,
+      alreadyConverted: true as const,
+    }
+  }
+
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const lead = check.lead
+    const { data: client, error: clientError } = await supabaseAdmin
+      .from('clients')
+      .insert({
+        company_id: check.companyId,
+        name: lead.name,
+        contact_name: lead.contact_name,
+        email: lead.email,
+        phone: lead.phone,
+        address: lead.address,
+        address_street: lead.address_street,
+        address_unit: lead.address_unit,
+        address_city: lead.address_city,
+        address_state: lead.address_state,
+        address_zip: lead.address_zip,
+        notes: lead.notes,
+        status: 'active',
+      })
+      .select('id')
+      .single()
+
+    if (clientError) throw clientError
+
+    const now = new Date().toISOString()
+    const { error: leadError } = await supabaseAdmin
+      .from('leads')
+      .update({
+        status: 'won',
+        converted_client_id: client.id,
+        converted_at: now,
+        updated_at: now,
+      })
+      .eq('id', leadId)
+
+    if (leadError) throw leadError
+
+    await insertLeadActivity(supabaseAdmin, {
+      leadId,
+      companyId: check.companyId,
+      type: 'converted',
+      body: 'Converted to client',
+      createdBy: check.userId,
+    })
+
+    revalidatePath('/dashboard/leads')
+    revalidatePath('/dashboard/clients')
+    revalidatePath(`/dashboard/clients/${client.id}`)
+
+    return { success: true as const, clientId: client.id, alreadyConverted: false as const }
+  } catch (error: any) {
+    console.error('convertLeadToClientAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to convert lead' }
   }
 }

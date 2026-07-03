@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { Card } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { PortalPageHeader } from '@/components/portal/portal-page-header'
 import { PortalEstimateCard } from '@/components/portal/portal-estimate-card'
 import { SearchBar } from '@/components/search-bar'
@@ -57,7 +58,8 @@ export function PortalEstimatesPageClient({ estimates }: { estimates: Estimate[]
           <p className="text-muted-foreground text-sm">No estimates match your search.</p>
         </Card>
       ) : (
-        <div className="flex flex-col gap-6 flex-1 min-h-0 overflow-auto scroll-fade pr-1">
+        <ScrollArea className="flex-1 min-h-0 pr-1" viewportClassName="scroll-fade">
+          <div className="flex flex-col gap-6">
           {pending.length > 0 && (
             <section>
               <h2 className="font-semibold text-lg mb-3">Awaiting your response</h2>
@@ -81,7 +83,8 @@ export function PortalEstimatesPageClient({ estimates }: { estimates: Estimate[]
               </div>
             </section>
           )}
-        </div>
+          </div>
+        </ScrollArea>
       )}
     </div>
   )

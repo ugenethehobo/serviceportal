@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import { Download, FileText } from 'lucide-react'
 import type { ClientDocument } from '@/lib/estimates'
@@ -58,7 +59,7 @@ export function ClientDocumentsPanel({
       )}
 
       {documents.length > 0 ? (
-        <div className="scroll-fade border rounded-lg flex-1 min-h-0 overflow-auto">
+        <ScrollArea className="border rounded-lg flex-1 min-h-0" viewportClassName="scroll-fade">
           <Table>
             <TableHeader>
               <TableRow>
@@ -99,7 +100,7 @@ export function ClientDocumentsPanel({
               ))}
             </TableBody>
           </Table>
-        </div>
+        </ScrollArea>
       ) : (
         <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg py-12">
           <p className="text-muted-foreground text-sm">

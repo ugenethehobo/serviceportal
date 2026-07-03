@@ -1085,6 +1085,60 @@ function MapPopup({
   );
 }
 
+const ROUTE_DIRECTION_ARROW_IMAGE_ID = "route-direction-arrow";
+const ROUTE_DIRECTION_ARROW_COLORS = {
+  light: "#000000",
+  dark: "#ffffff",
+} satisfies Record<Theme, string>;
+
+function createRouteDirectionArrowImageData(): ImageData {
+  const size = 24;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Could not create route direction arrow image");
+  }
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.moveTo(6, 5);
+  ctx.lineTo(18, 12);
+  ctx.lineTo(6, 19);
+  ctx.lineTo(9, 12);
+  ctx.closePath();
+  ctx.fill();
+
+  return ctx.getImageData(0, 0, size, size);
+}
+
+function ensureRouteDirectionArrowImage(map: MapLibreGL.Map) {
+  if (map.hasImage(ROUTE_DIRECTION_ARROW_IMAGE_ID)) {
+    return;
+  }
+
+  map.addImage(ROUTE_DIRECTION_ARROW_IMAGE_ID, createRouteDirectionArrowImageData(), {
+    sdf: true,
+  });
+}
+
+function removeMapRouteLayers(
+  map: MapLibreGL.Map,
+  sourceId: string,
+  layerId: string,
+  directionLayerId: string,
+) {
+  try {
+    if (map.getLayer(directionLayerId)) map.removeLayer(directionLayerId);
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+  } catch {
+    // ignore
+  }
+}
+
 type MapRouteProps = {
   /** Optional unique identifier for the route layer */
   id?: string;
@@ -1098,6 +1152,12 @@ type MapRouteProps = {
   opacity?: number;
   /** Dash pattern [dash length, gap length] for dashed lines */
   dashArray?: [number, number];
+  /** Draw chevron arrows along the route to indicate travel direction */
+  showDirection?: boolean;
+  /** Pixel spacing between direction arrows (default: 72) */
+  directionSpacing?: number;
+  /** Icon scale for direction arrows (default: 0.5) */
+  directionSize?: number;
   /** Callback when the route line is clicked */
   onClick?: () => void;
   /** Callback when mouse enters the route line */
@@ -1115,50 +1175,54 @@ function MapRoute({
   width = 3,
   opacity = 0.8,
   dashArray,
+  showDirection = false,
+  directionSpacing = 72,
+  directionSize = 0.5,
   onClick,
   onMouseEnter,
   onMouseLeave,
   interactive = true,
 }: MapRouteProps) {
-  const { map, isLoaded } = useMap();
+  const { map, isLoaded, resolvedTheme } = useMap();
+  const directionArrowColor = ROUTE_DIRECTION_ARROW_COLORS[resolvedTheme];
   const autoId = useId();
   const id = propId ?? autoId;
   const sourceId = `route-source-${id}`;
   const layerId = `route-layer-${id}`;
+  const directionLayerId = `route-direction-layer-${id}`;
 
-  // Add source and layer on mount
+  // Add source and line layer on mount
   useEffect(() => {
     if (!isLoaded || !map) return;
 
-    map.addSource(sourceId, {
-      type: "geojson",
-      data: {
-        type: "Feature",
-        properties: {},
-        geometry: { type: "LineString", coordinates: [] },
-      },
-    });
+    if (!map.getSource(sourceId)) {
+      map.addSource(sourceId, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: [] },
+        },
+      });
+    }
 
-    map.addLayer({
-      id: layerId,
-      type: "line",
-      source: sourceId,
-      layout: { "line-join": "round", "line-cap": "round" },
-      paint: {
-        "line-color": color,
-        "line-width": width,
-        "line-opacity": opacity,
-        ...(dashArray && { "line-dasharray": dashArray }),
-      },
-    });
+    if (!map.getLayer(layerId)) {
+      map.addLayer({
+        id: layerId,
+        type: "line",
+        source: sourceId,
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": color,
+          "line-width": width,
+          "line-opacity": opacity,
+          ...(dashArray && { "line-dasharray": dashArray }),
+        },
+      });
+    }
 
     return () => {
-      try {
-        if (map.getLayer(layerId)) map.removeLayer(layerId);
-        if (map.getSource(sourceId)) map.removeSource(sourceId);
-      } catch {
-        // ignore
-      }
+      removeMapRouteLayers(map, sourceId, layerId, directionLayerId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, map]);
@@ -1185,6 +1249,96 @@ function MapRoute({
     map.setPaintProperty(layerId, "line-opacity", opacity);
     map.setPaintProperty(layerId, "line-dasharray", dashArray);
   }, [isLoaded, map, layerId, color, width, opacity, dashArray]);
+
+  useEffect(() => {
+    if (!isLoaded || !map) {
+      return () => {};
+    }
+
+    if (!showDirection || coordinates.length < 2) {
+      try {
+        if (map.getLayer(directionLayerId)) map.removeLayer(directionLayerId);
+      } catch {
+        // ignore
+      }
+      return () => {
+        try {
+          if (map.getLayer(directionLayerId)) map.removeLayer(directionLayerId);
+        } catch {
+          // ignore
+        }
+      };
+    }
+
+    if (!map.getSource(sourceId)) {
+      return () => {
+        try {
+          if (map.getLayer(directionLayerId)) map.removeLayer(directionLayerId);
+        } catch {
+          // ignore
+        }
+      };
+    }
+
+    ensureRouteDirectionArrowImage(map);
+
+    if (!map.getLayer(directionLayerId)) {
+      map.addLayer({
+        id: directionLayerId,
+        type: "symbol",
+        source: sourceId,
+        layout: {
+          "symbol-placement": "line",
+          "symbol-spacing": directionSpacing,
+          "icon-image": ROUTE_DIRECTION_ARROW_IMAGE_ID,
+          "icon-size": directionSize,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: {
+          "icon-color": directionArrowColor,
+          "icon-opacity": Math.min(1, opacity + 0.15),
+        },
+      });
+    }
+
+    return () => {
+      try {
+        if (map.getLayer(directionLayerId)) map.removeLayer(directionLayerId);
+      } catch {
+        // ignore
+      }
+    };
+  }, [
+    isLoaded,
+    map,
+    showDirection,
+    coordinates.length,
+    sourceId,
+    directionLayerId,
+  ]);
+
+  useEffect(() => {
+    if (!isLoaded || !map || !showDirection || !map.getLayer(directionLayerId)) return;
+
+    map.setPaintProperty(directionLayerId, "icon-color", directionArrowColor);
+    map.setPaintProperty(
+      directionLayerId,
+      "icon-opacity",
+      Math.min(1, opacity + 0.15),
+    );
+    map.setLayoutProperty(directionLayerId, "symbol-spacing", directionSpacing);
+    map.setLayoutProperty(directionLayerId, "icon-size", directionSize);
+  }, [
+    isLoaded,
+    map,
+    showDirection,
+    directionLayerId,
+    directionArrowColor,
+    opacity,
+    directionSpacing,
+    directionSize,
+  ]);
 
   // Handle click and hover events
   useEffect(() => {

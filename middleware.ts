@@ -97,6 +97,17 @@ export async function middleware(request: NextRequest) {
       }
       return NextResponse.redirect(url)
     }
+
+    if (isStaffRoute && role === 'team_member') {
+      const isTeamHome = pathname === '/dashboard/team' || pathname.startsWith('/dashboard/team/')
+      const isAssignedJobRoute = /^\/dashboard\/clients\/[^/]+\/jobs\/[^/]+/.test(pathname)
+
+      if (!isTeamHome && !isAssignedJobRoute) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/dashboard/team'
+        return NextResponse.redirect(url)
+      }
+    }
   }
 
   if (pathname.startsWith('/admin') && user) {

@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Dialog,
   DialogContent,
@@ -402,7 +403,7 @@ export function ClientEstimatesPanel({
 
       {estimates.length > 0 ? (
         filteredEstimates.length > 0 ? (
-        <div className="scroll-fade border rounded-lg flex-1 min-h-0 overflow-auto">
+        <ScrollArea className="border rounded-lg flex-1 min-h-0" viewportClassName="scroll-fade">
           <Table>
             <TableHeader>
               <TableRow>
@@ -438,7 +439,7 @@ export function ClientEstimatesPanel({
               ))}
             </TableBody>
           </Table>
-        </div>
+        </ScrollArea>
         ) : (
           <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg">
             <p className="text-muted-foreground text-sm">No estimates match your search.</p>
@@ -469,7 +470,8 @@ export function ClientEstimatesPanel({
             </div>
           </DialogHeader>
 
-          <div className="scroll-fade flex-1 min-h-0 overflow-auto px-6 py-5 space-y-5">
+          <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+            <div className="px-6 py-5 space-y-5">
             <div>
               <Label>Title *</Label>
               <Input
@@ -632,7 +634,8 @@ export function ClientEstimatesPanel({
                 Start with a title — it saves automatically. Then add line items.
               </p>
             )}
-          </div>
+            </div>
+          </ScrollArea>
 
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t shrink-0">
             <div className="flex flex-wrap gap-2">

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { getClientBillingAction } from '@/app/action'
 import { formatCurrency } from '@/lib/billing'
 import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import {
   Table,
@@ -77,7 +78,7 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
       </div>
 
       {jobsWithBilling.length > 0 ? (
-        <div className="scroll-fade border rounded-lg flex-1 min-h-0 overflow-auto">
+        <ScrollArea className="border rounded-lg flex-1 min-h-0" viewportClassName="scroll-fade">
           <Table>
             <TableHeader>
               <TableRow>
@@ -120,7 +121,7 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
               ))}
             </TableBody>
           </Table>
-        </div>
+        </ScrollArea>
       ) : (
         <div className="border border-dashed rounded-lg p-8 text-center text-muted-foreground text-sm flex-1 flex items-center justify-center">
           No billing activity yet. Add line items on individual job billing tabs.

@@ -180,6 +180,13 @@ create policy billing_line_items_client_select on billing_line_items
     )
   );
 
+drop policy if exists job_photos_staff_all on job_photos;
+create policy job_photos_staff_all on job_photos
+  for all using (
+    auth_is_company_staff()
+    and job_photos.company_id = auth_profile_company_id()
+  );
+
 drop policy if exists billing_payments_staff_all on billing_payments;
 create policy billing_payments_staff_all on billing_payments
   for all using (

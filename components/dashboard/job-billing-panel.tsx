@@ -35,6 +35,7 @@ import {
   type BillingLineItem,
 } from '@/lib/billing'
 import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import { Banknote, Trash2, User, X, Check } from 'lucide-react'
 
@@ -262,7 +263,8 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
         </div>
       )}
 
-      <div className="scroll-fade flex-1 min-h-0 flex flex-col gap-6 overflow-auto">
+      <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+        <div className="flex flex-col gap-6">
         <section>
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -558,7 +560,8 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
             </div>
           )}
         </section>
-      </div>
+        </div>
+      </ScrollArea>
     </div>
   )
 }

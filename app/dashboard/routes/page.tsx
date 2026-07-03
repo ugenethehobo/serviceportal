@@ -8,10 +8,15 @@ export default async function RoutePlannerPage() {
 
   if (!result.success) {
     return (
-      <div className="h-screen flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">
-          {result.error || 'Unable to load route planner.'}
-        </p>
+      <div className="p-6 flex flex-col h-full min-h-0">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold tracking-tight">Route Planner</h1>
+        </div>
+        <div className="flex-1 flex items-center justify-center rounded-xl border bg-card">
+          <p className="text-sm text-muted-foreground">
+            {result.error || 'Unable to load route planner.'}
+          </p>
+        </div>
       </div>
     )
   }

@@ -8,7 +8,11 @@ import { Badge } from '@/components/ui/badge'
 import { CreditCard, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react'
 import type { CompanyStripeStatus } from '@/lib/stripe-connect'
 
-export function StripeConnectSettings() {
+interface StripeConnectSettingsProps {
+  embedded?: boolean
+}
+
+export function StripeConnectSettings({ embedded = false }: StripeConnectSettingsProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<CompanyStripeStatus | null>(null)
@@ -85,26 +89,24 @@ export function StripeConnectSettings() {
   }, [searchParams, syncStatus, startConnect, router])
 
   if (isLoading) {
-    return (
-      <Card className="p-6">
-        <p className="text-sm text-muted-foreground">Loading billing settings...</p>
-      </Card>
+    const loading = (
+      <p className="text-sm text-muted-foreground">Loading billing settings...</p>
     )
+    return embedded ? loading : <Card className="p-6">{loading}</Card>
   }
 
   const isConnected = status?.billingEnabled
   const isPending = status?.stripeAccountId && !status.chargesEnabled
 
-  return (
-    <Card className="p-6">
-      <div className="flex items-start gap-4">
-        <div className="rounded-lg bg-muted p-3">
-          <CreditCard className="size-6 text-muted-foreground" />
-        </div>
-        <div className="flex-1 space-y-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-lg font-semibold">Billing & Payments</h2>
+  const content = (
+    <div className="flex items-start gap-4">
+      <div className="rounded-lg bg-muted p-3 shrink-0">
+        <CreditCard className="size-6 text-muted-foreground" />
+      </div>
+      <div className="flex-1 space-y-4 min-w-0">
+        <div>
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            {!embedded && <h2 className="text-lg font-semibold">Billing & Payments</h2>}
               {isConnected && (
                 <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50">
                   <CheckCircle2 className="size-3 mr-1" />
@@ -122,12 +124,14 @@ export function StripeConnectSettings() {
                   Not connected
                 </Badge>
               )}
-            </div>
+          </div>
+          {!embedded && (
             <p className="text-sm text-muted-foreground">
               Connect your own Stripe account to enable billing. Client payments go directly to
               your Stripe account — not through ours.
             </p>
-          </div>
+          )}
+        </div>
 
           {isConnected && (
             <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
@@ -181,8 +185,9 @@ export function StripeConnectSettings() {
               {message}
             </p>
           )}
-        </div>
       </div>
-    </Card>
+    </div>
   )
+
+  return embedded ? content : <Card className="p-6">{content}</Card>
 }

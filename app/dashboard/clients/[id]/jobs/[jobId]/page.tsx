@@ -5,13 +5,19 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { parseAsCompanyTime, formatForDatetimeLocal } from '@/lib/timezone'
 import {
+  getDashboardUserDataAction,
   getJobAction,
   updateJobAction,
   archiveJobAction,
+  cancelJobAction,
   deleteJobAction,
 } from '@/app/action'
+import { JobPhotosPanel } from '@/components/dashboard/job-photos-panel'
+import { MapsNavigateButton } from '@/components/dashboard/maps-navigate-button'
+import { getDisplayAddressFromClient } from '@/lib/address'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -51,7 +57,16 @@ interface Job {
   status: string
   price: number
   crew?: { id: string; name: string } | null
-  client?: { id: string; name: string } | null
+  client?: {
+    id: string
+    name: string
+    address?: string | null
+    address_street?: string | null
+    address_unit?: string | null
+    address_city?: string | null
+    address_state?: string | null
+    address_zip?: string | null
+  } | null
 }
 
 export default function JobDetailPage() {
@@ -71,8 +86,9 @@ export default function JobDetailPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [availableCrews, setAvailableCrews] = useState<{ id: string; name: string }[]>([])
   const [conflictInfo, setConflictInfo] = useState<{ message: string; suggestedCrews?: { id: string; name: string }[] } | null>(null)
-  const [confirmAction, setConfirmAction] = useState<'archive' | 'delete' | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'archive' | 'cancel' | 'delete' | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<
     'details' | 'billing' | 'photos' | 'documents' | 'messaging'
   >('details')
@@ -84,12 +100,18 @@ export default function JobDetailPage() {
     }
   }, [searchParams])
 
+  const isTeamMember = userRole === 'team_member'
+
   const jobTabs = [
     { id: 'details' as const, label: 'Details' },
-    { id: 'billing' as const, label: 'Billing' },
-    { id: 'photos' as const, label: 'Photos' },
-    { id: 'documents' as const, label: 'Documents' },
-    { id: 'messaging' as const, label: 'Messaging' },
+    ...(isTeamMember
+      ? [{ id: 'photos' as const, label: 'Photos' }]
+      : [
+          { id: 'billing' as const, label: 'Billing' },
+          { id: 'photos' as const, label: 'Photos' },
+          { id: 'documents' as const, label: 'Documents' },
+          { id: 'messaging' as const, label: 'Messaging' },
+        ]),
   ]
 
   const handleTabChange = (tab: typeof activeTab) => {
@@ -146,7 +168,18 @@ export default function JobDetailPage() {
   useEffect(() => {
     fetchJob()
     fetchCompanyContext()
+    getDashboardUserDataAction().then((result) => {
+      if (result.success) {
+        setUserRole(result.profile.role)
+      }
+    })
   }, [fetchJob, fetchCompanyContext])
+
+  useEffect(() => {
+    if (userRole === 'team_member' && activeTab !== 'details' && activeTab !== 'photos') {
+      setActiveTab('details')
+    }
+  }, [userRole, activeTab])
 
   const populateFormFromJob = useCallback((j: Job, tz: string) => {
     setFormValues({
@@ -312,12 +345,21 @@ export default function JobDetailPage() {
     if (!confirmAction) return
     setIsActionLoading(true)
 
-    const result = confirmAction === 'archive'
-      ? await archiveJobAction(jobId, clientId)
-      : await deleteJobAction(jobId, clientId)
+    const result =
+      confirmAction === 'archive'
+        ? await archiveJobAction(jobId, clientId)
+        : confirmAction === 'cancel'
+          ? await cancelJobAction(jobId, clientId)
+          : await deleteJobAction(jobId, clientId)
 
     if (result.success) {
-      toast.success(confirmAction === 'archive' ? 'Job archived' : 'Job deleted')
+      toast.success(
+        confirmAction === 'archive'
+          ? 'Job archived'
+          : confirmAction === 'cancel'
+            ? 'Job cancelled'
+            : 'Job deleted'
+      )
       setConfirmAction(null)
       if (confirmAction === 'delete') {
         router.push(`/dashboard/clients/${clientId}`)
@@ -336,9 +378,10 @@ export default function JobDetailPage() {
     return <div className="p-6">Loading...</div>
   }
 
-  const canEdit = job.status === 'scheduled' || job.status === 'in_progress'
-  const canArchive = job.status === 'in_progress'
-  const canDelete = job.status === 'scheduled' || job.status === 'cancelled'
+  const canEdit = !isTeamMember && (job.status === 'scheduled' || job.status === 'in_progress')
+  const canArchive = !isTeamMember && job.status === 'in_progress'
+  const canCancel = !isTeamMember && job.status === 'scheduled'
+  const canDelete = !isTeamMember && (job.status === 'scheduled' || job.status === 'cancelled')
 
   const jobMeta = [
     statusLabels[job.status] ?? job.status,
@@ -350,46 +393,60 @@ export default function JobDetailPage() {
       ? { title: true, startTime: true, recurrence: true }
       : {}
 
+  const jobAddress = job.client
+    ? getDisplayAddressFromClient(job.client) || 'No address on file'
+    : 'No address on file'
+
   return (
-    <div className="p-6 flex flex-col h-[calc(100vh-2rem)]">
-      <div className="flex items-center justify-between mb-6">
-        <div>
+    <div className="flex flex-col h-full min-h-0 p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
+        <div className="min-w-0">
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard/clients">Clients</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbLink href={`/dashboard/clients/${clientId}`}>
-                  {clientName || 'Client'}
+                <BreadcrumbLink href={isTeamMember ? '/dashboard/team' : '/dashboard/clients'}>
+                  {isTeamMember ? 'My Day' : 'Clients'}
                 </BreadcrumbLink>
               </BreadcrumbItem>
+              {!isTeamMember && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbLink href={`/dashboard/clients/${clientId}`}>
+                      {clientName || 'Client'}
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                </>
+              )}
               <BreadcrumbSeparator />
               <BreadcrumbItem>
                 <BreadcrumbPage>{job.title}</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
-          <h1 className="text-3xl font-bold tracking-tight mt-2">{job.title}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-2">{job.title}</h1>
           <p className="text-sm text-muted-foreground mt-1">{jobMeta}</p>
+          {isTeamMember && (
+            <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{jobAddress}</p>
+          )}
         </div>
 
-        <div className="flex items-center gap-1 bg-card/50 rounded-lg p-1">
-          {jobTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
-                activeTab === tab.id ? 'bg-card shadow-sm font-medium' : 'hover:bg-background'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <div className="flex flex-col sm:flex-row gap-3 lg:items-center">
+          <div className="flex items-center gap-1 bg-card/50 rounded-lg p-1 overflow-x-auto">
+            {jobTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={`px-3 sm:px-4 py-2 text-sm rounded-md transition-colors whitespace-nowrap ${
+                  activeTab === tab.id ? 'bg-card shadow-sm font-medium' : 'hover:bg-background'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
           {activeTab === 'details' && canEdit && !isEditing && (
             <Button variant="outline" onClick={handleStartEditing}>Edit</Button>
           )}
@@ -403,18 +460,24 @@ export default function JobDetailPage() {
               </Button>
             </>
           )}
+          {canCancel && !isEditing && (
+            <Button variant="outline" onClick={() => setConfirmAction('cancel')}>
+              Cancel Job
+            </Button>
+          )}
           {canArchive && !isEditing && (
             <Button variant="outline" onClick={() => setConfirmAction('archive')}>Complete Early</Button>
           )}
           {canDelete && !isEditing && (
-            <Button variant="outline" onClick={() => setConfirmAction('delete')}>Delete</Button>
+            <Button variant="destructive" onClick={() => setConfirmAction('delete')}>Delete</Button>
           )}
+          </div>
         </div>
       </div>
 
-      <Card className="flex-1 flex flex-col p-6 min-h-0">
+      <Card className="flex-1 flex flex-col p-4 sm:p-6 min-h-0">
         {activeTab === 'details' && (
-          <div className="flex-1 min-h-0 overflow-auto">
+          <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
             {isEditing ? (
               <div className="max-w-2xl">
                 <h2 className="text-lg font-semibold tracking-tight mb-4">Edit Job</h2>
@@ -432,7 +495,7 @@ export default function JobDetailPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
-                <Card className="p-6 flex flex-col">
+                <Card className="p-4 sm:p-6 flex flex-col">
                   <h2 className="font-semibold text-lg mb-4">Job Information</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                     <div>
@@ -476,10 +539,19 @@ export default function JobDetailPage() {
                         {job.recurring_rule_id ? 'Recurring' : 'One-time'}
                       </div>
                     </div>
+                    {isTeamMember && (
+                      <div className="md:col-span-2">
+                        <div className="text-sm text-muted-foreground">Address</div>
+                        <div className="font-medium">{jobAddress}</div>
+                        <div className="mt-3 hidden sm:block max-w-sm">
+                          <MapsNavigateButton address={jobAddress} className="w-full" />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </Card>
 
-                <Card className="p-6 flex flex-col">
+                <Card className="p-4 sm:p-6 flex flex-col">
                   <h2 className="font-semibold text-lg mb-4">Description</h2>
                   <p className="text-sm flex-1">
                     {job.description || <span className="text-muted-foreground italic">No description provided.</span>}
@@ -487,7 +559,7 @@ export default function JobDetailPage() {
                 </Card>
               </div>
             )}
-          </div>
+          </ScrollArea>
         )}
 
         {activeTab === 'billing' && (
@@ -497,13 +569,7 @@ export default function JobDetailPage() {
         )}
 
         {activeTab === 'photos' && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center">
-            <div className="text-6xl mb-4">📷</div>
-            <h3 className="text-xl font-semibold mb-2">Photos</h3>
-            <p className="text-muted-foreground max-w-md">
-              Upload and view before/after photos and job site images.
-            </p>
-          </div>
+          <JobPhotosPanel scheduleId={jobId} clientId={clientId} />
         )}
 
         {activeTab === 'documents' && (
@@ -527,16 +593,28 @@ export default function JobDetailPage() {
         )}
       </Card>
 
+      {isTeamMember && (
+        <div className="sm:hidden fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 backdrop-blur p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <MapsNavigateButton address={jobAddress} size="lg" className="w-full" />
+        </div>
+      )}
+
       <Dialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <DialogContent className="!max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {confirmAction === 'archive' ? 'Complete Job Early' : 'Delete Job'}
+              {confirmAction === 'archive'
+                ? 'Complete Job Early'
+                : confirmAction === 'cancel'
+                  ? 'Cancel Job'
+                  : 'Delete Job'}
             </DialogTitle>
             <DialogDescription>
               {confirmAction === 'archive'
                 ? 'This will mark the job as completed/archived before its scheduled end time.'
-                : 'This will permanently delete the job. This action cannot be undone.'}
+                : confirmAction === 'cancel'
+                  ? 'This will cancel the scheduled job. It will remain on the schedule as cancelled and can be deleted later.'
+                  : 'This will permanently delete the job. This action cannot be undone.'}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
@@ -546,7 +624,11 @@ export default function JobDetailPage() {
               onClick={handleConfirmAction}
               disabled={isActionLoading}
             >
-              {isActionLoading ? 'Processing...' : 'Confirm'}
+              {isActionLoading
+                ? 'Processing...'
+                : confirmAction === 'cancel'
+                  ? 'Cancel Job'
+                  : 'Confirm'}
             </Button>
           </div>
         </DialogContent>

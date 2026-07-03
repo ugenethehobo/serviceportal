@@ -7,7 +7,13 @@ import { Fragment } from 'react'
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
-import { Dialog, DialogTitle, DialogHeader, DialogContent } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogTitle,
+  DialogHeader,
+  DialogContent,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { CalendarDays, Users, Banknote, MapPin, Pencil } from 'lucide-react';
 import {
   Breadcrumb,
@@ -20,7 +26,16 @@ import {
 import { Card, CardTitle, CardDescription, CardHeader, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { updateClientAction, createJobAction, convertEstimateToJobAction, syncScheduleStatusesAction } from '@/app/action'
+import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  archiveClientAction,
+  createJobAction,
+  convertEstimateToJobAction,
+  restoreClientAction,
+  syncScheduleStatusesAction,
+  updateClientAction,
+} from '@/app/action'
+import { toast } from 'sonner'
 import { StructuredAddressForm } from '@/components/dashboard/company-address-form'
 import {
   buildStructuredAddressDbFields,
@@ -102,6 +117,8 @@ export default function ClientDetailPage() {
   const [schedules, setSchedules] = useState<any[]>([])
   const [convertingEstimate, setConvertingEstimate] = useState<Estimate | null>(null)
   const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0)
+  const [clientStatusConfirm, setClientStatusConfirm] = useState<'archive' | 'restore' | null>(null)
+  const [isClientStatusLoading, setIsClientStatusLoading] = useState(false)
 
   const fetchSchedules = async () => {
     const { data, error } = await supabase
@@ -427,6 +444,28 @@ export default function ClientDetailPage() {
     setIsCreatingJob(false)
   }
 
+  const handleClientStatusChange = async () => {
+    if (!client || !clientStatusConfirm) return
+    setIsClientStatusLoading(true)
+
+    const result =
+      clientStatusConfirm === 'archive'
+        ? await archiveClientAction(client.id)
+        : await restoreClientAction(client.id)
+
+    if (result.success) {
+      toast.success(
+        clientStatusConfirm === 'archive' ? 'Client archived' : 'Client restored'
+      )
+      setClient({ ...client, status: clientStatusConfirm === 'archive' ? 'archived' : 'active' })
+      setClientStatusConfirm(null)
+    } else {
+      toast.error(result.error || 'Action failed')
+    }
+
+    setIsClientStatusLoading(false)
+  }
+
   const updateScheduleStatuses = async () => {
     console.log('=== Sync Statuses (Client) ===')
 
@@ -497,7 +536,7 @@ export default function ClientDetailPage() {
   const displayAddress = client ? getDisplayAddressFromClient(client) : ''
 
   return (
-    <div className="p-6 flex flex-col h-[calc(100vh-2rem)]">
+    <div className="p-6 flex flex-col h-full min-h-0">
     {/* Header */}
     <div className="flex items-center justify-between mb-6">
       {/* Left side: Breadcrumbs + Client Name */}
@@ -513,7 +552,12 @@ export default function ClientDetailPage() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
-        <h1 className="text-3xl font-bold tracking-tight mt-2">{client.name}</h1>
+        <div className="flex items-center gap-3 mt-2">
+          <h1 className="text-3xl font-bold tracking-tight">{client.name}</h1>
+          {client.status === 'archived' && (
+            <Badge variant="secondary">Archived</Badge>
+          )}
+        </div>
       </div>
 
       {/* Center: Tab Navigation */}
@@ -561,10 +605,21 @@ export default function ClientDetailPage() {
         </button>
       </div>
 
-      {/* Right side: Back button */}
-      <Button variant="outline" onClick={() => router.push('/dashboard/clients')}>
-        Back to Clients
-      </Button>
+      {/* Right side: status actions */}
+      <div className="flex items-center gap-2">
+        {client.status === 'active' ? (
+          <Button variant="outline" onClick={() => setClientStatusConfirm('archive')}>
+            Archive Client
+          </Button>
+        ) : (
+          <Button variant="outline" onClick={() => setClientStatusConfirm('restore')}>
+            Restore Client
+          </Button>
+        )}
+        <Button variant="outline" onClick={() => router.push('/dashboard/clients')}>
+          Back to Clients
+        </Button>
+      </div>
     </div>
 
       {/* Main Content */}
@@ -595,6 +650,7 @@ export default function ClientDetailPage() {
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={client.status === 'archived'}
                       onClick={() => {
                         setIsAddJobModalOpen(true)
                         setConflictInfo(null)
@@ -608,7 +664,8 @@ export default function ClientDetailPage() {
 
               {/* Jobs List */}
               {visibleSchedules.length > 0 ? (
-                <div className="scroll-fade space-y-4 overflow-auto">   {/* reduced space-y a bit */}
+                <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+                  <div className="space-y-4">
                   {visibleSchedules.map((schedule, index) => (
                     <Fragment key={schedule.id}>
                       {/* Job Card Row */}
@@ -720,7 +777,8 @@ export default function ClientDetailPage() {
 
                     </Fragment>
                   ))}
-                </div>
+                  </div>
+                </ScrollArea>
               ) : (
                 <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg">
                   <p className="text-muted-foreground">
@@ -773,7 +831,8 @@ export default function ClientDetailPage() {
                 Contact Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 flex-1 min-h-0 overflow-auto">
+            <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
 
               {[
                 { label: 'Name', field: 'name', value: client.name },
@@ -838,6 +897,7 @@ export default function ClientDetailPage() {
               </div>
 
             </CardContent>
+            </ScrollArea>
           </Card>
 
           <Card className="p-6 flex flex-col">
@@ -880,12 +940,13 @@ export default function ClientDetailPage() {
           else setIsAddressModalOpen(true)
         }}
       >
-        <DialogContent className="!max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="!max-w-lg max-h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
             <DialogTitle>Client Address</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+          <div className="space-y-4 px-6 py-2 pb-6">
             {legacyClientAddress && (
               <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
                 Saved address from the previous format:{' '}
@@ -906,8 +967,9 @@ export default function ClientDetailPage() {
               required={false}
             />
           </div>
+          </ScrollArea>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 px-6 py-4 border-t shrink-0">
             <Button variant="outline" onClick={closeAddressModal} disabled={isSavingAddress}>
               Cancel
             </Button>
@@ -954,6 +1016,33 @@ export default function ClientDetailPage() {
                 : convertingEstimate
                   ? 'Create Job from Estimate'
                   : 'Create Job'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!clientStatusConfirm} onOpenChange={(open) => !open && setClientStatusConfirm(null)}>
+        <DialogContent className="!max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {clientStatusConfirm === 'archive' ? 'Archive Client' : 'Restore Client'}
+            </DialogTitle>
+            <DialogDescription>
+              {clientStatusConfirm === 'archive'
+                ? 'Archived clients are hidden from the default clients list. Existing jobs and billing history are kept.'
+                : 'This client will return to the active clients list and can receive new jobs.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setClientStatusConfirm(null)}>
+              Back
+            </Button>
+            <Button onClick={handleClientStatusChange} disabled={isClientStatusLoading}>
+              {isClientStatusLoading
+                ? 'Processing...'
+                : clientStatusConfirm === 'archive'
+                  ? 'Archive Client'
+                  : 'Restore Client'}
             </Button>
           </div>
         </DialogContent>

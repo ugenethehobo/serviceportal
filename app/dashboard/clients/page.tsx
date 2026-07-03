@@ -10,10 +10,23 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
-import { createClientAction, updateClientAction } from "@/app/action"
+import {
+  archiveClientAction,
+  createClientAction,
+  restoreClientAction,
+  updateClientAction,
+} from "@/app/action"
+import { toast } from 'sonner'
 import { StructuredAddressForm } from '@/components/dashboard/company-address-form'
 import {
   emptyStructuredAddress,
@@ -66,6 +79,9 @@ export default function ClientsPage() {
   const [legacyClientAddress, setLegacyClientAddress] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list')
   const [isLoading, setIsLoading] = useState(true)
+  const [statusTarget, setStatusTarget] = useState<Client | null>(null)
+  const [statusAction, setStatusAction] = useState<'archive' | 'restore' | null>(null)
+  const [isStatusLoading, setIsStatusLoading] = useState(false)
 
   const fetchClients = async () => {
     setIsLoading(true)
@@ -198,6 +214,39 @@ export default function ClientsPage() {
     setIsCreatingClient(false)
   }
 
+  const openStatusConfirm = (
+    client: Client,
+    action: 'archive' | 'restore',
+    event: React.MouseEvent
+  ) => {
+    event.stopPropagation()
+    setStatusTarget(client)
+    setStatusAction(action)
+  }
+
+  const handleClientStatusChange = async () => {
+    if (!statusTarget || !statusAction) return
+    setIsStatusLoading(true)
+
+    const result =
+      statusAction === 'archive'
+        ? await archiveClientAction(statusTarget.id)
+        : await restoreClientAction(statusTarget.id)
+
+    if (result.success) {
+      toast.success(
+        statusAction === 'archive' ? 'Client archived' : 'Client restored'
+      )
+      setStatusTarget(null)
+      setStatusAction(null)
+      await fetchClients()
+    } else {
+      toast.error(result.error || 'Action failed')
+    }
+
+    setIsStatusLoading(false)
+  }
+
 const openEditClient = (client: Client) => {
   setEditingClient(client)
   const structured = structuredAddressFromClientRow(client)
@@ -241,8 +290,8 @@ const openEditClient = (client: Client) => {
   }, [])
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6 flex flex-col h-full min-h-0">
+      <div className="flex items-center justify-between mb-6 shrink-0">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
           <p className="text-muted-foreground">Manage your client relationships</p>
@@ -251,7 +300,7 @@ const openEditClient = (client: Client) => {
       </div>
 
       {/* Main Content Card */}
-      <Card className="p-6 flex flex-col h-[calc(100vh-8rem)]">
+      <Card className="p-6 flex flex-col flex-1 min-h-0">
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-6">
           <div className="flex gap-4 items-center w-full sm:w-auto">
@@ -280,7 +329,7 @@ const openEditClient = (client: Client) => {
           </Tabs>
         </div>
 
-        <div className="scroll-fade flex-1 overflow-auto">
+        <ScrollArea className="flex-1" viewportClassName="scroll-fade">
           {isLoading ? (
             // Loading Skeletons
             viewMode === 'list' ? (
@@ -320,6 +369,7 @@ const openEditClient = (client: Client) => {
                       <th className="text-left p-4 font-medium">Next Job</th>
                       <th className="text-left p-4 font-medium">Due</th>
                       <th className="text-left p-4 font-medium">Status</th>
+                      <th className="text-right p-4 font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -352,11 +402,30 @@ const openEditClient = (client: Client) => {
                             {client.status}
                           </Badge>
                         </td>
+                        <td className="p-4 text-right">
+                          {client.status === 'active' ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(event) => openStatusConfirm(client, 'archive', event)}
+                            >
+                              Archive
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(event) => openStatusConfirm(client, 'restore', event)}
+                            >
+                              Restore
+                            </Button>
+                          )}
+                        </td>
                       </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                        <td colSpan={7} className="p-8 text-center text-muted-foreground">
                           No clients found.
                         </td>
                       </tr>
@@ -407,8 +476,31 @@ const openEditClient = (client: Client) => {
                       </div>
 
                       <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="outline" size="sm" className="flex-1">View</Button>
-                        {/* Edit button removed */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => router.push(`/dashboard/clients/${client.id}`)}
+                        >
+                          View
+                        </Button>
+                        {client.status === 'active' ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(event) => openStatusConfirm(client, 'archive', event)}
+                          >
+                            Archive
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(event) => openStatusConfirm(client, 'restore', event)}
+                          >
+                            Restore
+                          </Button>
+                        )}
                       </div>
                     </Card>
                   ))
@@ -420,7 +512,7 @@ const openEditClient = (client: Client) => {
               </div>
             )
           )}
-        </div>
+        </ScrollArea>
       </Card>
 
       {/* Add / Edit Client Modal */}
@@ -515,6 +607,47 @@ const openEditClient = (client: Client) => {
               {isCreatingClient
                 ? (editingClient ? 'Saving...' : 'Creating...')
                 : (editingClient ? 'Save Changes' : 'Add Client')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!statusTarget && !!statusAction}
+        onOpenChange={(open) => {
+          if (!open) {
+            setStatusTarget(null)
+            setStatusAction(null)
+          }
+        }}
+      >
+        <DialogContent className="!max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {statusAction === 'archive' ? 'Archive Client' : 'Restore Client'}
+            </DialogTitle>
+            <DialogDescription>
+              {statusAction === 'archive'
+                ? `Archive ${statusTarget?.name}? They will be hidden from the default clients list.`
+                : `Restore ${statusTarget?.name}? They will appear in the active clients list again.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setStatusTarget(null)
+                setStatusAction(null)
+              }}
+            >
+              Back
+            </Button>
+            <Button onClick={handleClientStatusChange} disabled={isStatusLoading}>
+              {isStatusLoading
+                ? 'Processing...'
+                : statusAction === 'archive'
+                  ? 'Archive Client'
+                  : 'Restore Client'}
             </Button>
           </div>
         </DialogContent>

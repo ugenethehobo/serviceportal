@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import type { DashboardCrewSummary } from '@/lib/dashboard-overview'
 
 interface ActiveCrewsTodayProps {
@@ -29,7 +30,8 @@ export function ActiveCrewsToday({ crews }: ActiveCrewsTodayProps) {
   }
 
   return (
-    <div className="scroll-fade space-y-3 overflow-auto flex-1 pr-1">
+    <ScrollArea className="flex-1 pr-1" viewportClassName="scroll-fade">
+      <div className="space-y-3">
       {crews.map((crew) => (
         <div key={crew.id} className="rounded-lg border p-3">
           <div className="flex items-center justify-between gap-3">
@@ -49,6 +51,7 @@ export function ActiveCrewsToday({ crews }: ActiveCrewsTodayProps) {
           </div>
         </div>
       ))}
-    </div>
+      </div>
+    </ScrollArea>
   )
 }
