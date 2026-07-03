@@ -15,6 +15,46 @@ import {
   seedBillingFromEstimate,
   applyAutoEstimateStatus,
 } from '@/lib/estimates-server'
+import { cookies } from 'next/headers'
+import { getSessionProfile } from '@/lib/portal-auth'
+import {
+  isThemePreference,
+  THEME_COOKIE_NAME,
+  type ThemePreference,
+} from '@/lib/theme'
+import {
+  normalizeBusinessHours,
+  isValidBusinessHoursRange,
+  shouldShowTomorrowTimeline,
+  type BusinessHours,
+} from '@/lib/business-hours'
+import { formatCompanyDateLabel, getCompanyDayBounds } from '@/lib/timezone'
+import {
+  assignTimelineLanes,
+  buildCrewSummaries,
+  buildTimelineJobs,
+  type DashboardOverviewData,
+} from '@/lib/dashboard-overview'
+import { buildDashboardMapData, type DashboardMapData } from '@/lib/dashboard-map'
+import { buildRoutePlannerData, type RoutePlannerData } from '@/lib/route-planner'
+import { geocodeStructuredAddress } from '@/lib/geocoding'
+import {
+  buildStructuredAddressDbFields,
+  formatAddressForDisplay,
+  normalizeStructuredAddress,
+  structuredAddressFromCompanyRow,
+  validateStructuredAddress,
+  validateStructuredAddressIfPresent,
+  type StructuredAddress,
+} from '@/lib/address'
+import {
+  assertPortalEmailAvailable,
+  findAuthUserByEmail,
+  findProfileByClientId,
+  isEmailAlreadyRegisteredError,
+  linkClientPortalAccess,
+  upsertClientPortalProfile,
+} from '@/lib/portal-users'
 
 export async function createCompanyUser(data: {
   email: string
@@ -336,6 +376,7 @@ export async function createClientAction(data: {
   email?: string
   phone?: string
   address?: string
+  clientAddress?: StructuredAddress
   notes?: string
   companyId: string
 }) {
@@ -351,12 +392,35 @@ export async function createClientAction(data: {
   )
 
   try {
+    let addressFields: ReturnType<typeof buildStructuredAddressDbFields> | null = null
+
+    if (data.clientAddress) {
+      const normalized = normalizeStructuredAddress(data.clientAddress)
+      const validation = validateStructuredAddressIfPresent(normalized)
+      if (!validation.valid) {
+        const firstError = Object.values(validation.errors)[0]
+        return { success: false, error: firstError || 'Client address is invalid' }
+      }
+      addressFields = buildStructuredAddressDbFields(normalized)
+    }
+
+    const compiledAddress = addressFields
+      ? addressFields.address
+      : data.address
+        ? data.address
+        : null
+
     const { error } = await supabaseAdmin.from('clients').insert({
       name: data.name,
       contact_name: data.contact_name || null,
       email: data.email || null,
       phone: data.phone || null,
-      address: data.address || null,
+      address: compiledAddress,
+      address_street: addressFields?.address_street ?? null,
+      address_unit: addressFields?.address_unit ?? null,
+      address_city: addressFields?.address_city ?? null,
+      address_state: addressFields?.address_state ?? null,
+      address_zip: addressFields?.address_zip ?? null,
       notes: data.notes || null,
       company_id: data.companyId,
       status: 'active',
@@ -448,6 +512,7 @@ export async function updateClientAction(data: {
   email?: string
   phone?: string
   address?: string
+  clientAddress?: StructuredAddress
   notes?: string
 }) {
   const supabaseAdmin = createClient(
@@ -468,8 +533,19 @@ export async function updateClientAction(data: {
     if (data.name !== undefined) updateData.name = data.name
     if (data.email !== undefined) updateData.email = data.email || null
     if (data.phone !== undefined) updateData.phone = data.phone || null
-    if (data.address !== undefined) updateData.address = data.address || null
     if (data.notes !== undefined) updateData.notes = data.notes || null
+
+    if (data.clientAddress !== undefined) {
+      const normalized = normalizeStructuredAddress(data.clientAddress)
+      const validation = validateStructuredAddressIfPresent(normalized)
+      if (!validation.valid) {
+        const firstError = Object.values(validation.errors)[0]
+        return { success: false, error: firstError || 'Client address is invalid' }
+      }
+      Object.assign(updateData, buildStructuredAddressDbFields(normalized))
+    } else if (data.address !== undefined) {
+      updateData.address = data.address || null
+    }
 
     const { error } = await supabaseAdmin
       .from('clients')
@@ -479,6 +555,7 @@ export async function updateClientAction(data: {
     if (error) throw error
 
     revalidatePath('/dashboard/clients')
+    revalidatePath(`/dashboard/clients/${data.id}`)
     return { success: true }
   } catch (error: any) {
     console.error('Error updating client:', error)
@@ -595,63 +672,59 @@ export async function createJobAction(data: {
   }
 }
 
-export async function syncScheduleStatusesAction(clientId: string) {
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  )
+async function syncScheduleStatusesForClient(
+  supabaseAdmin: ReturnType<typeof createSupabaseAdmin>,
+  clientId: string
+) {
+  const now = new Date().toISOString()
+  let activated = 0
+  let archived = 0
 
-  try {
-    const now = new Date().toISOString()
-    let activated = 0
-    let archived = 0
+  const { data: toActivate } = await supabaseAdmin
+    .from('schedules')
+    .select('id')
+    .eq('client_id', clientId)
+    .eq('status', 'scheduled')
+    .lte('start_time', now)
+    .gt('end_time', now)
 
-    // 1. Activate jobs that should be running right now
-    const { data: toActivate } = await supabaseAdmin
+  if (toActivate && toActivate.length > 0) {
+    await supabaseAdmin
       .from('schedules')
-      .select('id')
-      .eq('client_id', clientId)
-      .eq('status', 'scheduled')
-      .lte('start_time', now)
-      .gt('end_time', now)
+      .update({ status: 'in_progress' })
+      .in('id', toActivate.map((s) => s.id))
+    activated = toActivate.length
+  }
 
-    if (toActivate && toActivate.length > 0) {
+  const { data: toArchive } = await supabaseAdmin
+    .from('schedules')
+    .select('*')
+    .eq('client_id', clientId)
+    .neq('status', 'archived')
+    .lt('end_time', now)
+
+  if (toArchive && toArchive.length > 0) {
+    for (const schedule of toArchive) {
       await supabaseAdmin
         .from('schedules')
-        .update({ status: 'in_progress' })
-        .in('id', toActivate.map(s => s.id))
-      activated = toActivate.length
-    }
+        .update({ status: 'archived' })
+        .eq('id', schedule.id)
+      archived++
 
-    // 2. Archive ended jobs + generate next recurring instance
-    const { data: toArchive } = await supabaseAdmin
-      .from('schedules')
-      .select('*')
-      .eq('client_id', clientId)
-      .neq('status', 'archived')
-      .lt('end_time', now)
-
-    if (toArchive && toArchive.length > 0) {
-      for (const schedule of toArchive) {
-        // Archive current
-        await supabaseAdmin
-          .from('schedules')
-          .update({ status: 'archived' })
-          .eq('id', schedule.id)
-        archived++
-
-        // If this was a recurring job, create the next occurrence
-        if (schedule.recurring_rule_id) {
-          await generateNextRecurringInstance(schedule, supabaseAdmin)
-        }
+      if (schedule.recurring_rule_id) {
+        await generateNextRecurringInstance(schedule, supabaseAdmin)
       }
     }
+  }
+
+  return { activated, archived }
+}
+
+export async function syncScheduleStatusesAction(clientId: string) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const { activated, archived } = await syncScheduleStatusesForClient(supabaseAdmin, clientId)
 
     revalidatePath(`/dashboard/clients/${clientId}`)
 
@@ -659,7 +732,7 @@ export async function syncScheduleStatusesAction(clientId: string) {
       success: true,
       activated,
       archived,
-      message: `Activated: ${activated}, Archived: ${archived}`
+      message: `Activated: ${activated}, Archived: ${archived}`,
     }
   } catch (error: any) {
     console.error('syncScheduleStatusesAction error:', error)
@@ -1807,5 +1880,809 @@ export async function convertEstimateToJobAction(data: {
   } catch (error: any) {
     console.error('convertEstimateToJobAction error:', error)
     return { success: false, error: error.message }
+  }
+}
+
+// ============================================
+// Client portal access
+// ============================================
+
+async function verifyCompanyAdminForClient(clientId: string) {
+  const session = await getSessionProfile()
+  if (!session) return { ok: false as const, error: 'Unauthorized' }
+
+  if (session.profile.role !== 'company_admin') {
+    return { ok: false as const, error: 'Only company admins can manage portal access' }
+  }
+
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data: client } = await supabaseAdmin
+    .from('clients')
+    .select('id, company_id, email, name, auth_user_id, portal_enabled, portal_invited_at')
+    .eq('id', clientId)
+    .single()
+
+  if (!client || client.company_id !== session.profile.company_id) {
+    return { ok: false as const, error: 'Client not found' }
+  }
+
+  return { ok: true as const, client, companyId: session.profile.company_id }
+}
+
+export async function getClientPortalStatusAction(clientId: string) {
+  try {
+    const check = await verifyCompanyAdminForClient(clientId)
+    if (!check.ok) return { success: false, error: check.error }
+
+    const { client } = check
+    let profileEmail: string | null = null
+
+    if (client.auth_user_id) {
+      const supabaseAdmin = createSupabaseAdmin()
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('email')
+        .eq('id', client.auth_user_id)
+        .single()
+      profileEmail = profile?.email ?? null
+    }
+
+    return {
+      success: true,
+      status: {
+        portalEnabled: client.portal_enabled,
+        portalInvitedAt: client.portal_invited_at,
+        hasPortalUser: !!client.auth_user_id,
+        portalUserEmail: profileEmail,
+        clientEmail: client.email,
+      },
+    }
+  } catch (error: any) {
+    console.error('getClientPortalStatusAction error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function inviteClientToPortalAction(clientId: string, origin: string) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const check = await verifyCompanyAdminForClient(clientId)
+    if (!check.ok) return { success: false, error: check.error }
+
+    const { client, companyId } = check
+    if (!companyId) return { success: false, error: 'Company not found' }
+
+    const email = client.email?.trim().toLowerCase()
+
+    if (!email) {
+      return { success: false, error: 'Add a client email before sending a portal invite' }
+    }
+
+    if (client.auth_user_id) {
+      return { success: false, error: 'This client already has portal access. Revoke first to re-invite.' }
+    }
+
+    const emailCheck = await assertPortalEmailAvailable(supabaseAdmin, email, clientId)
+    if (!emailCheck.ok) return { success: false, error: emailCheck.error }
+
+    const orphanedProfile = await findProfileByClientId(supabaseAdmin, clientId)
+    if (orphanedProfile) {
+      await upsertClientPortalProfile(supabaseAdmin, {
+        userId: orphanedProfile.id,
+        fullName: client.name,
+        email,
+        companyId,
+        clientId,
+      })
+      await linkClientPortalAccess(supabaseAdmin, clientId, orphanedProfile.id)
+      revalidatePath(`/dashboard/clients/${clientId}`)
+      return { success: true }
+    }
+
+    let authUserId: string
+
+    const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, email)
+    if (existingAuthUser) {
+      authUserId = existingAuthUser.id
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, {
+        email_confirm: true,
+        user_metadata: {
+          full_name: client.name,
+          role: 'client',
+          company_id: companyId,
+          client_id: clientId,
+        },
+      })
+      if (updateError) throw updateError
+    } else {
+      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+        email,
+        {
+          redirectTo: `${origin}/login`,
+          data: {
+            full_name: client.name,
+            role: 'client',
+            company_id: companyId,
+            client_id: clientId,
+          },
+        }
+      )
+
+      if (inviteError) throw inviteError
+      if (!inviteData.user) throw new Error('Invite failed')
+      authUserId = inviteData.user.id
+    }
+
+    await upsertClientPortalProfile(supabaseAdmin, {
+      userId: authUserId,
+      fullName: client.name,
+      email,
+      companyId,
+      clientId,
+    })
+
+    await linkClientPortalAccess(supabaseAdmin, clientId, authUserId)
+
+    revalidatePath(`/dashboard/clients/${clientId}`)
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('inviteClientToPortalAction error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function createClientPortalUserAction(data: {
+  clientId: string
+  email: string
+  password: string
+}) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const check = await verifyCompanyAdminForClient(data.clientId)
+    if (!check.ok) return { success: false, error: check.error }
+
+    const { client, companyId } = check
+    if (!companyId) return { success: false, error: 'Company not found' }
+
+    if (client.auth_user_id) {
+      return { success: false, error: 'This client already has portal credentials' }
+    }
+
+    const email = data.email.trim().toLowerCase()
+    if (!email || !data.password || data.password.length < 8) {
+      return { success: false, error: 'Valid email and password (8+ characters) are required' }
+    }
+
+    const emailCheck = await assertPortalEmailAvailable(supabaseAdmin, email, data.clientId)
+    if (!emailCheck.ok) return { success: false, error: emailCheck.error }
+
+    const orphanedProfile = await findProfileByClientId(supabaseAdmin, data.clientId)
+    if (orphanedProfile) {
+      const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(
+        orphanedProfile.id,
+        {
+          email,
+          password: data.password,
+          email_confirm: true,
+          user_metadata: {
+            full_name: client.name,
+            role: 'client',
+            company_id: companyId,
+            client_id: data.clientId,
+          },
+        }
+      )
+      if (passwordError) throw passwordError
+
+      await upsertClientPortalProfile(supabaseAdmin, {
+        userId: orphanedProfile.id,
+        fullName: client.name,
+        email,
+        companyId,
+        clientId: data.clientId,
+      })
+      await linkClientPortalAccess(supabaseAdmin, data.clientId, orphanedProfile.id, client.email || email)
+      revalidatePath(`/dashboard/clients/${data.clientId}`)
+      return { success: true }
+    }
+
+    let authUserId: string
+
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password: data.password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: client.name,
+        role: 'client',
+        company_id: companyId,
+        client_id: data.clientId,
+      },
+    })
+
+    if (authError && isEmailAlreadyRegisteredError(authError.message)) {
+      const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, email)
+      if (!existingAuthUser) throw authError
+
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        existingAuthUser.id,
+        {
+          email,
+          password: data.password,
+          email_confirm: true,
+          user_metadata: {
+            full_name: client.name,
+            role: 'client',
+            company_id: companyId,
+            client_id: data.clientId,
+          },
+        }
+      )
+      if (updateError) throw updateError
+      authUserId = existingAuthUser.id
+    } else if (authError) {
+      throw authError
+    } else if (!authData.user) {
+      throw new Error('Failed to create portal user')
+    } else {
+      authUserId = authData.user.id
+    }
+
+    await upsertClientPortalProfile(supabaseAdmin, {
+      userId: authUserId,
+      fullName: client.name,
+      email,
+      companyId,
+      clientId: data.clientId,
+    })
+
+    await linkClientPortalAccess(supabaseAdmin, data.clientId, authUserId, client.email || email)
+
+    revalidatePath(`/dashboard/clients/${data.clientId}`)
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('createClientPortalUserAction error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setClientPortalEnabledAction(clientId: string, enabled: boolean) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const check = await verifyCompanyAdminForClient(clientId)
+    if (!check.ok) return { success: false, error: check.error }
+
+    if (!check.client.auth_user_id) {
+      return { success: false, error: 'Set up portal access first' }
+    }
+
+    await supabaseAdmin
+      .from('clients')
+      .update({ portal_enabled: enabled })
+      .eq('id', clientId)
+
+    revalidatePath(`/dashboard/clients/${clientId}`)
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('setClientPortalEnabledAction error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function revokeClientPortalAccessAction(clientId: string) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const check = await verifyCompanyAdminForClient(clientId)
+    if (!check.ok) return { success: false, error: check.error }
+
+    const authUserId = check.client.auth_user_id
+
+    if (authUserId) {
+      await supabaseAdmin.from('profiles').delete().eq('id', authUserId)
+      await supabaseAdmin.auth.admin.deleteUser(authUserId)
+    }
+
+    await supabaseAdmin
+      .from('clients')
+      .update({
+        auth_user_id: null,
+        portal_enabled: false,
+        portal_invited_at: null,
+        portal_last_login_at: null,
+      })
+      .eq('id', clientId)
+
+    revalidatePath(`/dashboard/clients/${clientId}`)
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('revokeClientPortalAccessAction error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// ============================================
+// Dashboard session data (bypasses client RLS)
+// ============================================
+
+export async function getDashboardUserDataAction() {
+  try {
+    const session = await getSessionProfile()
+    if (!session) {
+      return { success: false as const, error: 'Not authenticated' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, avatar_url, role, company_id')
+      .eq('id', session.userId)
+      .single()
+
+    if (profileError || !profile) {
+      return { success: false as const, error: 'Profile not found' }
+    }
+
+    let company: { id: string; name: string; logo_url: string | null } | null = null
+    if (profile.company_id) {
+      const { data: companyData } = await supabaseAdmin
+        .from('companies')
+        .select('id, name, logo_url')
+        .eq('id', profile.company_id)
+        .single()
+      company = companyData
+    }
+
+    return { success: true as const, profile, company }
+  } catch (error: any) {
+    console.error('getDashboardUserDataAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to load user data' }
+  }
+}
+
+async function syncCompanyScheduleStatuses(companyId: string) {
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data: clients } = await supabaseAdmin
+    .from('clients')
+    .select('id')
+    .eq('company_id', companyId)
+
+  if (!clients?.length) return
+
+  for (const client of clients) {
+    await syncScheduleStatusesForClient(supabaseAdmin, client.id)
+  }
+}
+
+export async function getDashboardOverviewAction(): Promise<
+  { success: true; data: DashboardOverviewData } | { success: false; error: string }
+> {
+  try {
+    const session = await getSessionProfile()
+    if (!session?.profile?.company_id) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    const companyId = session.profile.company_id
+    await syncCompanyScheduleStatuses(companyId)
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select('timezone, business_hours_start, business_hours_end')
+      .eq('id', companyId)
+      .single()
+
+    if (companyError || !company) {
+      return { success: false, error: 'Company not found' }
+    }
+
+    const timezone = company.timezone || 'America/Chicago'
+    const businessHours = normalizeBusinessHours(
+      company.business_hours_start,
+      company.business_hours_end
+    )
+    const now = new Date()
+    const showTomorrow = shouldShowTomorrowTimeline(timezone, businessHours, now)
+    const timelineMode = showTomorrow ? 'tomorrow' : 'today'
+    const timelineDayOffset = showTomorrow ? 1 : 0
+
+    const { startIso: todayStartIso, endIso: todayEndIso } = getCompanyDayBounds(timezone, now, 0)
+    const { startIso: timelineStartIso, endIso: timelineEndIso } = getCompanyDayBounds(
+      timezone,
+      now,
+      timelineDayOffset
+    )
+
+    const { data: clients } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('company_id', companyId)
+
+    const clientIds = clients?.map((client) => client.id) || []
+
+    const scheduleSelect = `
+      id,
+      title,
+      start_time,
+      end_time,
+      status,
+      client_id,
+      crew_id,
+      client:clients!client_id (name, address),
+      crew:crews!crew_id (id, name)
+    `
+
+    const fetchSchedulesForDay = async (startIso: string, endIso: string) => {
+      if (clientIds.length === 0) return []
+
+      const { data: scheduleData, error: scheduleError } = await supabaseAdmin
+        .from('schedules')
+        .select(scheduleSelect)
+        .in('client_id', clientIds)
+        .neq('status', 'cancelled')
+        .lt('start_time', endIso)
+        .gt('end_time', startIso)
+        .order('start_time', { ascending: true })
+
+      if (scheduleError) {
+        throw new Error(scheduleError.message)
+      }
+
+      return scheduleData || []
+    }
+
+    let todaySchedules: any[] = []
+    let timelineSchedules: any[] = []
+
+    try {
+      todaySchedules = await fetchSchedulesForDay(todayStartIso, todayEndIso)
+      if (timelineMode === 'tomorrow') {
+        timelineSchedules = await fetchSchedulesForDay(timelineStartIso, timelineEndIso)
+      } else {
+        timelineSchedules = todaySchedules
+      }
+    } catch (error: any) {
+      return { success: false, error: error.message || 'Failed to load schedules' }
+    }
+
+    const { data: crewsData, error: crewsError } = await supabaseAdmin
+      .from('crews')
+      .select(`
+        id,
+        name,
+        profiles!crew_id (id, full_name)
+      `)
+      .eq('company_id', companyId)
+      .order('name', { ascending: true })
+
+    if (crewsError) {
+      return { success: false, error: crewsError.message }
+    }
+
+    const timelineJobs = assignTimelineLanes(buildTimelineJobs(timelineSchedules, timezone, now))
+    const crews = buildCrewSummaries(crewsData || [], todaySchedules, timezone, now)
+    const laneCount = timelineJobs.reduce((max, job) => Math.max(max, job.lane + 1), 1)
+
+    return {
+      success: true,
+      data: {
+        timezone,
+        businessHours,
+        crews,
+        jobs: timelineJobs,
+        laneCount,
+        timelineMode,
+        timelineDateLabel: formatCompanyDateLabel(timezone, now, timelineDayOffset),
+      },
+    }
+  } catch (error: any) {
+    console.error('getDashboardOverviewAction error:', error)
+    return { success: false, error: error.message || 'Failed to load dashboard' }
+  }
+}
+
+export async function getDashboardMapDataAction(): Promise<
+  { success: true; data: DashboardMapData } | { success: false; error: string }
+> {
+  try {
+    const session = await getSessionProfile()
+    if (!session?.profile?.company_id) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    const companyId = session.profile.company_id
+    const supabaseAdmin = createSupabaseAdmin()
+    const now = new Date()
+    const timezone = 'America/Chicago'
+
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select(`
+        name,
+        address,
+        timezone,
+        address_street,
+        address_unit,
+        address_city,
+        address_state,
+        address_zip
+      `)
+      .eq('id', companyId)
+      .single()
+
+    if (companyError || !company) {
+      return { success: false, error: 'Company not found' }
+    }
+
+    const companyTimezone = company.timezone || timezone
+    const { startIso: todayStartIso, endIso: todayEndIso } = getCompanyDayBounds(
+      companyTimezone,
+      now,
+      0
+    )
+
+    const { data: clients } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('company_id', companyId)
+
+    const clientIds = clients?.map((client) => client.id) || []
+    let todaySchedules: any[] = []
+
+    if (clientIds.length > 0) {
+      const { data: scheduleData, error: scheduleError } = await supabaseAdmin
+        .from('schedules')
+        .select(`
+          id,
+          title,
+          start_time,
+          end_time,
+          status,
+          crew_id,
+          client:clients!client_id (name, address),
+          crew:crews!crew_id (id, name)
+        `)
+        .in('client_id', clientIds)
+        .neq('status', 'cancelled')
+        .lt('start_time', todayEndIso)
+        .gt('end_time', todayStartIso)
+
+      if (scheduleError) {
+        return { success: false, error: scheduleError.message }
+      }
+      todaySchedules = scheduleData || []
+    }
+
+    const { data: crewsData, error: crewsError } = await supabaseAdmin
+      .from('crews')
+      .select('id, name')
+      .eq('company_id', companyId)
+
+    if (crewsError) {
+      return { success: false, error: crewsError.message }
+    }
+
+    const companyStructuredAddress = structuredAddressFromCompanyRow(company)
+
+    const mapData = await buildDashboardMapData({
+      companyName: company.name,
+      companyAddress: company.address,
+      companyStructuredAddress,
+      crews: crewsData || [],
+      schedules: todaySchedules,
+      now,
+    })
+
+    return { success: true, data: mapData }
+  } catch (error: any) {
+    console.error('getDashboardMapDataAction error:', error)
+    return { success: false, error: error.message || 'Failed to load map data' }
+  }
+}
+
+export async function getRoutePlannerDataAction(): Promise<
+  { success: true; data: RoutePlannerData } | { success: false; error: string }
+> {
+  try {
+    const session = await getSessionProfile()
+    if (!session?.profile?.company_id) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    const companyId = session.profile.company_id
+    const supabaseAdmin = createSupabaseAdmin()
+    const now = new Date()
+
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select(`
+        name,
+        address,
+        timezone,
+        address_street,
+        address_unit,
+        address_city,
+        address_state,
+        address_zip
+      `)
+      .eq('id', companyId)
+      .single()
+
+    if (companyError || !company) {
+      return { success: false, error: 'Company not found' }
+    }
+
+    const companyTimezone = company.timezone || 'America/Chicago'
+    const { startIso: todayStartIso, endIso: todayEndIso } = getCompanyDayBounds(
+      companyTimezone,
+      now,
+      0
+    )
+
+    const { data: clients } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('company_id', companyId)
+
+    const clientIds = clients?.map((client) => client.id) || []
+    let todaySchedules: any[] = []
+
+    if (clientIds.length > 0) {
+      const { data: scheduleData, error: scheduleError } = await supabaseAdmin
+        .from('schedules')
+        .select(`
+          id,
+          title,
+          start_time,
+          end_time,
+          status,
+          crew_id,
+          client:clients!client_id (id, name, address),
+          crew:crews!crew_id (id, name)
+        `)
+        .in('client_id', clientIds)
+        .neq('status', 'cancelled')
+        .not('crew_id', 'is', null)
+        .lt('start_time', todayEndIso)
+        .gt('end_time', todayStartIso)
+
+      if (scheduleError) {
+        return { success: false, error: scheduleError.message }
+      }
+      todaySchedules = scheduleData || []
+    }
+
+    const { data: crewsData, error: crewsError } = await supabaseAdmin
+      .from('crews')
+      .select('id, name')
+      .eq('company_id', companyId)
+
+    if (crewsError) {
+      return { success: false, error: crewsError.message }
+    }
+
+    const companyStructuredAddress = structuredAddressFromCompanyRow(company)
+
+    const routeData = await buildRoutePlannerData({
+      companyName: company.name,
+      companyAddress: company.address,
+      companyStructuredAddress,
+      crews: crewsData || [],
+      schedules: todaySchedules,
+    })
+
+    routeData.dateLabel = formatCompanyDateLabel(companyTimezone, now, 0)
+
+    return { success: true, data: routeData }
+  } catch (error: any) {
+    console.error('getRoutePlannerDataAction error:', error)
+    return { success: false, error: error.message || 'Failed to load route planner' }
+  }
+}
+
+export async function updateUserThemeAction(theme: ThemePreference) {
+  try {
+    const session = await getSessionProfile()
+    if (!session) {
+      return { success: false as const, error: 'Not authenticated' }
+    }
+
+    if (!isThemePreference(theme)) {
+      return { success: false as const, error: 'Invalid theme preference' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { error } = await supabaseAdmin
+      .from('profiles')
+      .update({ theme_preference: theme })
+      .eq('id', session.userId)
+
+    if (error) {
+      return { success: false as const, error: error.message }
+    }
+
+    const cookieStore = await cookies()
+    cookieStore.set(THEME_COOKIE_NAME, theme, {
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: 'lax',
+    })
+
+    return { success: true as const }
+  } catch (error: any) {
+    console.error('updateUserThemeAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to save theme' }
+  }
+}
+
+export async function updateCompanySettingsAction(data: {
+  timezone: string
+  businessHours: BusinessHours
+  companyAddress?: StructuredAddress
+}) {
+  try {
+    const session = await getSessionProfile()
+    if (!session?.profile?.company_id) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    if (!data.timezone?.trim()) {
+      return { success: false, error: 'Timezone is required' }
+    }
+
+    if (!isValidBusinessHoursRange(data.businessHours)) {
+      return { success: false, error: 'Business hours end must be after start' }
+    }
+
+    const normalizedAddress = normalizeStructuredAddress(data.companyAddress)
+    const addressValidation = validateStructuredAddress(normalizedAddress)
+    if (!addressValidation.valid) {
+      const firstError = Object.values(addressValidation.errors)[0]
+      return { success: false, error: firstError || 'Company address is invalid' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .update({
+        timezone: data.timezone,
+        business_hours_start: data.businessHours.start,
+        business_hours_end: data.businessHours.end,
+        address_street: normalizedAddress.street,
+        address_unit: normalizedAddress.unit || null,
+        address_city: normalizedAddress.city,
+        address_state: normalizedAddress.state,
+        address_zip: normalizedAddress.zip,
+        address: formatAddressForDisplay(normalizedAddress),
+      })
+      .eq('id', session.profile.company_id)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    const geocodeResult = await geocodeStructuredAddress(normalizedAddress)
+
+    revalidatePath('/dashboard')
+    revalidatePath('/dashboard/settings')
+
+    return {
+      success: true,
+      mapReady: geocodeResult.success,
+      mapWarning: geocodeResult.success
+        ? undefined
+        : geocodeResult.reason,
+    }
+  } catch (error: any) {
+    console.error('updateCompanySettingsAction error:', error)
+    return { success: false, error: error.message || 'Failed to save settings' }
   }
 }

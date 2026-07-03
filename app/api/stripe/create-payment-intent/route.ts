@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { stripe } from '@/lib/stripe'
 import { fetchJobBillingTotals } from '@/lib/billing-server'
 import { getCompanyStripeStatus } from '@/lib/stripe-connect'
+import { assertJobAccess } from '@/lib/portal-auth'
 
 export async function POST(request: Request) {
   try {
@@ -26,9 +27,9 @@ export async function POST(request: Request) {
       }
     )
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const access = await assertJobAccess(scheduleId, clientId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.error === 'Unauthorized' ? 401 : 403 })
     }
 
     const billing = await fetchJobBillingTotals(scheduleId, clientId)
@@ -79,7 +80,11 @@ export async function POST(request: Request) {
       { stripeAccount: stripeStatus.stripeAccountId }
     )
 
-    return NextResponse.json({ clientSecret: paymentIntent.client_secret })
+    return NextResponse.json({
+      clientSecret: paymentIntent.client_secret,
+      stripeAccountId: stripeStatus.stripeAccountId,
+      amount: billing.summary.balanceDue,
+    })
   } catch (error: any) {
     console.error('create-payment-intent error:', error)
     return NextResponse.json({ error: error.message || 'Failed to create payment' }, { status: 500 })

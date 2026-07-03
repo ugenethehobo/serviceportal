@@ -1,63 +1,88 @@
 'use client'
 
+import Link from 'next/link'
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from '@/components/ui/hover-card'
 import { Badge } from '@/components/ui/badge'
+import {
+  minutesToTimelinePercent,
+  parseTimeToMinutes,
+  type BusinessHours,
+} from '@/lib/business-hours'
 
 interface JobBarProps {
-  startTime: string
+  startMinutes: number
   durationMinutes: number
   title: string
   crew: string
   location: string
   status: 'Completed' | 'In Progress' | 'Scheduled'
-  top?: string
+  businessHours: BusinessHours
+  clientId: string
+  jobId: string
+  lane?: number
+  laneHeight?: number
+  laneGap?: number
 }
 
 export function JobBar({
-  startTime,
+  startMinutes,
   durationMinutes,
   title,
   crew,
   location,
   status,
-  top = 'top-0',
+  businessHours,
+  clientId,
+  jobId,
+  lane = 0,
+  laneHeight = 36,
+  laneGap = 4,
 }: JobBarProps) {
-  const startHour = parseInt(startTime.split(':')[0])
-  const startMinute = parseInt(startTime.split(':')[1] || '0')
-  const startTotalMinutes = startHour * 60 + startMinute
+  const timelineStart = parseTimeToMinutes(businessHours.start)
+  const timelineEnd = parseTimeToMinutes(businessHours.end)
+  const clippedStart = Math.max(startMinutes, timelineStart)
+  const clippedEnd = Math.min(startMinutes + durationMinutes, timelineEnd)
+  const clippedDuration = Math.max(0, clippedEnd - clippedStart)
 
-  const timelineStart = 8 * 60
-  const timelineEnd = 17 * 60
-  const totalMinutes = timelineEnd - timelineStart
+  if (clippedDuration <= 0) return null
 
-  const leftPercent = ((startTotalMinutes - timelineStart) / totalMinutes) * 100
-  const widthPercent = (durationMinutes / totalMinutes) * 100
+  const leftPercent = minutesToTimelinePercent(clippedStart, businessHours)
+  const widthPercent = minutesToTimelinePercent(clippedStart + clippedDuration, businessHours) - leftPercent
+  const topOffset = lane * (laneHeight + laneGap)
 
-  const getStatusVariant = (status: string) => {
-    if (status === 'Completed') return 'outline'
-    if (status === 'In Progress') return 'default'
+  const startTime = formatMinutesLabel(startMinutes)
+  const endTime = formatMinutesLabel(startMinutes + durationMinutes)
+
+  const getStatusVariant = (value: string) => {
+    if (value === 'Completed') return 'outline'
+    if (value === 'In Progress') return 'default'
     return 'secondary'
   }
 
   return (
     <div
-      className={`absolute ${top}`}
+      className="absolute"
       style={{
         left: `${leftPercent}%`,
-        width: `${widthPercent}%`
+        width: `${Math.max(widthPercent, 1.5)}%`,
+        top: topOffset,
+        height: laneHeight,
       }}
     >
       <HoverCard>
-        <HoverCardTrigger>
-          <div className="h-9 w-full rounded-md border bg-background flex items-center px-3 shadow-sm text-xs cursor-pointer hover:bg-accent transition-colors">
-            <div className="flex items-center gap-2 w-full min-w-0">
-              <span className="font-medium truncate">{title}</span>
-            </div>
-          </div>
+        <HoverCardTrigger
+          render={
+            <Link
+              href={`/dashboard/clients/${clientId}/jobs/${jobId}`}
+              className="h-full w-full rounded-md border bg-background flex items-center px-3 shadow-sm text-xs cursor-pointer hover:bg-accent transition-colors"
+            />
+          }
+        >
+          <span className="font-medium truncate">{title}</span>
         </HoverCardTrigger>
 
         <HoverCardContent
@@ -71,7 +96,7 @@ export function JobBar({
             <div>
               <div className="font-semibold">{title}</div>
               <div className="text-xs text-muted-foreground">
-                {startTime} – {calculateEndTime(startTime, durationMinutes)}
+                {startTime} – {endTime}
               </div>
             </div>
             <div className="text-sm">
@@ -88,16 +113,10 @@ export function JobBar({
   )
 }
 
-function calculateEndTime(startTime: string, durationMinutes: number): string {
-  const [hourStr, minuteStr] = startTime.split(':')
-  const start = new Date()
-  start.setHours(parseInt(hourStr), parseInt(minuteStr || '0'))
-  const end = new Date(start.getTime() + durationMinutes * 60000)
-  return end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })
-}
-
-function getStatusVariant(status: string) {
-  if (status === 'Completed') return 'outline'
-  if (status === 'In Progress') return 'default'
-  return 'secondary'
+function formatMinutesLabel(minutes: number): string {
+  const hour = Math.floor(minutes / 60)
+  const minute = minutes % 60
+  const date = new Date()
+  date.setHours(hour, minute, 0, 0)
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }

@@ -1,15 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function LoginPage() {
-  const router = useRouter()
   const supabase = createClient()
 
   const [email, setEmail] = useState('')
@@ -23,51 +21,40 @@ export default function LoginPage() {
     setError('')
 
     try {
-      // 1. Authenticate with Supabase
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+      const trimmedEmail = email.trim()
+      if (!trimmedEmail || !password) {
+        throw new Error('Email and password are required')
+      }
+
+      let authData = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
         password,
       })
 
-      if (authError) throw authError
-      if (!authData.user) throw new Error('Login failed')
+      if (authData.error?.message?.toLowerCase().includes('invalid')) {
+        const lowerEmail = trimmedEmail.toLowerCase()
+        if (lowerEmail !== trimmedEmail) {
+          authData = await supabase.auth.signInWithPassword({
+            email: lowerEmail,
+            password,
+          })
+        }
+      }
 
-      const userEmail = authData.user.email
+      if (authData.error) throw authData.error
+      if (!authData.data.user) throw new Error('Login failed')
 
-      // 2. Check for static admin user
+      const userEmail = authData.data.user.email
+
       if (userEmail === process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
-        router.push('/admin')
-        router.refresh()
+        window.location.href = '/admin'
         return
       }
 
-      // 3. Fetch user profile to get role
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-
-      if (profileError || !profile) {
-        await supabase.auth.signOut()
-        throw new Error('No profile found. Please contact your administrator.')
-      }
-
-      // 4. Role-based redirection
-      if (profile.role === 'company_admin') {
-        router.push('/dashboard')
-      } else if (profile.role === 'team_member') {
-        router.push('/dashboard/team')
-      } else {
-        // Fallback for unknown roles
-        router.push('/dashboard')
-      }
-
-      router.refresh()
-
-    } catch (error: any) {
-      setError(error.message || 'An error occurred during login')
-    } finally {
+      // Hard navigation so auth cookies are sent; middleware routes by role.
+      window.location.href = '/dashboard'
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred during login')
       setIsLoading(false)
     }
   }
@@ -93,6 +80,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                autoComplete="email"
               />
             </div>
 
@@ -106,6 +94,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
+                autoComplete="current-password"
               />
             </div>
 

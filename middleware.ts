@@ -1,5 +1,22 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
+
+async function getProfileRole(userId: string) {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('role, client_id')
+    .eq('id', userId)
+    .single()
+
+  return profile
+}
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -34,44 +51,56 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // This is important - we still need to call getUser() to refresh the session
   await supabase.auth.getUser()
 
-  // Protected routes
-  const protectedRoutes = ['/dashboard', '/admin']
+  const pathname = request.nextUrl.pathname
+  const protectedStaffRoutes = ['/dashboard', '/admin']
+  const isStaffRoute = protectedStaffRoutes.some((route) => pathname.startsWith(route))
+  const isPortalRoute = pathname.startsWith('/portal')
 
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    request.nextUrl.pathname.startsWith(route)
-  )
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (isProtectedRoute) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  if ((isStaffRoute || isPortalRoute) && !user) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
 
-    if (!user) {
+  if (user && (isStaffRoute || isPortalRoute || pathname === '/login')) {
+    const profile = await getProfileRole(user.id)
+    const role = profile?.role
+
+    if (isPortalRoute && role !== 'client') {
       const url = request.nextUrl.clone()
-      url.pathname = '/login'
+      url.pathname = role === 'team_member' ? '/dashboard/team' : '/dashboard'
       return NextResponse.redirect(url)
     }
 
-    // Extra protection for /admin - only allow the static admin email
-    if (request.nextUrl.pathname.startsWith('/admin')) {
-      if (user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
-        const url = request.nextUrl.clone()
+    if (isStaffRoute && role === 'client') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/portal'
+      return NextResponse.redirect(url)
+    }
+
+    if (pathname === '/login') {
+      const url = request.nextUrl.clone()
+      if (user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
+        url.pathname = '/admin'
+      } else if (role === 'client') {
+        url.pathname = '/portal'
+      } else if (role === 'team_member') {
+        url.pathname = '/dashboard/team'
+      } else {
         url.pathname = '/dashboard'
-        return NextResponse.redirect(url)
       }
+      return NextResponse.redirect(url)
     }
   }
 
-  // Redirect logged-in users away from login page
-  if (request.nextUrl.pathname === '/login') {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (user) {
+  if (pathname.startsWith('/admin') && user) {
+    if (user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
       const url = request.nextUrl.clone()
       url.pathname = '/dashboard'
       return NextResponse.redirect(url)

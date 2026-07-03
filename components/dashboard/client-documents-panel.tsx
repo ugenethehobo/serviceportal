@@ -19,9 +19,14 @@ import type { ClientDocument } from '@/lib/estimates'
 interface ClientDocumentsPanelProps {
   clientId: string
   refreshKey?: number
+  variant?: 'staff' | 'portal'
 }
 
-export function ClientDocumentsPanel({ clientId, refreshKey = 0 }: ClientDocumentsPanelProps) {
+export function ClientDocumentsPanel({
+  clientId,
+  refreshKey = 0,
+  variant = 'staff',
+}: ClientDocumentsPanelProps) {
   const [documents, setDocuments] = useState<ClientDocument[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -46,9 +51,11 @@ export function ClientDocumentsPanel({ clientId, refreshKey = 0 }: ClientDocumen
 
   return (
     <div className="flex flex-col gap-4 flex-1 min-h-0">
-      <p className="text-sm text-muted-foreground">
-        Estimate PDFs are generated automatically when you create or update an estimate.
-      </p>
+      {variant === 'staff' && (
+        <p className="text-sm text-muted-foreground">
+          Estimate PDFs are generated automatically when you create or update an estimate.
+        </p>
+      )}
 
       {documents.length > 0 ? (
         <div className="scroll-fade border rounded-lg flex-1 min-h-0 overflow-auto">
@@ -94,9 +101,11 @@ export function ClientDocumentsPanel({ clientId, refreshKey = 0 }: ClientDocumen
           </Table>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg">
+        <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg py-12">
           <p className="text-muted-foreground text-sm">
-            No documents yet. Create an estimate to generate a PDF automatically.
+            {variant === 'portal'
+              ? 'No documents shared yet. Estimate PDFs will appear here when sent to you.'
+              : 'No documents yet. Create an estimate to generate a PDF automatically.'}
           </p>
         </div>
       )}

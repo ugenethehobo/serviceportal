@@ -14,6 +14,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton"
 
 import { createClientAction, updateClientAction } from "@/app/action"
+import { StructuredAddressForm } from '@/components/dashboard/company-address-form'
+import {
+  emptyStructuredAddress,
+  normalizeStructuredAddress,
+  structuredAddressFromClientRow,
+  validateStructuredAddressIfPresent,
+  type StructuredAddress,
+  type StructuredAddressErrors,
+} from '@/lib/address'
 
 interface Client {
   id: string
@@ -22,6 +31,12 @@ interface Client {
   email?: string
   phone?: string
   address?: string
+  address_street?: string | null
+  address_unit?: string | null
+  address_city?: string | null
+  address_state?: string | null
+  address_zip?: string | null
+  notes?: string
   status: 'active' | 'archived'
   created_at: string
 
@@ -44,9 +59,11 @@ export default function ClientsPage() {
     name: '',
     email: '',
     phone: '',
-    address: '',
     notes: '',
   })
+  const [clientAddress, setClientAddress] = useState<StructuredAddress>(emptyStructuredAddress())
+  const [addressErrors, setAddressErrors] = useState<StructuredAddressErrors>({})
+  const [legacyClientAddress, setLegacyClientAddress] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list')
   const [isLoading, setIsLoading] = useState(true)
 
@@ -126,6 +143,14 @@ export default function ClientsPage() {
       return
     }
 
+    const normalizedAddress = normalizeStructuredAddress(clientAddress)
+    const addressValidation = validateStructuredAddressIfPresent(normalizedAddress)
+    if (!addressValidation.valid) {
+      setAddressErrors(addressValidation.errors)
+      return
+    }
+    setAddressErrors({})
+
     setIsCreatingClient(true)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -140,29 +165,29 @@ export default function ClientsPage() {
     let result
 
     if (editingClient) {
-      // Update existing client
       result = await updateClientAction({
         id: editingClient.id,
         name: newClient.name.trim(),
         email: newClient.email.trim() || undefined,
         phone: newClient.phone.trim() || undefined,
-        address: newClient.address.trim() || undefined,
+        clientAddress: normalizedAddress,
         notes: newClient.notes.trim() || undefined,
       })
     } else {
-      // Create new client
       result = await createClientAction({
         name: newClient.name.trim(),
         email: newClient.email.trim() || undefined,
         phone: newClient.phone.trim() || undefined,
-        address: newClient.address.trim() || undefined,
+        clientAddress: normalizedAddress,
         notes: newClient.notes.trim() || undefined,
         companyId: profile!.company_id,
       })
     }
 
     if (result.success) {
-      setNewClient({ name: '', email: '', phone: '', address: '', notes: '' })
+      setNewClient({ name: '', email: '', phone: '', notes: '' })
+      setClientAddress(emptyStructuredAddress())
+      setLegacyClientAddress(null)
       setEditingClient(null)
       setIsAddModalOpen(false)
       await fetchClients()
@@ -175,13 +200,16 @@ export default function ClientsPage() {
 
 const openEditClient = (client: Client) => {
   setEditingClient(client)
+  const structured = structuredAddressFromClientRow(client)
   setNewClient({
     name: client.name,
     email: client.email || '',
     phone: client.phone || '',
-    address: client.address || '',
-    notes: '', // You can fetch notes if stored separately
+    notes: client.notes || '',
   })
+  setClientAddress(structured.street ? structured : emptyStructuredAddress())
+  setLegacyClientAddress(structured.street ? null : client.address?.trim() || null)
+  setAddressErrors({})
   setIsAddModalOpen(true)
 }
 
@@ -399,11 +427,14 @@ const openEditClient = (client: Client) => {
       <Dialog open={isAddModalOpen} onOpenChange={(open) => {
         if (!open) {
           setEditingClient(null)
-          setNewClient({ name: '', email: '', phone: '', address: '', notes: '' })
+          setNewClient({ name: '', email: '', phone: '', notes: '' })
+          setClientAddress(emptyStructuredAddress())
+          setLegacyClientAddress(null)
+          setAddressErrors({})
         }
         setIsAddModalOpen(open)
       }}>
-        <DialogContent className="!max-w-md">
+        <DialogContent className="!max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {editingClient ? 'Edit Client' : 'Add New Client'}
@@ -441,11 +472,24 @@ const openEditClient = (client: Client) => {
             </div>
 
             <div>
-              <Label>Address</Label>
-              <Input
-                value={newClient.address}
-                onChange={(e) => setNewClient({ ...newClient, address: e.target.value })}
-                placeholder="123 Main St, City, State"
+              {legacyClientAddress && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100 mb-3">
+                  Saved address from the previous format:{' '}
+                  <span className="font-medium">{legacyClientAddress}</span>.
+                  Re-enter it using the fields below.
+                </div>
+              )}
+              <StructuredAddressForm
+                value={clientAddress}
+                onChange={(value) => {
+                  setClientAddress(value)
+                  if (Object.keys(addressErrors).length > 0) {
+                    setAddressErrors({})
+                  }
+                }}
+                errors={addressErrors}
+                idPrefix="client-modal"
+                required={false}
               />
             </div>
 

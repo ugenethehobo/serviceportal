@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import {
   Elements,
@@ -11,11 +11,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
-
 interface StripePaymentFormProps {
   clientSecret: string
   amountLabel: string
+  stripeAccountId?: string
   onSuccess: (paymentIntentId: string) => void
   onCancel: () => void
 }
@@ -78,9 +77,18 @@ function PaymentFormInner({
 export function StripePaymentForm({
   clientSecret,
   amountLabel,
+  stripeAccountId,
   onSuccess,
   onCancel,
 }: StripePaymentFormProps) {
+  const stripePromise = useMemo(
+    () =>
+      loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!, {
+        ...(stripeAccountId ? { stripeAccount: stripeAccountId } : {}),
+      }),
+    [stripeAccountId]
+  )
+
   return (
     <Elements
       stripe={stripePromise}

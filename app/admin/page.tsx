@@ -25,6 +25,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { getDashboardData } from "@/app/action"
+import { AppearanceSettings } from '@/components/appearance-settings'
 
 interface Company {
   id: string
@@ -232,6 +233,10 @@ export default function AdminDashboard() {
             </div>
           </DialogContent>
         </Dialog>
+      </div>
+
+      <div className="max-w-2xl">
+        <AppearanceSettings />
       </div>
 
       {/* Dynamic Stats */}

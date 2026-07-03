@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   getClientEstimatesAction,
@@ -38,8 +38,23 @@ import {
   type EstimateLineItem,
   type EstimateStatus,
 } from '@/lib/estimates'
+import { SearchBar } from '@/components/search-bar'
+import { matchesSearch } from '@/lib/search'
 import { toast } from 'sonner'
 import { Trash2, ArrowRight, Plus, FileDown, X, Check } from 'lucide-react'
+
+function filterEstimates(estimates: Estimate[], query: string) {
+  return estimates.filter((estimate) =>
+    matchesSearch(
+      query,
+      estimate.title,
+      estimate.description,
+      formatEstimateNumber(estimate.id, estimate.created_at),
+      ESTIMATE_STATUS_LABELS[estimate.status],
+      ...(estimate.line_items || []).map((item) => item.description)
+    )
+  )
+}
 
 interface ClientEstimatesPanelProps {
   clientId: string
@@ -70,6 +85,8 @@ export function ClientEstimatesPanel({
   const [isLineSaving, setIsLineSaving] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('idle')
 
+  const [estimateSearchQuery, setEstimateSearchQuery] = useState('')
+
   const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [isCreateMode, setIsCreateMode] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -84,6 +101,10 @@ export function ClientEstimatesPanel({
   const savedIndicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const selectedEstimate = estimates.find((e) => e.id === selectedId) ?? null
+  const filteredEstimates = useMemo(
+    () => filterEstimates(estimates, estimateSearchQuery),
+    [estimates, estimateSearchQuery]
+  )
 
   const fetchEstimates = useCallback(async () => {
     const result = await getClientEstimatesAction(clientId)
@@ -361,17 +382,26 @@ export function ClientEstimatesPanel({
 
   return (
     <div className="flex flex-col gap-4 flex-1 min-h-0">
-      <div className="flex items-center justify-between shrink-0">
-        <p className="text-sm text-muted-foreground">
-          Changes save automatically. Status updates when you add line items.
-        </p>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="size-4" />
-          New Estimate
-        </Button>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+        <SearchBar
+          value={estimateSearchQuery}
+          onChange={setEstimateSearchQuery}
+          placeholder="Search estimates by title, number, or status..."
+          className="flex-1 max-w-md"
+        />
+        <div className="flex items-center gap-3 sm:ml-auto">
+          <p className="text-sm text-muted-foreground hidden lg:block">
+            Changes save automatically.
+          </p>
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="size-4" />
+            New Estimate
+          </Button>
+        </div>
       </div>
 
       {estimates.length > 0 ? (
+        filteredEstimates.length > 0 ? (
         <div className="scroll-fade border rounded-lg flex-1 min-h-0 overflow-auto">
           <Table>
             <TableHeader>
@@ -383,7 +413,7 @@ export function ClientEstimatesPanel({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {estimates.map((estimate) => (
+              {filteredEstimates.map((estimate) => (
                 <TableRow
                   key={estimate.id}
                   className="cursor-pointer hover:bg-muted/30"
@@ -409,6 +439,11 @@ export function ClientEstimatesPanel({
             </TableBody>
           </Table>
         </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg">
+            <p className="text-muted-foreground text-sm">No estimates match your search.</p>
+          </div>
+        )
       ) : (
         <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg">
           <p className="text-muted-foreground text-sm">No estimates yet. Create one to get started.</p>

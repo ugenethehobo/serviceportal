@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogTitle, DialogHeader, DialogContent } from "@/components/ui/dialog"
-import { CalendarDays, Users, Banknote } from 'lucide-react';
+import { CalendarDays, Users, Banknote, MapPin, Pencil } from 'lucide-react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -21,13 +21,27 @@ import { Card, CardTitle, CardDescription, CardHeader, CardContent, CardFooter }
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { updateClientAction, createJobAction, convertEstimateToJobAction, syncScheduleStatusesAction } from '@/app/action'
+import { StructuredAddressForm } from '@/components/dashboard/company-address-form'
+import {
+  buildStructuredAddressDbFields,
+  emptyStructuredAddress,
+  getDisplayAddressFromClient,
+  normalizeStructuredAddress,
+  structuredAddressFromClientRow,
+  validateStructuredAddressIfPresent,
+  type StructuredAddress,
+  type StructuredAddressErrors,
+} from '@/lib/address'
 import { parseAsCompanyTime } from '@/lib/timezone'
 import { JobFormFields } from '@/components/dashboard/job-form-fields'
 import { JobStatusBadge } from '@/components/dashboard/job-status-badge'
 import { ClientBillingPanel } from '@/components/dashboard/client-billing-panel'
 import { ClientEstimatesPanel } from '@/components/dashboard/client-estimates-panel'
 import { ClientDocumentsPanel } from '@/components/dashboard/client-documents-panel'
+import { ClientPortalAccess } from '@/components/dashboard/client-portal-access'
 import { StripeConnectGate } from '@/components/dashboard/stripe-connect-gate'
+import { SearchBar } from '@/components/search-bar'
+import { matchesSearch } from '@/lib/search'
 import type { Estimate } from '@/lib/estimates'
 
 interface Client {
@@ -37,6 +51,11 @@ interface Client {
   email?: string
   phone?: string
   address?: string
+  address_street?: string | null
+  address_unit?: string | null
+  address_city?: string | null
+  address_state?: string | null
+  address_zip?: string | null
   notes?: string
   status: 'active' | 'archived'
   created_at: string
@@ -52,6 +71,11 @@ export default function ClientDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [tempValue, setTempValue] = useState('')
+  const [tempAddress, setTempAddress] = useState<StructuredAddress>(emptyStructuredAddress())
+  const [addressErrors, setAddressErrors] = useState<StructuredAddressErrors>({})
+  const [legacyClientAddress, setLegacyClientAddress] = useState<string | null>(null)
+  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false)
+  const [isSavingAddress, setIsSavingAddress] = useState(false)
 
   const [isAddJobModalOpen, setIsAddJobModalOpen] = useState(false)
   const [isCreatingJob, setIsCreatingJob] = useState(false)
@@ -59,6 +83,7 @@ export default function ClientDetailPage() {
   const [conflictInfo, setConflictInfo] = useState<any>(null)
 
   const [showArchived, setShowArchived] = useState(false)
+  const [jobSearchQuery, setJobSearchQuery] = useState('')
 
   const [activeTab, setActiveTab] = useState<
     'jobs' | 'estimates' | 'billing' |  'documents' | 'messaging'
@@ -171,6 +196,56 @@ export default function ClientDetailPage() {
     } else {
       setEditingField(null)
     }
+  }
+
+  const openAddressModal = () => {
+    if (!client) return
+    const structured = structuredAddressFromClientRow(client)
+    setTempAddress(structured.street ? structured : emptyStructuredAddress())
+    setLegacyClientAddress(
+      structured.street ? null : client.address?.trim() || null
+    )
+    setAddressErrors({})
+    setIsAddressModalOpen(true)
+  }
+
+  const closeAddressModal = () => {
+    setIsAddressModalOpen(false)
+    setAddressErrors({})
+    setLegacyClientAddress(null)
+  }
+
+  const saveAddress = async () => {
+    if (!client) return
+
+    const normalized = normalizeStructuredAddress(tempAddress)
+    const validation = validateStructuredAddressIfPresent(normalized)
+    if (!validation.valid) {
+      setAddressErrors(validation.errors)
+      return
+    }
+
+    setIsSavingAddress(true)
+
+    const result = await updateClientAction({
+      id: client.id,
+      name: client.name,
+      clientAddress: normalized,
+    })
+
+    if (result.success) {
+      const addressFields = buildStructuredAddressDbFields(normalized)
+      setClient({
+        ...client,
+        ...addressFields,
+        address: addressFields.address || undefined,
+      })
+      closeAddressModal()
+    } else {
+      alert(result.error || 'Failed to save address')
+    }
+
+    setIsSavingAddress(false)
   }
 
   // ==================== ADD JOB LOGIC ====================
@@ -403,9 +478,23 @@ export default function ClientDetailPage() {
     return <div className="p-6">Loading...</div>
   }
 
-  const visibleSchedules = showArchived
-      ? schedules
-      : schedules.filter(schedule => schedule.status !== 'archived')
+  const archivedFiltered = showArchived
+    ? schedules
+    : schedules.filter((schedule) => schedule.status !== 'archived')
+
+  const visibleSchedules = archivedFiltered.filter((schedule) =>
+    matchesSearch(
+      jobSearchQuery,
+      schedule.title,
+      schedule.description,
+      schedule.status,
+      schedule.status?.replace('_', ' '),
+      schedule.crew?.name,
+      schedule.price > 0 ? String(schedule.price) : undefined
+    )
+  )
+
+  const displayAddress = client ? getDisplayAddressFromClient(client) : ''
 
   return (
     <div className="p-6 flex flex-col h-[calc(100vh-2rem)]">
@@ -487,27 +576,34 @@ export default function ClientDetailPage() {
           {activeTab === 'jobs' && (
             <>
               {/* Header row for Jobs tab */}
-              <div className="flex items-center justify-between mb-4">
-                {/* Show Archived Toggle */}
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={showArchived}
-                    onCheckedChange={setShowArchived}
+              <div className="flex flex-col gap-3 mb-4 shrink-0">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <SearchBar
+                    value={jobSearchQuery}
+                    onChange={setJobSearchQuery}
+                    placeholder="Search jobs by title, crew, or status..."
+                    className="flex-1 max-w-md"
                   />
-                  <span className="text-sm text-muted-foreground">Show archived</span>
+                  <div className="flex items-center gap-3 sm:ml-auto">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={showArchived}
+                        onCheckedChange={setShowArchived}
+                      />
+                      <span className="text-sm text-muted-foreground">Show archived</span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setIsAddJobModalOpen(true)
+                        setConflictInfo(null)
+                      }}
+                    >
+                      + Add Job
+                    </Button>
+                  </div>
                 </div>
-
-                {/* Add Job Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setIsAddJobModalOpen(true)
-                    setConflictInfo(null)
-                  }}
-                >
-                  + Add Job
-                </Button>
               </div>
 
               {/* Jobs List */}
@@ -627,7 +723,11 @@ export default function ClientDetailPage() {
                 </div>
               ) : (
                 <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg">
-                  <p className="text-muted-foreground">No jobs scheduled yet for this client.</p>
+                  <p className="text-muted-foreground">
+                    {archivedFiltered.length > 0 && jobSearchQuery.trim()
+                      ? 'No jobs match your search.'
+                      : 'No jobs scheduled yet for this client.'}
+                  </p>
                 </div>
               )}
             </>
@@ -665,15 +765,20 @@ export default function ClientDetailPage() {
 
         {/* Contact + Notes — only on Jobs tab */}
         {activeTab === 'jobs' && (
-        <div className="flex-[3] grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
-          <Card className="p-6 flex flex-col">
-            <h2 className="font-semibold text-lg mb-4">Contact Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 flex-1">
+        <>
+        <div className="flex-[3] grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
+          <Card className="p-6 flex flex-col min-h-0">
+            <CardHeader className="pb-3 shrink-0">
+              <CardTitle className="font-semibold text-lg">
+                Contact Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 flex-1 min-h-0 overflow-auto">
+
               {[
                 { label: 'Name', field: 'name', value: client.name },
                 { label: 'Email', field: 'email', value: client.email },
                 { label: 'Phone', field: 'phone', value: client.phone },
-                { label: 'Address', field: 'address', value: client.address },
               ].map(({ label, field, value }) => (
                 <div key={field}>
                   <div className="text-sm text-muted-foreground">{label}</div>
@@ -699,11 +804,49 @@ export default function ClientDetailPage() {
                   )}
                 </div>
               ))}
-            </div>
+
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm text-muted-foreground">Address</div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={openAddressModal}
+                  >
+                    <Pencil className="size-3 mr-1" />
+                    Edit
+                  </Button>
+                </div>
+                <button
+                  type="button"
+                  onClick={openAddressModal}
+                  className="mt-1 w-full text-left rounded-md px-2 py-2 -mx-2 hover:bg-muted/50 transition-colors"
+                >
+                  {displayAddress ? (
+                    <span className="flex items-start gap-2 font-medium text-sm leading-snug">
+                      <MapPin className="size-4 shrink-0 mt-0.5 text-muted-foreground" />
+                      <span>{displayAddress}</span>
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground italic">
+                      No address — click to add
+                    </span>
+                  )}
+                </button>
+              </div>
+
+            </CardContent>
           </Card>
 
           <Card className="p-6 flex flex-col">
-            <h2 className="font-semibold text-lg mb-4">Notes</h2>
+            <CardHeader>
+              <CardTitle className="font-semibold text-lg">
+                Notes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
             <textarea
               value={client.notes || ''}
               onChange={async (e) => {
@@ -714,12 +857,66 @@ export default function ClientDetailPage() {
                   await updateClientAction({ id: client.id, name: client.name, notes: newNotes })
                 }, 800)
               }}
-              className="flex-1 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
+              className="flex-1 w-full h-auto resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
             />
+            </CardContent>
+          </Card>
+
+          <Card className="flex p-6">
+            <ClientPortalAccess clientId={clientId} clientEmail={client.email} />
           </Card>
         </div>
+
+
+        </>
         )}
       </div>
+
+      {/* Edit Address Modal */}
+      <Dialog
+        open={isAddressModalOpen}
+        onOpenChange={(open) => {
+          if (!open) closeAddressModal()
+          else setIsAddressModalOpen(true)
+        }}
+      >
+        <DialogContent className="!max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Client Address</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {legacyClientAddress && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+                Saved address from the previous format:{' '}
+                <span className="font-medium">{legacyClientAddress}</span>.
+                Re-enter it using the fields below.
+              </div>
+            )}
+            <StructuredAddressForm
+              value={tempAddress}
+              onChange={(value) => {
+                setTempAddress(value)
+                if (Object.keys(addressErrors).length > 0) {
+                  setAddressErrors({})
+                }
+              }}
+              errors={addressErrors}
+              idPrefix="client"
+              required={false}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={closeAddressModal} disabled={isSavingAddress}>
+              Cancel
+            </Button>
+            <Button onClick={saveAddress} disabled={isSavingAddress}>
+              {isSavingAddress ? 'Saving...' : 'Save Address'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Job Modal */}
       <Dialog

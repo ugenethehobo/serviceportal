@@ -9,10 +9,12 @@ import {
   Users,
   CheckSquare,
   BarChart3,
+  Route,
   Settings,
   LogOut,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { getDashboardUserDataAction } from '@/app/action'
 
 const navItems = [
   {
@@ -29,6 +31,11 @@ const navItems = [
     href: '/dashboard/crews',
     label: 'Crews',
     icon: CheckSquare,
+  },
+  {
+    href: '/dashboard/routes',
+    label: 'Routes',
+    icon: Route,
   },
   {
     href: '/dashboard/reports',
@@ -63,65 +70,31 @@ export function Sidebar() {
   const pathname = usePathname()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [company, setCompany] = useState<Company | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  // Fetch user profile + company
   useEffect(() => {
     const fetchUserData = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
+      const result = await getDashboardUserDataAction()
+      if (!result.success) {
+        console.error('Error fetching profile:', result.error)
+        return
+      }
 
-        // Fetch profile with company data
-        const { data: profileData, error } = await supabase
-          .from('profiles')
-          .select(`
-            id,
-            full_name,
-            avatar_url,
-            role,
-            company_id,
-            companies:company_id (
-              id,
-              name,
-              logo_url
-            )
-          `)
-          .eq('id', user.id)
-          .single()
+      setUserProfile({
+        id: result.profile.id,
+        full_name: result.profile.full_name,
+        avatar_url: result.profile.avatar_url,
+        role: result.profile.role,
+        company_id: result.profile.company_id ?? undefined,
+      })
 
-        if (error) {
-          console.error('Error fetching profile:', error)
-          return
-        }
-
-        if (profileData) {
-          setUserProfile({
-            id: profileData.id,
-            full_name: profileData.full_name,
-            avatar_url: profileData.avatar_url,
-            role: profileData.role,
-            company_id: profileData.company_id,
-          })
-
-          // Set company data if available
-          if (profileData.companies) {
-            const companyData = Array.isArray(profileData.companies)
-              ? profileData.companies[0]
-              : profileData.companies
-            if (companyData) setCompany(companyData as Company)
-          }
-        }
-      } catch (error) {
-        console.error('Error in fetchUserData:', error)
-      } finally {
-        setIsLoading(false)
+      if (result.company) {
+        setCompany(result.company)
       }
     }
 
     fetchUserData()
-  }, [supabase])
+  }, [])
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -135,7 +108,6 @@ export function Sidebar() {
     }
   }
 
-  // Fallback values
   const displayName = userProfile?.full_name || 'User'
   const displayRole = userProfile?.role || 'Member'
   const companyName = company?.name || 'Your Company'
@@ -149,66 +121,61 @@ export function Sidebar() {
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
-    {/* Logo / Brand Area */}
-          <div className="flex h-16 items-center px-4">
-            <div className="flex items-center gap-3">
-              {companyLogo ? (
-                <img
-                  src={companyLogo}
-                  alt={companyName}
-                  className="h-8 w-8 rounded-lg object-cover ring-1 ring-border"
-                />
-              ) : (
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                  <span className="text-sm font-bold">
-                    {companyName.slice(0, 2).toUpperCase()}
-                  </span>
-                </div>
-              )}
+      <div className="flex h-16 items-center px-4">
+        <div className="flex items-center gap-3">
+          {companyLogo ? (
+            <img
+              src={companyLogo}
+              alt={companyName}
+              className="h-8 w-8 rounded-lg object-cover ring-1 ring-border"
+            />
+          ) : (
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <span className="text-sm font-bold">
+                {companyName.slice(0, 2).toUpperCase()}
+              </span>
+            </div>
+          )}
 
-              {isExpanded && (
-                <span className="text-lg font-semibold tracking-tight text-muted-foreground truncate">
-                  {companyName}
+          {isExpanded && (
+            <span className="text-lg font-semibold tracking-tight text-muted-foreground truncate">
+              {companyName}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mx-2 mb-2">
+        <div
+          className={`rounded-lg bg-muted/50 p-2 transition-all ${
+            isExpanded ? '' : 'flex justify-center'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            {userProfile?.avatar_url ? (
+              <img
+                src={userProfile.avatar_url}
+                alt={displayName}
+                className="h-8 w-8 flex-shrink-0 rounded-full object-cover ring-1 ring-border"
+              />
+            ) : (
+              <div className="h-8 w-8 flex-shrink-0 rounded-full bg-muted ring-1 ring-border flex items-center justify-center">
+                <span className="text-xs font-medium">
+                  {displayName.slice(0, 2).toUpperCase()}
                 </span>
-              )}
-            </div>
-          </div>
-
-          {/* Current User Card */}
-          <div className="mx-2 mb-2">
-            <div
-              className={`rounded-lg bg-muted/50 p-2 transition-all ${
-                isExpanded ? '' : 'flex justify-center'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                {/* Profile Photo */}
-                {userProfile?.avatar_url ? (
-                  <img
-                    src={userProfile.avatar_url}
-                    alt={displayName}
-                    className="h-8 w-8 flex-shrink-0 rounded-full object-cover ring-1 ring-border"
-                  />
-                ) : (
-                  <div className="h-8 w-8 flex-shrink-0 rounded-full bg-muted ring-1 ring-border flex items-center justify-center">
-                    <span className="text-xs font-medium">
-                      {displayName.slice(0, 2).toUpperCase()}
-                    </span>
-                  </div>
-                )}
-
-                {/* User Info */}
-                {isExpanded && (
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <div className="truncate text-sm font-medium">{displayName}</div>
-                    <div className="truncate text-xs text-muted-foreground">{displayRole}</div>
-                  </div>
-                )}
               </div>
-            </div>
-          </div>
+            )}
 
-      {/* Navigation */}
+            {isExpanded && (
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <div className="truncate text-sm font-medium">{displayName}</div>
+                <div className="truncate text-xs text-muted-foreground">{displayRole}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <nav className="flex flex-col gap-1 p-2">
         {navItems.map((item) => {
           const isActive = pathname === item.href
@@ -239,25 +206,24 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Logout Button */}
-            <div className="mt-auto p-2">
-              <button
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-                className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              >
-                <LogOut className="h-5 w-5 flex-shrink-0" />
-                <span
-                  className={`ml-3 overflow-hidden whitespace-nowrap transition-all duration-150 ${
-                    isExpanded
-                      ? 'max-w-[180px] opacity-100'
-                      : 'max-w-0 opacity-0'
-                  }`}
-                >
-                  Logout
-                </span>
-              </button>
-            </div>
+      <div className="mt-auto p-2">
+        <button
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          <LogOut className="h-5 w-5 flex-shrink-0" />
+          <span
+            className={`ml-3 overflow-hidden whitespace-nowrap transition-all duration-150 ${
+              isExpanded
+                ? 'max-w-[180px] opacity-100'
+                : 'max-w-0 opacity-0'
+            }`}
+          >
+            Logout
+          </span>
+        </button>
+      </div>
     </div>
   )
 }

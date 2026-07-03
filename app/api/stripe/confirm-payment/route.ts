@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
 import { recordStripePayment } from '@/lib/billing-server'
+import { assertJobAccess } from '@/lib/portal-auth'
 
 export async function POST(request: Request) {
   try {
@@ -24,6 +25,11 @@ export async function POST(request: Request) {
 
     if (!scheduleId || !clientId || !companyId) {
       return NextResponse.json({ error: 'Missing payment metadata' }, { status: 400 })
+    }
+
+    const access = await assertJobAccess(scheduleId, clientId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.error === 'Unauthorized' ? 401 : 403 })
     }
 
     await recordStripePayment({

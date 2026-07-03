@@ -40,17 +40,17 @@ export async function GET(
 
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('company_id')
+      .select('company_id, client_id, role')
       .eq('id', user.id)
       .single()
 
-    if (!profile?.company_id) {
-      return NextResponse.json({ error: 'No company found' }, { status: 404 })
+    if (!profile) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
 
     const { data: document, error } = await supabaseAdmin
       .from('client_documents')
-      .select('storage_path, name, company_id')
+      .select('storage_path, name, company_id, client_id')
       .eq('id', id)
       .single()
 
@@ -58,7 +58,25 @@ export async function GET(
       return NextResponse.json({ error: 'Document not found' }, { status: 404 })
     }
 
-    if (document.company_id !== profile.company_id) {
+    const isStaff =
+      profile.role === 'company_admin' || profile.role === 'team_member'
+    const isClientOwner =
+      profile.role === 'client' && profile.client_id === document.client_id
+
+    if (isStaff) {
+      if (!profile.company_id || document.company_id !== profile.company_id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    } else if (isClientOwner) {
+      const { data: client } = await supabaseAdmin
+        .from('clients')
+        .select('portal_enabled')
+        .eq('id', profile.client_id)
+        .single()
+      if (!client?.portal_enabled) {
+        return NextResponse.json({ error: 'Portal access disabled' }, { status: 403 })
+      }
+    } else {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
