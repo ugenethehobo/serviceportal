@@ -28,6 +28,7 @@ export const adminNavItems: DashboardNavItem[] = [
 
 export const teamNavItems: DashboardNavItem[] = [
   { href: '/dashboard/team', label: 'My Day', icon: CalendarDays },
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
 
 export function getDashboardNavItems(role?: string) {

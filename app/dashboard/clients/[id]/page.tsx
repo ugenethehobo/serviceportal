@@ -53,6 +53,7 @@ import { JobStatusBadge } from '@/components/dashboard/job-status-badge'
 import { ClientBillingPanel } from '@/components/dashboard/client-billing-panel'
 import { ClientEstimatesPanel } from '@/components/dashboard/client-estimates-panel'
 import { ClientDocumentsPanel } from '@/components/dashboard/client-documents-panel'
+import { ClientMessagingPanel } from '@/components/dashboard/client-messaging-panel'
 import { ClientPortalAccess } from '@/components/dashboard/client-portal-access'
 import { StripeConnectGate } from '@/components/dashboard/stripe-connect-gate'
 import { SearchBar } from '@/components/search-bar'
@@ -811,13 +812,7 @@ export default function ClientDetailPage() {
           )}
 
           {activeTab === 'messaging' && (
-            <div className="flex-1 flex flex-col items-center justify-center text-center">
-              <div className="text-6xl mb-4">💬</div>
-              <h3 className="text-xl font-semibold mb-2">Messaging</h3>
-              <p className="text-muted-foreground max-w-md">
-                Communicate directly with this client through the portal.
-              </p>
-            </div>
+            <ClientMessagingPanel clientId={clientId} clientName={client.name} />
           )}
         </Card>
 

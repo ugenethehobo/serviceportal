@@ -1,10 +1,24 @@
-export type JobPhotoCategory = string
+export type DocumentCategory = string
 
-export function normalizeJobPhotoCategories(input: unknown): JobPhotoCategory[] {
+export const DEFAULT_DOCUMENT_CATEGORY = 'General'
+
+export function resolveUploadCategory(
+  category: string | null | undefined
+): { valid: true; category: DocumentCategory } | { valid: false; error: string } {
+  const resolved = category?.trim() || DEFAULT_DOCUMENT_CATEGORY
+
+  if (resolved.length > 40) {
+    return { valid: false, error: 'Category must be 40 characters or fewer' }
+  }
+
+  return { valid: true, category: resolved }
+}
+
+export function normalizeDocumentCategories(input: unknown): DocumentCategory[] {
   if (!Array.isArray(input)) return []
 
   const seen = new Set<string>()
-  const categories: JobPhotoCategory[] = []
+  const categories: DocumentCategory[] = []
 
   for (const entry of input) {
     if (typeof entry !== 'string') continue
@@ -19,8 +33,8 @@ export function normalizeJobPhotoCategories(input: unknown): JobPhotoCategory[] 
   return categories
 }
 
-export function validateJobPhotoCategories(
-  categories: JobPhotoCategory[]
+export function validateDocumentCategories(
+  categories: DocumentCategory[]
 ): { valid: true } | { valid: false; error: string } {
   if (categories.length > 30) {
     return { valid: false, error: 'Use 30 categories or fewer' }
@@ -38,10 +52,10 @@ export function validateJobPhotoCategories(
   return { valid: true }
 }
 
-export function normalizePhotoCategory(
+export function normalizeDocumentCategory(
   category: string | null | undefined,
-  available: JobPhotoCategory[]
-): JobPhotoCategory | null {
+  available: DocumentCategory[]
+): DocumentCategory | null {
   const trimmed = category?.trim()
   if (!trimmed) return null
 

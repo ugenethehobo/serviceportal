@@ -14,9 +14,19 @@ import {
   syncEstimateDocument,
   seedBillingFromEstimate,
   applyAutoEstimateStatus,
+  notifyEstimateSentById,
 } from '@/lib/estimates-server'
+import {
+  normalizeNotificationPreferences,
+  type NotificationPreferences,
+} from '@/lib/notifications'
+import {
+  notifyClientMessageFromStaff,
+  notifyStaffMessageFromClient,
+  queueNotification,
+} from '@/lib/notifications-server'
 import { cookies } from 'next/headers'
-import { getSessionProfile } from '@/lib/portal-auth'
+import { getSessionProfile, isStaffRole } from '@/lib/portal-auth'
 import {
   isThemePreference,
   THEME_COOKIE_NAME,
@@ -71,6 +81,18 @@ import {
   JOB_PHOTO_MAX_BYTES,
   type JobPhotoWithUrl,
 } from '@/lib/job-photos'
+import {
+  normalizeDocumentCategories,
+  resolveUploadCategory,
+  validateDocumentCategories,
+  type DocumentCategory,
+} from '@/lib/document-categories'
+import {
+  CLIENT_DOCUMENTS_BUCKET,
+  UPLOADED_DOCUMENT_ACCEPTED_TYPES,
+  UPLOADED_DOCUMENT_MAX_BYTES,
+  type UploadedDocument,
+} from '@/lib/uploaded-documents'
 import { geocodeStructuredAddress } from '@/lib/geocoding'
 import {
   buildStructuredAddressDbFields,
@@ -89,6 +111,18 @@ import {
   linkClientPortalAccess,
   upsertClientPortalProfile,
 } from '@/lib/portal-users'
+import {
+  validateMessageBody,
+  type MessagingMessage,
+  type MessagingThread,
+} from '@/lib/messaging'
+import {
+  getOrCreateMessagingThread,
+  insertMessagingMessage,
+  listMessagingMessages,
+  resolveStaffMessageSenderName,
+  verifyScheduleBelongsToClient,
+} from '@/lib/messaging-server'
 
 export async function createCompanyUser(data: {
   email: string
@@ -1318,6 +1352,11 @@ export async function uploadJobPhotoAction(
       companyRow?.job_photo_categories
     )
     const category = normalizePhotoCategory(categoryRaw, availableCategories)
+
+    if (availableCategories.length > 0 && !category) {
+      return { success: false, error: 'Select a photo category before uploading' }
+    }
+
     const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const storagePath = `${access.companyId}/${scheduleId}/${Date.now()}.${fileExt}`
     const fileBuffer = Buffer.from(await file.arrayBuffer())
@@ -1413,14 +1452,8 @@ export async function updateJobPhotoCategoriesAction(
   categories: JobPhotoCategory[]
 ): Promise<{ success: true } | { success: false; error: string }> {
   try {
-    const session = await getSessionProfile()
-    if (!session?.profile?.company_id) {
-      return { success: false, error: 'Not authenticated' }
-    }
-
-    if (session.profile.role !== 'company_admin') {
-      return { success: false, error: 'Only company admins can update photo categories' }
-    }
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
 
     const normalized = categories
       .map((category) => category.trim())
@@ -1435,7 +1468,7 @@ export async function updateJobPhotoCategoriesAction(
     const { error } = await supabaseAdmin
       .from('companies')
       .update({ job_photo_categories: normalized })
-      .eq('id', session.profile.company_id)
+      .eq('id', check.companyId)
 
     if (error) {
       if (error.code === '42703') {
@@ -1447,6 +1480,7 @@ export async function updateJobPhotoCategoriesAction(
       return { success: false, error: error.message }
     }
 
+    revalidatePath('/dashboard/settings')
     revalidatePath('/dashboard/settings')
     return { success: true }
   } catch (error: any) {
@@ -1494,6 +1528,280 @@ export async function deleteJobPhotoAction(
   } catch (error: any) {
     console.error('deleteJobPhotoAction error:', error)
     return { success: false, error: error.message || 'Failed to delete photo' }
+  }
+}
+
+function sanitizeUploadedFileName(name: string) {
+  const base = name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_{2,}/g, '_')
+  return base.slice(0, 120) || 'file'
+}
+
+export async function getDocumentCategoriesAction(): Promise<
+  { success: true; categories: DocumentCategory[] } | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: company, error } = await supabaseAdmin
+      .from('companies')
+      .select('document_categories')
+      .eq('id', check.companyId)
+      .single()
+
+    if (error) {
+      if (error.code === '42703') {
+        return { success: true, categories: normalizeDocumentCategories(null) }
+      }
+      throw error
+    }
+
+    return {
+      success: true,
+      categories: normalizeDocumentCategories(company?.document_categories),
+    }
+  } catch (error: any) {
+    console.error('getDocumentCategoriesAction error:', error)
+    return { success: false, error: error.message || 'Failed to load document categories' }
+  }
+}
+
+export async function updateDocumentCategoriesAction(
+  categories: DocumentCategory[]
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const normalized = categories.map((category) => category.trim()).filter(Boolean)
+    const validation = validateDocumentCategories(normalized)
+    if (!validation.valid) {
+      return { success: false, error: validation.error }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .update({ document_categories: normalized })
+      .eq('id', check.companyId)
+
+    if (error) {
+      if (error.code === '42703') {
+        return {
+          success: false,
+          error: 'Document categories are not enabled yet. Run supabase/document-uploads-schema.sql.',
+        }
+      }
+      return { success: false, error: error.message }
+    }
+
+    revalidatePath('/dashboard/settings')
+    revalidatePath('/dashboard/settings')
+    return { success: true }
+  } catch (error: any) {
+    console.error('updateDocumentCategoriesAction error:', error)
+    return { success: false, error: error.message || 'Failed to save document categories' }
+  }
+}
+
+export async function getUploadedDocumentsAction(
+  clientId: string,
+  scheduleId?: string | null
+): Promise<
+  { success: true; documents: UploadedDocument[] } | { success: false; error: string }
+> {
+  try {
+    const access = await verifyClientCompanyAccess(clientId)
+    if (!access.ok) return { success: false, error: access.error }
+
+    if (scheduleId) {
+      const schedule = await verifyScheduleOwnership(scheduleId, clientId)
+      if (!schedule) return { success: false, error: 'Job not found' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    let query = supabaseAdmin
+      .from('client_documents')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('company_id', access.companyId)
+      .eq('source', 'upload')
+      .order('created_at', { ascending: false })
+
+    if (scheduleId) {
+      query = query.eq('schedule_id', scheduleId)
+    } else {
+      query = query.is('schedule_id', null)
+    }
+
+    const { data: documents, error } = await query
+
+    if (error) {
+      if (error.code === '42703') {
+        return { success: true, documents: [] }
+      }
+      throw error
+    }
+
+    return { success: true, documents: (documents || []) as UploadedDocument[] }
+  } catch (error: any) {
+    console.error('getUploadedDocumentsAction error:', error)
+    return { success: false, error: error.message || 'Failed to load documents' }
+  }
+}
+
+export async function uploadUploadedDocumentAction(
+  clientId: string,
+  formData: FormData,
+  scheduleId?: string | null
+): Promise<
+  { success: true; document: UploadedDocument } | { success: false; error: string }
+> {
+  try {
+    const access = scheduleId
+      ? await verifyScheduleCompanyAccess(scheduleId, clientId)
+      : await verifyClientCompanyAccess(clientId)
+
+    if (!access.ok) return { success: false, error: access.error }
+
+    const file = formData.get('file') as File | null
+    const notes = String(formData.get('notes') || '').trim() || null
+    const categoryRaw = String(formData.get('category') || '').trim() || null
+
+    if (!file || typeof file.size !== 'number' || file.size === 0) {
+      return { success: false, error: 'No file provided' }
+    }
+
+    if (
+      !UPLOADED_DOCUMENT_ACCEPTED_TYPES.includes(
+        file.type as (typeof UPLOADED_DOCUMENT_ACCEPTED_TYPES)[number]
+      )
+    ) {
+      return { success: false, error: 'File type is not supported' }
+    }
+
+    if (file.size > UPLOADED_DOCUMENT_MAX_BYTES) {
+      return { success: false, error: 'File must be 25 MB or smaller' }
+    }
+
+    const categoryResult = resolveUploadCategory(categoryRaw)
+    if (!categoryResult.valid) {
+      return { success: false, error: categoryResult.error }
+    }
+    const category = categoryResult.category
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const safeName = sanitizeUploadedFileName(file.name)
+    const storagePath = scheduleId
+      ? `${access.companyId}/uploads/jobs/${scheduleId}/${Date.now()}-${safeName}`
+      : `${access.companyId}/uploads/clients/${clientId}/${Date.now()}-${safeName}`
+
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from(CLIENT_DOCUMENTS_BUCKET)
+      .upload(storagePath, fileBuffer, {
+        contentType: file.type,
+        upsert: false,
+      })
+
+    if (uploadError) {
+      return { success: false, error: uploadError.message }
+    }
+
+    const { data: document, error: insertError } = await supabaseAdmin
+      .from('client_documents')
+      .insert({
+        client_id: clientId,
+        company_id: access.companyId,
+        schedule_id: scheduleId || null,
+        name: notes || file.name,
+        file_name: file.name,
+        storage_path: storagePath,
+        file_type: file.type,
+        source: 'upload',
+        category,
+        file_size: file.size,
+        notes,
+        uploaded_by: access.userId,
+      })
+      .select('*')
+      .single()
+
+    if (insertError) {
+      await supabaseAdmin.storage.from(CLIENT_DOCUMENTS_BUCKET).remove([storagePath])
+      if (insertError.code === '42703') {
+        return {
+          success: false,
+          error: 'Document uploads are not enabled yet. Run supabase/document-uploads-schema.sql.',
+        }
+      }
+      throw insertError
+    }
+
+    revalidatePath(`/dashboard/clients/${clientId}`)
+    if (scheduleId) {
+      revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+    }
+
+    return { success: true, document: document as UploadedDocument }
+  } catch (error: any) {
+    console.error('uploadUploadedDocumentAction error:', error)
+    return { success: false, error: error.message || 'Failed to upload document' }
+  }
+}
+
+export async function deleteUploadedDocumentAction(
+  documentId: string,
+  clientId: string,
+  scheduleId?: string | null
+) {
+  try {
+    const access = scheduleId
+      ? await verifyScheduleCompanyAccess(scheduleId, clientId)
+      : await verifyClientCompanyAccess(clientId)
+
+    if (!access.ok) return { success: false, error: access.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    let query = supabaseAdmin
+      .from('client_documents')
+      .select('id, storage_path, company_id, source, schedule_id')
+      .eq('id', documentId)
+      .eq('client_id', clientId)
+      .eq('company_id', access.companyId)
+      .eq('source', 'upload')
+
+    if (scheduleId) {
+      query = query.eq('schedule_id', scheduleId)
+    } else {
+      query = query.is('schedule_id', null)
+    }
+
+    const { data: document, error: documentError } = await query.single()
+
+    if (documentError || !document) {
+      return { success: false, error: 'Document not found' }
+    }
+
+    const { error: deleteRowError } = await supabaseAdmin
+      .from('client_documents')
+      .delete()
+      .eq('id', documentId)
+
+    if (deleteRowError) throw deleteRowError
+
+    await supabaseAdmin.storage.from(CLIENT_DOCUMENTS_BUCKET).remove([document.storage_path])
+
+    revalidatePath(`/dashboard/clients/${clientId}`)
+    if (scheduleId) {
+      revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('deleteUploadedDocumentAction error:', error)
+    return { success: false, error: error.message || 'Failed to delete document' }
   }
 }
 
@@ -1869,10 +2177,38 @@ export async function getClientDocumentsAction(clientId: string) {
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
+    const staffCheck = await verifyCompanyStaff()
+    if (staffCheck.ok) {
+      const companyId = await getCompanyIdForClient(clientId)
+      if (!companyId || companyId !== staffCheck.companyId) {
+        return { success: false, error: 'Client not found' }
+      }
+    } else {
+      const session = await getSessionProfile()
+      if (
+        !session ||
+        session.profile.role !== 'client' ||
+        session.profile.client_id !== clientId
+      ) {
+        return { success: false, error: 'Unauthorized' }
+      }
+
+      const { data: client } = await supabaseAdmin
+        .from('clients')
+        .select('portal_enabled')
+        .eq('id', clientId)
+        .single()
+
+      if (!client?.portal_enabled) {
+        return { success: false, error: 'Portal access disabled' }
+      }
+    }
+
     const { data: documents, error } = await supabaseAdmin
       .from('client_documents')
       .select('*')
       .eq('client_id', clientId)
+      .eq('source', 'estimate')
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -1993,6 +2329,10 @@ export async function setEstimateStatusAction(data: {
 
     await syncEstimateDocument(data.id)
     revalidatePath(`/dashboard/clients/${data.clientId}`)
+
+    if (data.status === 'sent' && estimate.status !== 'sent') {
+      void notifyEstimateSentById(data.id)
+    }
 
     return { success: true, estimate: updated }
   } catch (error: any) {
@@ -2642,6 +2982,253 @@ export async function getDashboardUserDataAction() {
   } catch (error: any) {
     console.error('getDashboardUserDataAction error:', error)
     return { success: false as const, error: error.message || 'Failed to load user data' }
+  }
+}
+
+async function verifyOwnStaffAccount() {
+  const session = await getSessionProfile()
+  if (!session) {
+    return { ok: false as const, error: 'Not authenticated' }
+  }
+  if (!isStaffRole(session.profile.role)) {
+    return { ok: false as const, error: 'Unauthorized' }
+  }
+  return {
+    ok: true as const,
+    session,
+    userId: session.userId,
+    role: session.profile.role,
+  }
+}
+
+export async function getAccountSettingsAction(): Promise<
+  | {
+      success: true
+      account: {
+        fullName: string
+        email: string
+        avatarUrl: string | null
+        role: string
+      }
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyOwnStaffAccount()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('full_name, avatar_url, role, email')
+      .eq('id', check.userId)
+      .single()
+
+    if (profileError || !profile) {
+      return { success: false, error: 'Profile not found' }
+    }
+
+    const { data: authData, error: authError } =
+      await supabaseAdmin.auth.admin.getUserById(check.userId)
+
+    if (authError || !authData.user) {
+      return { success: false, error: 'Account not found' }
+    }
+
+    return {
+      success: true,
+      account: {
+        fullName: profile.full_name || '',
+        email: authData.user.email || profile.email || '',
+        avatarUrl: profile.avatar_url,
+        role: profile.role,
+      },
+    }
+  } catch (error: any) {
+    console.error('getAccountSettingsAction error:', error)
+    return { success: false, error: error.message || 'Failed to load account settings' }
+  }
+}
+
+export async function updateAccountSettingsAction(data: {
+  fullName: string
+  email: string
+  password?: string
+}): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const check = await verifyOwnStaffAccount()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const fullName = data.fullName.trim()
+    const email = data.email.trim().toLowerCase()
+    const password = data.password?.trim()
+
+    if (!fullName) {
+      return { success: false, error: 'Display name is required' }
+    }
+
+    if (!email || !email.includes('@')) {
+      return { success: false, error: 'Enter a valid email address' }
+    }
+
+    if (password && password.length < 8) {
+      return { success: false, error: 'Password must be at least 8 characters' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const existingUser = await findAuthUserByEmail(supabaseAdmin, email)
+    if (existingUser && existingUser.id !== check.userId) {
+      return { success: false, error: 'This email is already in use' }
+    }
+
+    const authUpdate: {
+      email?: string
+      password?: string
+      email_confirm?: boolean
+      user_metadata: { full_name: string; role: string }
+    } = {
+      email_confirm: true,
+      user_metadata: {
+        full_name: fullName,
+        role: check.role,
+      },
+    }
+
+    authUpdate.email = email
+    if (password) {
+      authUpdate.password = password
+    }
+
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+      check.userId,
+      authUpdate
+    )
+
+    if (authError) {
+      return { success: false, error: authError.message }
+    }
+
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        full_name: fullName,
+        email,
+      })
+      .eq('id', check.userId)
+
+    if (profileError) {
+      return { success: false, error: profileError.message }
+    }
+
+    revalidatePath('/dashboard/settings')
+    return { success: true }
+  } catch (error: any) {
+    console.error('updateAccountSettingsAction error:', error)
+    return { success: false, error: error.message || 'Failed to update account' }
+  }
+}
+
+export async function uploadAccountAvatarAction(
+  formData: FormData
+): Promise<
+  { success: true; avatarUrl: string } | { success: false; error: string }
+> {
+  try {
+    const check = await verifyOwnStaffAccount()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const file = formData.get('file') as File | null
+    if (!file || typeof file.size !== 'number' || file.size === 0) {
+      return { success: false, error: 'No image file provided' }
+    }
+
+    const acceptedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    if (!acceptedTypes.includes(file.type)) {
+      return { success: false, error: 'Use a JPG, PNG, WebP, or GIF image' }
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return { success: false, error: 'Image must be 5 MB or smaller' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const storagePath = `${check.userId}/${Date.now()}.${fileExt}`
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('user-avatars')
+      .upload(storagePath, fileBuffer, {
+        contentType: file.type,
+        upsert: true,
+      })
+
+    if (uploadError) {
+      return { success: false, error: uploadError.message }
+    }
+
+    const { data: publicUrl } = supabaseAdmin.storage
+      .from('user-avatars')
+      .getPublicUrl(uploadData.path)
+
+    const avatarUrl = publicUrl.publicUrl
+
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .update({ avatar_url: avatarUrl })
+      .eq('id', check.userId)
+
+    if (profileError) {
+      return { success: false, error: profileError.message }
+    }
+
+    revalidatePath('/dashboard/settings')
+    return { success: true, avatarUrl }
+  } catch (error: any) {
+    console.error('uploadAccountAvatarAction error:', error)
+    return { success: false, error: error.message || 'Failed to upload profile photo' }
+  }
+}
+
+export async function removeAccountAvatarAction(): Promise<
+  { success: true } | { success: false; error: string }
+> {
+  try {
+    const check = await verifyOwnStaffAccount()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('avatar_url')
+      .eq('id', check.userId)
+      .single()
+
+    if (profileError) {
+      return { success: false, error: profileError.message }
+    }
+
+    if (profile?.avatar_url) {
+      const path = profile.avatar_url.split('/user-avatars/')[1]
+      if (path) {
+        await supabaseAdmin.storage.from('user-avatars').remove([path])
+      }
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update({ avatar_url: null })
+      .eq('id', check.userId)
+
+    if (updateError) {
+      return { success: false, error: updateError.message }
+    }
+
+    revalidatePath('/dashboard/settings')
+    return { success: true }
+  } catch (error: any) {
+    console.error('removeAccountAvatarAction error:', error)
+    return { success: false, error: error.message || 'Failed to remove profile photo' }
   }
 }
 
@@ -3311,6 +3898,73 @@ export async function uploadCompanyLogoAction(
   }
 }
 
+export async function getNotificationSettingsAction(): Promise<
+  | { success: true; preferences: NotificationPreferences }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: company, error } = await supabaseAdmin
+      .from('companies')
+      .select('notification_settings')
+      .eq('id', check.companyId)
+      .single()
+
+    if (error) {
+      if (error.code === '42703') {
+        return {
+          success: true,
+          preferences: normalizeNotificationPreferences(null),
+        }
+      }
+      throw error
+    }
+
+    return {
+      success: true,
+      preferences: normalizeNotificationPreferences(company?.notification_settings),
+    }
+  } catch (error: any) {
+    console.error('getNotificationSettingsAction error:', error)
+    return { success: false, error: error.message || 'Failed to load notification settings' }
+  }
+}
+
+export async function updateNotificationSettingsAction(
+  preferences: NotificationPreferences
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const normalized = normalizeNotificationPreferences(preferences)
+    const supabaseAdmin = createSupabaseAdmin()
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .update({ notification_settings: normalized })
+      .eq('id', check.companyId)
+
+    if (error) {
+      if (error.code === '42703') {
+        return {
+          success: false,
+          error: 'Notifications are not enabled yet. Run supabase/notifications-schema.sql.',
+        }
+      }
+      return { success: false, error: error.message }
+    }
+
+    revalidatePath('/dashboard/settings')
+    return { success: true }
+  } catch (error: any) {
+    console.error('updateNotificationSettingsAction error:', error)
+    return { success: false, error: error.message || 'Failed to save notification settings' }
+  }
+}
+
 export async function updateCompanySettingsAction(data: {
   timezone: string
   businessHours: BusinessHours
@@ -3927,5 +4581,178 @@ export async function convertLeadToClientAction(leadId: string) {
   } catch (error: any) {
     console.error('convertLeadToClientAction error:', error)
     return { success: false as const, error: error.message || 'Failed to convert lead' }
+  }
+}
+
+// ============================================
+// Messaging
+// ============================================
+
+async function verifyClientCompanyAccess(clientId: string) {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return check
+
+  const companyId = await getCompanyIdForClient(clientId)
+  if (!companyId || companyId !== check.companyId) {
+    return { ok: false as const, error: 'Client not found' }
+  }
+
+  return { ...check, companyId }
+}
+
+export async function getMessagingThreadAction(
+  clientId: string,
+  scheduleId?: string | null
+): Promise<
+  | {
+      success: true
+      thread: MessagingThread
+      messages: MessagingMessage[]
+      companyName: string | null
+      clientName: string | null
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const access = scheduleId
+      ? await verifyScheduleCompanyAccess(scheduleId, clientId)
+      : await verifyClientCompanyAccess(clientId)
+
+    if (!access.ok) {
+      return { success: false, error: access.error }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+
+    if (scheduleId) {
+      const belongs = await verifyScheduleBelongsToClient(
+        supabaseAdmin,
+        scheduleId,
+        clientId
+      )
+      if (!belongs) {
+        return { success: false, error: 'Job not found' }
+      }
+    }
+
+    const [{ data: company }, { data: client }] = await Promise.all([
+      supabaseAdmin
+        .from('companies')
+        .select('name')
+        .eq('id', access.companyId)
+        .single(),
+      supabaseAdmin.from('clients').select('name').eq('id', clientId).single(),
+    ])
+
+    const thread = await getOrCreateMessagingThread(supabaseAdmin, {
+      companyId: access.companyId,
+      clientId,
+      scheduleId: scheduleId ?? null,
+    })
+
+    const messages = await listMessagingMessages(supabaseAdmin, thread.id)
+
+    return {
+      success: true,
+      thread,
+      messages,
+      companyName: company?.name?.trim() || null,
+      clientName: client?.name?.trim() || null,
+    }
+  } catch (error: any) {
+    console.error('getMessagingThreadAction error:', error)
+    return { success: false, error: error.message || 'Failed to load messages' }
+  }
+}
+
+export async function sendMessagingMessageAction(
+  clientId: string,
+  body: string,
+  scheduleId?: string | null
+): Promise<
+  | { success: true; message: MessagingMessage }
+  | { success: false; error: string }
+> {
+  try {
+    const validation = validateMessageBody(body)
+    if (!validation.ok) {
+      return { success: false, error: validation.error }
+    }
+
+    const access = scheduleId
+      ? await verifyScheduleCompanyAccess(scheduleId, clientId)
+      : await verifyClientCompanyAccess(clientId)
+
+    if (!access.ok) {
+      return { success: false, error: access.error }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+
+    if (scheduleId) {
+      const belongs = await verifyScheduleBelongsToClient(
+        supabaseAdmin,
+        scheduleId,
+        clientId
+      )
+      if (!belongs) {
+        return { success: false, error: 'Job not found' }
+      }
+    }
+
+    const thread = await getOrCreateMessagingThread(supabaseAdmin, {
+      companyId: access.companyId,
+      clientId,
+      scheduleId: scheduleId ?? null,
+    })
+
+    const senderName = await resolveStaffMessageSenderName(supabaseAdmin, {
+      companyId: access.companyId,
+      clientId,
+      profile: access.session.profile,
+    })
+
+    const message = await insertMessagingMessage(supabaseAdmin, {
+      threadId: thread.id,
+      companyId: access.companyId,
+      senderUserId: access.userId,
+      senderRole: 'staff',
+      senderName,
+      body: validation.body,
+    })
+
+    revalidatePath(`/dashboard/clients/${clientId}`)
+    if (scheduleId) {
+      revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+    }
+    revalidatePath('/portal/messages')
+
+    void queueNotification(supabaseAdmin, async (admin) => {
+      const [{ data: client }, { data: company }] = await Promise.all([
+        admin
+          .from('clients')
+          .select('name, email, phone, portal_enabled')
+          .eq('id', clientId)
+          .single(),
+        admin.from('companies').select('name').eq('id', access.companyId).single(),
+      ])
+
+      if (!client?.portal_enabled) return
+
+      await notifyClientMessageFromStaff(admin, {
+        companyId: access.companyId,
+        companyName: company?.name,
+        clientEmail: client?.email,
+        clientPhone: client?.phone,
+        clientName: client?.name,
+        messagePreview: validation.body,
+        scheduleId: scheduleId ?? null,
+      })
+    })
+
+    return { success: true, message }
+  } catch (error: any) {
+    console.error('sendMessagingMessageAction error:', error)
+    return { success: false, error: error.message || 'Failed to send message' }
   }
 }

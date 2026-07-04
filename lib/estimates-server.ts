@@ -2,6 +2,10 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { generateEstimatePdf } from '@/lib/estimate-pdf'
 import { calcEstimateTotal, formatEstimateNumber, resolveAutoEstimateStatus, type EstimateStatus } from '@/lib/estimates'
 import { calcLineAmount } from '@/lib/billing'
+import {
+  notifyClientEstimateSent,
+  queueNotification,
+} from '@/lib/notifications-server'
 
 const BUCKET = 'client-documents'
 
@@ -33,14 +37,69 @@ export async function applyAutoEstimateStatus(
     count || 0
   )
 
-  if (newStatus !== estimate?.status) {
+  const previousStatus = estimate?.status
+
+  if (newStatus !== previousStatus) {
     await supabaseAdmin
       .from('estimates')
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq('id', estimateId)
+
+    if (newStatus === 'sent' && previousStatus !== 'sent') {
+      void queueNotification(supabaseAdmin, async (admin) => {
+        await maybeNotifyEstimateSent(admin, estimateId)
+      })
+    }
   }
 
   return newStatus
+}
+
+async function maybeNotifyEstimateSent(
+  supabaseAdmin: SupabaseClient,
+  estimateId: string
+) {
+  const { data: estimate } = await supabaseAdmin
+    .from('estimates')
+    .select(`
+      id,
+      title,
+      total,
+      company_id,
+      client:clients!client_id (name, email, phone, portal_enabled),
+      company:companies!company_id (name)
+    `)
+    .eq('id', estimateId)
+    .single()
+
+  if (!estimate) return
+
+  const client = Array.isArray((estimate as any).client)
+    ? (estimate as any).client[0]
+    : (estimate as any).client
+  const company = Array.isArray((estimate as any).company)
+    ? (estimate as any).company[0]
+    : (estimate as any).company
+
+  if (!client?.email && !client?.phone) return
+
+  await notifyClientEstimateSent(supabaseAdmin, {
+    companyId: estimate.company_id,
+    companyName: company?.name,
+    clientEmail: client?.email,
+    clientPhone: client?.phone,
+    clientName: client?.name,
+    estimateTitle: estimate.title,
+    estimateTotal: Number(estimate.total),
+    estimateId: estimate.id,
+  })
+}
+
+export async function notifyEstimateSentById(estimateId: string) {
+  const supabaseAdmin = createSupabaseAdmin()
+  await queueNotification(supabaseAdmin, async (admin) => {
+    await maybeNotifyEstimateSent(admin, estimateId)
+  })
 }
 
 export async function recalcEstimateTotal(

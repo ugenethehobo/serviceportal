@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getPostLoginPath } from '@/lib/portal-auth'
 
 async function getProfileRole(userId: string) {
   const supabaseAdmin = createClient(
@@ -62,6 +63,22 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  if (pathname === '/') {
+    const url = request.nextUrl.clone()
+    if (!user) {
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+
+    const profile = await getProfileRole(user.id)
+    url.pathname = getPostLoginPath(
+      profile?.role || '',
+      process.env.NEXT_PUBLIC_ADMIN_EMAIL,
+      user.email
+    )
+    return NextResponse.redirect(url)
+  }
+
   if ((isStaffRoute || isPortalRoute) && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
@@ -84,25 +101,33 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
+    if (
+      isStaffRoute &&
+      (pathname === '/dashboard/account' || pathname.startsWith('/dashboard/account/'))
+    ) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard/settings'
+      url.searchParams.set('section', 'profile')
+      return NextResponse.redirect(url)
+    }
+
     if (pathname === '/login') {
       const url = request.nextUrl.clone()
-      if (user.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
-        url.pathname = '/admin'
-      } else if (role === 'client') {
-        url.pathname = '/portal'
-      } else if (role === 'team_member') {
-        url.pathname = '/dashboard/team'
-      } else {
-        url.pathname = '/dashboard'
-      }
+      url.pathname = getPostLoginPath(
+        role || '',
+        process.env.NEXT_PUBLIC_ADMIN_EMAIL,
+        user.email
+      )
       return NextResponse.redirect(url)
     }
 
     if (isStaffRoute && role === 'team_member') {
       const isTeamHome = pathname === '/dashboard/team' || pathname.startsWith('/dashboard/team/')
+      const isSettingsRoute =
+        pathname === '/dashboard/settings' || pathname.startsWith('/dashboard/settings/')
       const isAssignedJobRoute = /^\/dashboard\/clients\/[^/]+\/jobs\/[^/]+/.test(pathname)
 
-      if (!isTeamHome && !isAssignedJobRoute) {
+      if (!isTeamHome && !isSettingsRoute && !isAssignedJobRoute) {
         const url = request.nextUrl.clone()
         url.pathname = '/dashboard/team'
         return NextResponse.redirect(url)

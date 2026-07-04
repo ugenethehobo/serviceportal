@@ -13,6 +13,8 @@ import {
   deleteJobAction,
 } from '@/app/action'
 import { JobPhotosPanel } from '@/components/dashboard/job-photos-panel'
+import { JobDocumentsPanel } from '@/components/dashboard/job-documents-panel'
+import { JobMessagingPanel } from '@/components/dashboard/job-messaging-panel'
 import { MapsNavigateButton } from '@/components/dashboard/maps-navigate-button'
 import { getDisplayAddressFromClient } from '@/lib/address'
 import { Button } from '@/components/ui/button'
@@ -105,7 +107,10 @@ export default function JobDetailPage() {
   const jobTabs = [
     { id: 'details' as const, label: 'Details' },
     ...(isTeamMember
-      ? [{ id: 'photos' as const, label: 'Photos' }]
+      ? [
+          { id: 'photos' as const, label: 'Photos' },
+          { id: 'messaging' as const, label: 'Messaging' },
+        ]
       : [
           { id: 'billing' as const, label: 'Billing' },
           { id: 'photos' as const, label: 'Photos' },
@@ -176,7 +181,11 @@ export default function JobDetailPage() {
   }, [fetchJob, fetchCompanyContext])
 
   useEffect(() => {
-    if (userRole === 'team_member' && activeTab !== 'details' && activeTab !== 'photos') {
+    const teamMemberTabs = ['details', 'photos', 'messaging'] as const
+    if (
+      userRole === 'team_member' &&
+      !teamMemberTabs.includes(activeTab as (typeof teamMemberTabs)[number])
+    ) {
       setActiveTab('details')
     }
   }, [userRole, activeTab])
@@ -573,23 +582,16 @@ export default function JobDetailPage() {
         )}
 
         {activeTab === 'documents' && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center">
-            <div className="text-6xl mb-4">📁</div>
-            <h3 className="text-xl font-semibold mb-2">Documents</h3>
-            <p className="text-muted-foreground max-w-md">
-              Store work orders, permits, and other documents for this job.
-            </p>
-          </div>
+          <JobDocumentsPanel scheduleId={jobId} clientId={clientId} />
         )}
 
         {activeTab === 'messaging' && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center">
-            <div className="text-6xl mb-4">💬</div>
-            <h3 className="text-xl font-semibold mb-2">Messaging</h3>
-            <p className="text-muted-foreground max-w-md">
-              Communicate with the client and crew about this job.
-            </p>
-          </div>
+          <JobMessagingPanel
+            clientId={clientId}
+            scheduleId={jobId}
+            jobTitle={job.title}
+            clientName={clientName}
+          />
         )}
       </Card>
 

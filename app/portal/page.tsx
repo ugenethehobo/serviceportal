@@ -95,6 +95,13 @@ export default async function PortalHomePage() {
               <span className="font-medium">Download documents</span>
               <ArrowRight className="size-4 text-muted-foreground" />
             </Link>
+            <Link
+              href="/portal/messages"
+              className="flex items-center justify-between rounded-lg border px-4 py-3 text-sm hover:bg-muted/50 transition-colors"
+            >
+              <span className="font-medium">Message your provider</span>
+              <ArrowRight className="size-4 text-muted-foreground" />
+            </Link>
           </div>
           {data.balanceDue > 0 && (
             <div className="mt-4 rounded-lg bg-orange-50 border border-orange-200 p-4 text-sm">

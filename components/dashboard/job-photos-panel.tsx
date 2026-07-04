@@ -30,10 +30,10 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { DEFAULT_JOB_PHOTO_CATEGORIES } from '@/lib/job-photo-categories'
+import { JobPhotoCategoriesSettings } from '@/components/dashboard/job-photo-categories-settings'
 import type { JobPhotoWithUrl } from '@/lib/job-photos'
 import { toast } from 'sonner'
-import { Camera, ImagePlus, Loader2, Trash2, X } from 'lucide-react'
+import { Camera, ChevronDown, ChevronUp, ImagePlus, Loader2, Tags, Trash2, X } from 'lucide-react'
 
 interface JobPhotosPanelProps {
   scheduleId: string
@@ -128,15 +128,14 @@ function PhotoGalleryItem({
 
 export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
   const [photos, setPhotos] = useState<JobPhotoWithUrl[]>([])
-  const [categories, setCategories] = useState<string[]>([...DEFAULT_JOB_PHOTO_CATEGORIES])
-  const [selectedCategory, setSelectedCategory] = useState<string>(
-    DEFAULT_JOB_PHOTO_CATEGORIES[0]
-  )
+  const [categories, setCategories] = useState<string[]>([])
+  const [selectedCategory, setSelectedCategory] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [caption, setCaption] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
   const [activeTab, setActiveTab] = useState('all')
+  const [showCategoryManager, setShowCategoryManager] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchPhotos = useCallback(async () => {
@@ -156,7 +155,7 @@ export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
       setSelectedCategory((current) =>
         categoriesResult.categories.includes(current)
           ? current
-          : categoriesResult.categories[0]
+          : categoriesResult.categories[0] || ''
       )
     }
 
@@ -205,6 +204,11 @@ export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
     const files = Array.from(fileList || [])
     if (files.length === 0) return
 
+    if (categories.length > 0 && !selectedCategory) {
+      toast.error('Select a photo category before uploading')
+      return
+    }
+
     const newPending = files.map((file) => ({
       id: `${Date.now()}-${file.name}-${Math.random().toString(36).slice(2)}`,
       file,
@@ -243,6 +247,8 @@ export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
   }
 
   const isUploading = pendingUploads.some((entry) => entry.state === 'uploading')
+  const hasCategories = categories.length > 0
+  const canUpload = !hasCategories || Boolean(selectedCategory)
 
   if (isLoading) {
     return (
@@ -281,30 +287,70 @@ export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
     <div className="flex flex-col gap-5 flex-1 min-h-0">
       <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
         <p className="text-sm text-muted-foreground">
-          Take or upload job site photos. Choose a category to keep large galleries organized.
+          Take or upload job site photos
+          {hasCategories ? ' and choose a category to keep large galleries organized.' : '.'}
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="photo-category">Category</Label>
-            <Select
-              value={selectedCategory}
-              onValueChange={(value) => {
-                if (value) setSelectedCategory(value)
-              }}
-            >
-              <SelectTrigger id="photo-category" className="w-full">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {!hasCategories && (
+          <div className="rounded-lg border border-dashed bg-background px-3 py-2 text-xs text-muted-foreground">
+            No photo categories yet. Uploads will be uncategorized until you add categories below.
           </div>
+        )}
+
+        <div className="rounded-lg border bg-background">
+          <button
+            type="button"
+            onClick={() => setShowCategoryManager((current) => !current)}
+            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/50 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <Tags className="size-4 text-muted-foreground" />
+              Manage photo categories
+            </span>
+            {showCategoryManager ? (
+              <ChevronUp className="size-4 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronDown className="size-4 text-muted-foreground shrink-0" />
+            )}
+          </button>
+          {showCategoryManager && (
+            <div className="border-t px-3 py-3">
+              <JobPhotoCategoriesSettings
+                embedded
+                onSaved={(savedCategories) => {
+                  setCategories(savedCategories)
+                  setSelectedCategory((current) =>
+                    savedCategories.includes(current) ? current : savedCategories[0] || ''
+                  )
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className={`grid grid-cols-1 gap-3 ${hasCategories ? 'sm:grid-cols-2' : ''}`}>
+          {hasCategories && (
+            <div className="space-y-2">
+              <Label htmlFor="photo-category">Category</Label>
+              <Select
+                value={selectedCategory}
+                onValueChange={(value) => {
+                  if (value) setSelectedCategory(value)
+                }}
+              >
+                <SelectTrigger id="photo-category" className="w-full">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="photo-caption">Caption (optional)</Label>
             <Input
@@ -333,7 +379,7 @@ export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
             size="lg"
             className="flex-1"
             onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
+            disabled={isUploading || !canUpload}
           >
             <Camera className="size-4" />
             {isUploading ? 'Uploading…' : 'Take / Add Photos'}
@@ -350,7 +396,7 @@ export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
                 fileInputRef.current.setAttribute('capture', 'environment')
               }
             }}
-            disabled={isUploading}
+            disabled={isUploading || !canUpload}
           >
             <ImagePlus className="size-4" />
             Choose from library
@@ -403,7 +449,7 @@ export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
             </p>
           </div>
         </div>
-      ) : (
+      ) : hasCategories && groupedPhotos.length > 0 ? (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
           <ScrollArea className="shrink-0" viewportClassName="scroll-fade-x">
             <TabsList className="w-max min-w-full justify-start">
@@ -430,6 +476,10 @@ export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
             </TabsContent>
           ))}
         </Tabs>
+      ) : (
+        <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+          {renderPhotoGrid(photos)}
+        </ScrollArea>
       )}
     </div>
   )

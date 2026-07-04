@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { CompanyAddressForm } from '@/components/dashboard/company-address-form'
 import { CompanyLogoUpload } from '@/components/dashboard/company-logo-upload'
-import { JobPhotoCategoriesSettings } from '@/components/dashboard/job-photo-categories-settings'
+
 import type { SaveStatus } from '@/components/dashboard/save-status-badge'
 import { updateCompanySettingsAction } from '@/app/action'
 import { dispatchCompanyBrandingUpdate } from '@/lib/company-branding'
@@ -385,7 +385,6 @@ export function CompanyProfileSettings({
         </div>
       </SettingsSubsection>
 
-      <JobPhotoCategoriesSettings />
     </div>
   )
 }

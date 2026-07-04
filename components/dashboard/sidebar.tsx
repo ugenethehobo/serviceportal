@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -45,29 +45,38 @@ function useDashboardNav() {
   const [company, setCompany] = useState<Company | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      const result = await getDashboardUserDataAction()
-      if (!result.success) {
-        console.error('Error fetching profile:', result.error)
-        return
-      }
-
-      setUserProfile({
-        id: result.profile.id,
-        full_name: result.profile.full_name,
-        avatar_url: result.profile.avatar_url,
-        role: result.profile.role,
-        company_id: result.profile.company_id ?? undefined,
-      })
-
-      if (result.company) {
-        setCompany(result.company)
-      }
+  const fetchUserData = useCallback(async () => {
+    const result = await getDashboardUserDataAction()
+    if (!result.success) {
+      console.error('Error fetching profile:', result.error)
+      return
     }
 
-    fetchUserData()
+    setUserProfile({
+      id: result.profile.id,
+      full_name: result.profile.full_name,
+      avatar_url: result.profile.avatar_url,
+      role: result.profile.role,
+      company_id: result.profile.company_id ?? undefined,
+    })
+
+    if (result.company) {
+      setCompany(result.company)
+    }
   }, [])
+
+  useEffect(() => {
+    fetchUserData()
+  }, [fetchUserData])
+
+  useEffect(() => {
+    const handleProfileUpdated = () => {
+      fetchUserData()
+    }
+
+    window.addEventListener('dashboard-profile-updated', handleProfileUpdated)
+    return () => window.removeEventListener('dashboard-profile-updated', handleProfileUpdated)
+  }, [fetchUserData])
 
   useEffect(() => {
     return subscribeCompanyBrandingUpdates((update) => {

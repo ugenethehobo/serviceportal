@@ -30,7 +30,7 @@ export function ActiveCrewsToday({ crews }: ActiveCrewsTodayProps) {
   }
 
   return (
-    <ScrollArea className="flex-1 pr-1" viewportClassName="scroll-fade">
+    <ScrollArea className="flex-1 pr-3 overflow-auto scroll-fade" viewportClassName="scroll-fade">
       <div className="space-y-3">
       {crews.map((crew) => (
         <div key={crew.id} className="rounded-lg border p-3">

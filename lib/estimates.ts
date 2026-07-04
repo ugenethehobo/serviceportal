@@ -35,9 +35,14 @@ export interface ClientDocument {
   estimate_id: string | null
   schedule_id: string | null
   name: string
+  file_name?: string | null
   storage_path: string
   file_type: string
   source: 'estimate' | 'upload'
+  category?: string | null
+  file_size?: number | null
+  notes?: string | null
+  uploaded_by?: string | null
   created_at: string
 }
 

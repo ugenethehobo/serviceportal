@@ -4,6 +4,18 @@ import { revalidatePath } from 'next/cache'
 import { getSessionProfile, createSupabaseAdmin } from '@/lib/portal-auth'
 import { calcBillingSummary, formatCurrency } from '@/lib/billing'
 import { syncEstimateDocument } from '@/lib/estimates-server'
+import { validateMessageBody, type MessagingMessage } from '@/lib/messaging'
+import type { UploadedDocument } from '@/lib/uploaded-documents'
+import {
+  notifyStaffEstimateResponse,
+  notifyStaffMessageFromClient,
+  queueNotification,
+} from '@/lib/notifications-server'
+import {
+  getOrCreateMessagingThread,
+  insertMessagingMessage,
+  listMessagingMessages,
+} from '@/lib/messaging-server'
 
 async function requirePortalClient() {
   const session = await getSessionProfile()
@@ -189,7 +201,7 @@ export async function respondToEstimateAction(
 
   const { data: estimate } = await admin
     .from('estimates')
-    .select('id, status')
+    .select('id, status, title, company_id')
     .eq('id', estimateId)
     .eq('client_id', clientId)
     .single()
@@ -216,5 +228,139 @@ export async function respondToEstimateAction(
   revalidatePath('/portal/estimates')
   revalidatePath(`/dashboard/clients/${clientId}`)
 
+  void queueNotification(admin, async (notificationAdmin) => {
+    const [{ data: client }, { data: company }] = await Promise.all([
+      notificationAdmin.from('clients').select('name').eq('id', clientId).single(),
+      notificationAdmin
+        .from('companies')
+        .select('name')
+        .eq('id', estimate.company_id)
+        .single(),
+    ])
+
+    await notifyStaffEstimateResponse(notificationAdmin, {
+      companyId: estimate.company_id,
+      companyName: company?.name,
+      clientName: client?.name,
+      estimateTitle: estimate.title,
+      response,
+      clientId,
+      estimateId,
+    })
+  })
+
   return { success: true as const, status: response }
+}
+
+export async function getPortalMessagingThreadAction(): Promise<
+  | { success: true; messages: MessagingMessage[] }
+  | { success: false; error: string }
+> {
+  try {
+    const { clientId, companyId } = await requirePortalClient()
+    const admin = createSupabaseAdmin()
+
+    const thread = await getOrCreateMessagingThread(admin, {
+      companyId,
+      clientId,
+      scheduleId: null,
+    })
+
+    const messages = await listMessagingMessages(admin, thread.id)
+    return { success: true, messages }
+  } catch (error: any) {
+    console.error('getPortalMessagingThreadAction error:', error)
+    return { success: false, error: error.message || 'Failed to load messages' }
+  }
+}
+
+export async function sendPortalMessagingMessageAction(
+  body: string
+): Promise<
+  | { success: true; message: MessagingMessage }
+  | { success: false; error: string }
+> {
+  try {
+    const validation = validateMessageBody(body)
+    if (!validation.ok) {
+      return { success: false, error: validation.error }
+    }
+
+    const { clientId, companyId, profile } = await requirePortalClient()
+    const admin = createSupabaseAdmin()
+
+    const { data: client } = await admin
+      .from('clients')
+      .select('name')
+      .eq('id', clientId)
+      .single()
+
+    const thread = await getOrCreateMessagingThread(admin, {
+      companyId,
+      clientId,
+      scheduleId: null,
+    })
+
+    const message = await insertMessagingMessage(admin, {
+      threadId: thread.id,
+      companyId,
+      senderUserId: profile.id,
+      senderRole: 'client',
+      senderName: client?.name?.trim() || profile.full_name?.trim() || 'Client',
+      body: validation.body,
+    })
+
+    revalidatePath('/portal/messages')
+    revalidatePath(`/dashboard/clients/${clientId}`)
+
+    void queueNotification(admin, async (notificationAdmin) => {
+      const { data: company } = await notificationAdmin
+        .from('companies')
+        .select('name')
+        .eq('id', companyId)
+        .single()
+
+      await notifyStaffMessageFromClient(notificationAdmin, {
+        companyId,
+        companyName: company?.name,
+        clientName: client?.name,
+        messagePreview: validation.body,
+        clientId,
+      })
+    })
+
+    return { success: true, message }
+  } catch (error: any) {
+    console.error('sendPortalMessagingMessageAction error:', error)
+    return { success: false, error: error.message || 'Failed to send message' }
+  }
+}
+
+export async function getPortalUploadedDocumentsAction(): Promise<
+  { success: true; documents: UploadedDocument[] } | { success: false; error: string }
+> {
+  try {
+    const { clientId } = await requirePortalClient()
+    const admin = createSupabaseAdmin()
+
+    const { data: documents, error } = await admin
+      .from('client_documents')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('source', 'upload')
+      .is('schedule_id', null)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      if (error.code === '42703') {
+        return { success: true, documents: [] }
+      }
+      throw error
+    }
+
+    return { success: true, documents: (documents || []) as UploadedDocument[] }
+  } catch (error: any) {
+    console.error('getPortalUploadedDocumentsAction error:', error)
+    return { success: false, error: error.message || 'Failed to load documents' }
+  }
 }

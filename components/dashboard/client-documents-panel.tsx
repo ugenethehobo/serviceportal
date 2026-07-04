@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getClientDocumentsAction } from '@/app/action'
+import { UploadedDocumentsPanel } from '@/components/dashboard/uploaded-documents-panel'
 import { Button } from '@/components/ui/button'
 import {
   Table,
@@ -11,8 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { Download, FileText } from 'lucide-react'
 import type { ClientDocument } from '@/lib/estimates'
@@ -28,13 +29,13 @@ export function ClientDocumentsPanel({
   refreshKey = 0,
   variant = 'staff',
 }: ClientDocumentsPanelProps) {
-  const [documents, setDocuments] = useState<ClientDocument[]>([])
+  const [estimateDocuments, setEstimateDocuments] = useState<ClientDocument[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchDocuments = useCallback(async () => {
     const result = await getClientDocumentsAction(clientId)
     if (result.success) {
-      setDocuments((result.documents || []) as ClientDocument[])
+      setEstimateDocuments((result.documents || []) as ClientDocument[])
     } else {
       toast.error(result.error || 'Failed to load documents')
     }
@@ -51,65 +52,72 @@ export function ClientDocumentsPanel({
   }
 
   return (
-    <div className="flex flex-col gap-4 flex-1 min-h-0">
-      {variant === 'staff' && (
-        <p className="text-sm text-muted-foreground">
-          Estimate PDFs are generated automatically when you create or update an estimate.
-        </p>
-      )}
-
-      {documents.length > 0 ? (
-        <ScrollArea className="border rounded-lg flex-1 min-h-0" viewportClassName="scroll-fade">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Document</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead className="w-28" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {documents.map((doc) => (
-                <TableRow key={doc.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <FileText className="size-4 text-muted-foreground shrink-0" />
-                      <span className="font-medium">{doc.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="capitalize">
-                      {doc.source}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {new Date(doc.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(`/api/documents/${doc.id}/download`, '_blank')}
-                    >
-                      <Download className="size-4" />
-                      Download
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </ScrollArea>
-      ) : (
-        <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg py-12">
-          <p className="text-muted-foreground text-sm">
-            {variant === 'portal'
-              ? 'No documents shared yet. Estimate PDFs will appear here when sent to you.'
-              : 'No documents yet. Create an estimate to generate a PDF automatically.'}
-          </p>
+    <div className="flex flex-col gap-6 flex-1 min-h-0">
+      <div className="flex flex-col gap-4 flex-1 min-h-0">
+        <div>
+          <h3 className="font-semibold tracking-tight">Estimate PDFs</h3>
+          {variant === 'staff' && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Generated automatically when you create or update an estimate.
+            </p>
+          )}
         </div>
-      )}
+
+        {estimateDocuments.length > 0 ? (
+          <ScrollArea className="border rounded-lg flex-1 min-h-0 max-h-72" viewportClassName="scroll-fade">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Document</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="w-28" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {estimateDocuments.map((doc) => (
+                  <TableRow key={doc.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <FileText className="size-4 text-muted-foreground shrink-0" />
+                        <span className="font-medium">{doc.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(doc.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(`/api/documents/${doc.id}/download`, '_blank')}
+                      >
+                        <Download className="size-4" />
+                        Download
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        ) : (
+          <div className="flex items-center justify-center border border-dashed rounded-lg py-10">
+            <p className="text-muted-foreground text-sm">
+              {variant === 'portal'
+                ? 'No estimate PDFs shared yet.'
+                : 'No estimate PDFs yet. Create an estimate to generate one automatically.'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <Separator />
+
+      <UploadedDocumentsPanel
+        clientId={clientId}
+        variant={variant}
+        refreshKey={refreshKey}
+      />
     </div>
   )
 }

@@ -155,5 +155,39 @@ export async function recordStripePayment(data: {
   })
 
   if (error) throw error
+
+  const { data: schedule } = await supabaseAdmin
+    .from('schedules')
+    .select('title, client:clients!client_id (name, email)')
+    .eq('id', data.scheduleId)
+    .single()
+
+  const client = Array.isArray((schedule as any)?.client)
+    ? (schedule as any).client[0]
+    : (schedule as any)?.client
+
+  const { notifyPaymentReceived, queueNotification } = await import(
+    '@/lib/notifications-server'
+  )
+
+  void queueNotification(supabaseAdmin, async (admin) => {
+    const { data: company } = await admin
+      .from('companies')
+      .select('name')
+      .eq('id', data.companyId)
+      .single()
+
+    await notifyPaymentReceived(admin, {
+      companyId: data.companyId,
+      companyName: company?.name,
+      clientEmail: client?.email,
+      clientName: client?.name,
+      jobTitle: (schedule as any)?.title || 'Job',
+      amount: data.amount,
+      scheduleId: data.scheduleId,
+      clientId: data.clientId,
+    })
+  })
+
   return { success: true, duplicate: false }
 }

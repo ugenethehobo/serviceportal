@@ -9,6 +9,7 @@ import {
   FileText,
   FolderOpen,
   LogOut,
+  MessageSquare,
   Settings,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -18,6 +19,7 @@ const navItems = [
   { href: '/portal/jobs', label: 'Jobs', icon: CalendarDays, exact: false },
   { href: '/portal/estimates', label: 'Estimates', icon: FileText, exact: false },
   { href: '/portal/documents', label: 'Documents', icon: FolderOpen, exact: false },
+  { href: '/portal/messages', label: 'Messages', icon: MessageSquare, exact: false },
   { href: '/portal/settings', label: 'Settings', icon: Settings, exact: false },
 ]
 
