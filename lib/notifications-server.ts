@@ -328,6 +328,64 @@ export async function notifyClientEstimateSent(
   })
 }
 
+export async function notifyClientInvoiceSent(
+  supabaseAdmin: SupabaseClient,
+  input: {
+    companyId: string
+    companyName?: string
+    clientEmail?: string | null
+    clientPhone?: string | null
+    clientName?: string | null
+    jobTitle: string
+    balanceDue: number
+    scheduleId: string
+  }
+) {
+  const baseUrl = getAppBaseUrl()
+  const portalUrl = `${baseUrl}/portal/documents`
+  const companyName = input.companyName?.trim() || 'Your service company'
+  const clientLabel = input.clientName?.trim() || 'there'
+  const amount = `$${Number(input.balanceDue).toFixed(2)}`
+
+  void import('@/lib/integration-events').then(({ dispatchCompanyZapierEvent }) =>
+    dispatchCompanyZapierEvent(supabaseAdmin, {
+      companyId: input.companyId,
+      event: 'invoice_sent',
+      data: {
+        schedule_id: input.scheduleId,
+        job_title: input.jobTitle,
+        balance_due: input.balanceDue,
+        client_name: input.clientName,
+      },
+    })
+  )
+
+  await dispatchNotification(supabaseAdmin, {
+    companyId: input.companyId,
+    event: 'invoice_sent',
+    email: input.clientEmail
+      ? {
+          to: input.clientEmail,
+          subject: `Invoice for ${input.jobTitle}`,
+          html: buildEmailShell(
+            companyName,
+            'Your invoice is ready',
+            `<p>Hi ${escapeHtml(clientLabel)},</p><p>Your invoice for <strong>${escapeHtml(input.jobTitle)}</strong> is ready.${input.balanceDue > 0 ? ` Balance due: <strong>${escapeHtml(amount)}</strong>.` : ' This job is paid in full.'}</p>`,
+            { label: 'View invoice', href: portalUrl }
+          ),
+          text: `${companyName} sent an invoice for ${input.jobTitle}${input.balanceDue > 0 ? ` (${amount} due)` : ''}. View: ${portalUrl}`,
+        }
+      : undefined,
+    sms: input.clientPhone
+      ? {
+          phone: input.clientPhone,
+          message: `${companyName}: Invoice for "${input.jobTitle}"${input.balanceDue > 0 ? ` — ${amount} due` : ''}. ${portalUrl}`,
+        }
+      : undefined,
+    metadata: { schedule_id: input.scheduleId },
+  })
+}
+
 export async function notifyStaffEstimateResponse(
   supabaseAdmin: SupabaseClient,
   input: {

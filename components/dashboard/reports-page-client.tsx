@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AR_AGING_BUCKET_LABELS } from '@/lib/ar-aging'
 import { formatReportsCurrency, REPORTS_PERIOD_LABELS, type ReportsData, type ReportsPeriod } from '@/lib/reports'
 
 const revenueChartConfig = {
@@ -133,7 +134,7 @@ export function ReportsPageClient() {
             <SummaryCard
               label="Outstanding"
               value={formatReportsCurrency(data.summary.balanceDue)}
-              hint="Open job prices (scheduled & in progress)"
+              hint="Open job balances from line items"
               highlight={data.summary.balanceDue > 0}
             />
             <SummaryCard
@@ -246,6 +247,104 @@ export function ReportsPageClient() {
               )}
             </Card>
           </div>
+
+          <Card className="p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight">AR aging</h2>
+                <p className="text-sm text-muted-foreground">
+                  Outstanding invoices by age since issue date
+                </p>
+              </div>
+              {data.arAging.totalOutstanding > 0 && (
+                <Badge variant="outline" className="text-orange-600 border-orange-500/40">
+                  {formatReportsCurrency(data.arAging.totalOutstanding)} total
+                </Badge>
+              )}
+            </div>
+
+            {data.arAging.totalOutstanding > 0 ? (
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                  {data.arAging.buckets.map((bucket) => (
+                    <div
+                      key={bucket.bucket}
+                      className="rounded-lg border bg-muted/20 px-4 py-3"
+                    >
+                      <p className="text-xs text-muted-foreground">{bucket.label}</p>
+                      <p className="text-lg font-semibold mt-1">
+                        {formatReportsCurrency(bucket.amount)}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {bucket.invoiceCount} invoice{bucket.invoiceCount === 1 ? '' : 's'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40">
+                      <tr className="text-left">
+                        <th className="p-3 font-medium">Client</th>
+                        <th className="p-3 font-medium">Job</th>
+                        <th className="p-3 font-medium">Age</th>
+                        <th className="p-3 font-medium text-right">Amount due</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.arAging.invoices.slice(0, 25).map((row) => (
+                        <tr key={row.scheduleId} className="border-t">
+                          <td className="p-3">
+                            <Link
+                              href={`/dashboard/clients/${row.clientId}`}
+                              className="font-medium hover:underline"
+                            >
+                              {row.clientName}
+                            </Link>
+                          </td>
+                          <td className="p-3">
+                            <Link
+                              href={`/dashboard/clients/${row.clientId}/jobs/${row.scheduleId}?tab=billing`}
+                              className="hover:underline text-muted-foreground"
+                            >
+                              {row.jobTitle}
+                            </Link>
+                          </td>
+                          <td className="p-3">
+                            <Badge
+                              variant="outline"
+                              className={
+                                row.bucket === 'over_90'
+                                  ? 'text-red-600 border-red-500/40'
+                                  : row.bucket === 'current'
+                                    ? 'text-emerald-600 border-emerald-500/40'
+                                    : 'text-orange-600 border-orange-500/40'
+                              }
+                            >
+                              {row.daysOutstanding}d · {AR_AGING_BUCKET_LABELS[row.bucket].split(' ')[0]}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-right font-medium text-orange-600">
+                            {formatReportsCurrency(row.balanceDue)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {data.arAging.invoices.length > 25 && (
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Showing 25 of {data.arAging.invoices.length} outstanding invoices.
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="py-12 text-center border border-dashed rounded-lg text-sm text-muted-foreground">
+                No outstanding invoices — AR is current.
+              </div>
+            )}
+          </Card>
 
           <Card className="p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3 mb-4">

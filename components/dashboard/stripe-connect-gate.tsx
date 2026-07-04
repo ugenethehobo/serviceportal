@@ -29,30 +29,35 @@ export function StripeConnectGate({ children }: StripeConnectGateProps) {
   }, [])
 
   if (isLoading) {
-    return <div className="text-sm text-muted-foreground">Checking billing setup...</div>
+    return <div className="text-sm text-muted-foreground">Loading billing...</div>
   }
 
-  if (!status?.billingEnabled) {
-    return (
-      <Card className="p-8 flex flex-col items-center justify-center text-center max-w-md mx-auto">
-        <CreditCard className="size-10 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Connect Stripe to enable billing</h3>
-        <p className="text-sm text-muted-foreground mb-6">
-          {status?.stripeAccountId && !status.chargesEnabled
-            ? 'Your Stripe account is connected but not fully set up yet. Complete onboarding in Settings.'
-            : 'Each company uses their own Stripe account. Connect yours in Settings before creating invoices or accepting payments.'}
-        </p>
-        <Link
-          href="/dashboard/settings"
-          className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/80"
-        >
-          Go to Settings
-        </Link>
-      </Card>
-    )
-  }
-
-  return <>{children}</>
+  return (
+    <div className="flex flex-col gap-4 flex-1 min-h-0">
+      {!status?.billingEnabled && (
+        <Card className="flex items-start gap-3 border-amber-200 bg-amber-50/80 p-4 text-sm dark:border-amber-900/50 dark:bg-amber-950/20">
+          <CreditCard className="size-4 mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" />
+          <div className="min-w-0">
+            <p className="font-medium text-amber-900 dark:text-amber-100">
+              Card payments need Stripe
+            </p>
+            <p className="text-amber-800/90 dark:text-amber-200/80 mt-0.5">
+              {status?.stripeAccountId && !status.chargesEnabled
+                ? 'Finish Stripe setup in Settings so clients can pay by card in the portal.'
+                : 'Line items and cash/check payments work now. Connect Stripe in Settings when you want clients to pay online.'}
+            </p>
+            <Link
+              href="/dashboard/settings?section=billing"
+              className="inline-flex mt-2 text-sm font-medium text-amber-900 underline underline-offset-2 dark:text-amber-100"
+            >
+              Open billing settings
+            </Link>
+          </div>
+        </Card>
+      )}
+      {children}
+    </div>
+  )
 }
 
 export function StripeConnectBadge({ status }: { status: CompanyStripeStatus }) {
@@ -61,7 +66,7 @@ export function StripeConnectBadge({ status }: { status: CompanyStripeStatus }) 
   return (
     <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
       <CheckCircle2 className="size-4" />
-      Stripe connected — payments go to your account
+      Stripe connected — clients can pay online in the portal
     </div>
   )
 }

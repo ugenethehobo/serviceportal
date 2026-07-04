@@ -39,6 +39,10 @@ interface User {
 interface Company {
   id: string
   name: string
+  subscription_plan?: string | null
+  subscription_status?: string | null
+  seat_limit?: number | null
+  trial_ends_at?: string | null
 }
 
 export default function CompanyUsersPage() {
@@ -235,10 +239,22 @@ useEffect(() => {
         </BreadcrumbList>
       </Breadcrumb>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{company?.name}</h1>
           <p className="text-muted-foreground">User Management</p>
+          {company && (
+            <div className="flex flex-wrap items-center gap-2 mt-2 text-sm text-muted-foreground">
+              <Badge variant="outline">{company.subscription_plan || 'trial'}</Badge>
+              <span>
+                Seats {users.filter((u) => u.role === 'company_admin' || u.role === 'team_member').length}/
+                {company.seat_limit ?? 10}
+              </span>
+              {company.trial_ends_at && (
+                <span>Trial ends {new Date(company.trial_ends_at).toLocaleDateString()}</span>
+              )}
+            </div>
+          )}
         </div>
         <Button onClick={() => setIsAddUserModalOpen(true)}>+ Add User</Button>
       </div>

@@ -1,22 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { getClientDocumentsAction } from '@/app/action'
-import { UploadedDocumentsPanel } from '@/components/dashboard/uploaded-documents-panel'
-import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
-import { toast } from 'sonner'
-import { Download, FileText } from 'lucide-react'
-import type { ClientDocument } from '@/lib/estimates'
+import { FolderDocumentsPanel } from '@/components/dashboard/folder-documents-panel'
 
 interface ClientDocumentsPanelProps {
   clientId: string
@@ -29,95 +13,24 @@ export function ClientDocumentsPanel({
   refreshKey = 0,
   variant = 'staff',
 }: ClientDocumentsPanelProps) {
-  const [estimateDocuments, setEstimateDocuments] = useState<ClientDocument[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-
-  const fetchDocuments = useCallback(async () => {
-    const result = await getClientDocumentsAction(clientId)
-    if (result.success) {
-      setEstimateDocuments((result.documents || []) as ClientDocument[])
-    } else {
-      toast.error(result.error || 'Failed to load documents')
-    }
-    setIsLoading(false)
-  }, [clientId])
-
-  useEffect(() => {
-    setIsLoading(true)
-    fetchDocuments()
-  }, [fetchDocuments, refreshKey])
-
-  if (isLoading) {
-    return <div className="text-sm text-muted-foreground">Loading documents...</div>
+  if (variant === 'portal') {
+    return (
+      <FolderDocumentsPanel
+        clientId={clientId}
+        variant="portal"
+        refreshKey={refreshKey}
+        title="Documents"
+        description="Invoices, estimates, and files from your service provider — organized by job."
+      />
+    )
   }
 
   return (
-    <div className="flex flex-col gap-6 flex-1 min-h-0">
-      <div className="flex flex-col gap-4 flex-1 min-h-0">
-        <div>
-          <h3 className="font-semibold tracking-tight">Estimate PDFs</h3>
-          {variant === 'staff' && (
-            <p className="text-sm text-muted-foreground mt-1">
-              Generated automatically when you create or update an estimate.
-            </p>
-          )}
-        </div>
-
-        {estimateDocuments.length > 0 ? (
-          <ScrollArea className="border rounded-lg flex-1 min-h-0 max-h-72" viewportClassName="scroll-fade">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Document</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="w-28" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {estimateDocuments.map((doc) => (
-                  <TableRow key={doc.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <FileText className="size-4 text-muted-foreground shrink-0" />
-                        <span className="font-medium">{doc.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(doc.created_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(`/api/documents/${doc.id}/download`, '_blank')}
-                      >
-                        <Download className="size-4" />
-                        Download
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        ) : (
-          <div className="flex items-center justify-center border border-dashed rounded-lg py-10">
-            <p className="text-muted-foreground text-sm">
-              {variant === 'portal'
-                ? 'No estimate PDFs shared yet.'
-                : 'No estimate PDFs yet. Create an estimate to generate one automatically.'}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <Separator />
-
-      <UploadedDocumentsPanel
-        clientId={clientId}
-        variant={variant}
-        refreshKey={refreshKey}
-      />
-    </div>
+    <FolderDocumentsPanel
+      clientId={clientId}
+      refreshKey={refreshKey}
+      title="All Documents"
+      description="Every file for this client in one place — job invoices, uploads, and client-level files organized by job folder."
+    />
   )
 }

@@ -1,5 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { revalidatePath } from 'next/cache'
 import { calcBillingSummary, calcLineAmount } from '@/lib/billing'
+import { syncJobInvoiceDocument } from '@/lib/invoices-server'
+import { isJobBillableForClient } from '@/lib/portal-jobs'
 
 type SupabaseAdmin = SupabaseClient
 
@@ -91,6 +94,8 @@ export async function fetchJobBillingTotals(scheduleId: string, clientId: string
       id,
       client_id,
       title,
+      status,
+      start_time,
       client:clients!client_id (company_id)
     `)
     .eq('id', scheduleId)
@@ -113,7 +118,15 @@ export async function fetchJobBillingTotals(scheduleId: string, clientId: string
     .select('amount')
     .eq('schedule_id', scheduleId)
 
-  const summary = calcBillingSummary(lineItems || [], payments || [])
+  const rawSummary = calcBillingSummary(lineItems || [], payments || [])
+  const billable = isJobBillableForClient(
+    { status: (schedule as any).status, startTime: (schedule as any).start_time },
+    new Date()
+  )
+  const summary = {
+    ...rawSummary,
+    balanceDue: billable ? rawSummary.balanceDue : 0,
+  }
 
   return {
     scheduleId,
@@ -122,6 +135,7 @@ export async function fetchJobBillingTotals(scheduleId: string, clientId: string
     jobTitle: (schedule as any).title,
     summary,
     lineItemCount: lineItems?.length ?? 0,
+    billable,
   }
 }
 
@@ -156,6 +170,11 @@ export async function recordStripePayment(data: {
 
   if (error) throw error
 
+  revalidatePath('/dashboard/payments')
+  revalidatePath('/dashboard/reports')
+  revalidatePath(`/dashboard/clients/${data.clientId}`)
+  revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.scheduleId}`)
+
   const { data: schedule } = await supabaseAdmin
     .from('schedules')
     .select('title, client:clients!client_id (name, email)')
@@ -189,5 +208,52 @@ export async function recordStripePayment(data: {
     })
   })
 
+  try {
+    await syncJobInvoiceDocument(data.scheduleId)
+  } catch (error) {
+    console.error('syncJobInvoiceDocument after stripe payment error:', error)
+  }
+
   return { success: true, duplicate: false }
+}
+
+export async function handleStripeRefund(paymentIntentId: string, refundedAmount: number) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  const { data: payment, error } = await supabaseAdmin
+    .from('billing_payments')
+    .select('id, amount, schedule_id, client_id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+
+  if (error || !payment) return { handled: false }
+
+  const currentAmount = Number(payment.amount)
+  const refundTotal = Math.round(refundedAmount * 100) / 100
+
+  if (refundTotal >= currentAmount - 0.009) {
+    await supabaseAdmin.from('billing_payments').delete().eq('id', payment.id)
+  } else {
+    const nextAmount = Math.round((currentAmount - refundTotal) * 100) / 100
+    await supabaseAdmin
+      .from('billing_payments')
+      .update({
+        amount: nextAmount,
+        notes: 'Partial Stripe refund applied',
+      })
+      .eq('id', payment.id)
+  }
+
+  revalidatePath(`/dashboard/clients/${payment.client_id}`)
+  revalidatePath(`/dashboard/clients/${payment.client_id}/jobs/${payment.schedule_id}`)
+  revalidatePath('/dashboard/payments')
+  revalidatePath('/dashboard/reports')
+
+  try {
+    await syncJobInvoiceDocument(payment.schedule_id)
+  } catch (error) {
+    console.error('syncJobInvoiceDocument after stripe refund error:', error)
+  }
+
+  return { handled: true }
 }

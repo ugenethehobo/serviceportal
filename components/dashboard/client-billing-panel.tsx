@@ -63,9 +63,18 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
 
   return (
     <div className="flex flex-col gap-6 flex-1 min-h-0">
-      <p className="text-sm text-muted-foreground">
-        Clients pay job balances through the client portal. Record cash payments on individual job billing tabs.
-      </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Clients pay job balances through the client portal. Record cash payments on individual job billing tabs.
+        </p>
+        <Link
+          href="/dashboard/payments"
+          className="text-sm font-medium inline-flex items-center gap-1.5 hover:underline shrink-0"
+        >
+          View all transactions
+          <ExternalLink className="size-3.5" />
+        </Link>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <SummaryCard label="Total Billed" value={formatCurrency(billing.summary.totalCharged)} />

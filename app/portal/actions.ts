@@ -2,7 +2,16 @@
 
 import { revalidatePath } from 'next/cache'
 import { getSessionProfile, createSupabaseAdmin } from '@/lib/portal-auth'
+import { getDisplayAddressFromClient } from '@/lib/address'
 import { calcBillingSummary, formatCurrency } from '@/lib/billing'
+import { buildPortalActivity } from '@/lib/portal-activity'
+import {
+  isJobBillableForClient,
+  partitionPortalJobs,
+  sumBillableBalanceDue,
+  toPayableJobRows,
+  type PortalJob,
+} from '@/lib/portal-jobs'
 import { syncEstimateDocument } from '@/lib/estimates-server'
 import { validateMessageBody, type MessagingMessage } from '@/lib/messaging'
 import type { UploadedDocument } from '@/lib/uploaded-documents'
@@ -35,73 +44,94 @@ async function requirePortalClient() {
   return { profile: session.profile, clientId: session.profile.client_id, companyId: client.company_id }
 }
 
-export async function getPortalHomeData() {
-  const { clientId } = await requirePortalClient()
+async function getPortalCompanyTimezone(companyId: string) {
   const admin = createSupabaseAdmin()
-  const now = new Date().toISOString()
+  const { data: company } = await admin
+    .from('companies')
+    .select('timezone')
+    .eq('id', companyId)
+    .single()
 
-  const { data: schedules } = await admin
-    .from('schedules')
-    .select('id')
-    .eq('client_id', clientId)
-    .gte('start_time', now)
-    .neq('status', 'archived')
-    .neq('status', 'cancelled')
+  return company?.timezone || 'America/Chicago'
+}
 
-  const scheduleIds = (schedules || []).map((s) => s.id)
-  let balanceDue = 0
+async function getPortalClientAddress(clientId: string) {
+  const admin = createSupabaseAdmin()
+  const { data: client } = await admin
+    .from('clients')
+    .select(
+      'address, address_street, address_unit, address_city, address_state, address_zip'
+    )
+    .eq('id', clientId)
+    .single()
 
-  if (scheduleIds.length > 0) {
-    const { data: lineItems } = await admin
-      .from('billing_line_items')
-      .select('amount, schedule_id')
-      .in('schedule_id', scheduleIds)
+  if (!client) return ''
+  return getDisplayAddressFromClient(client) || ''
+}
 
-    const { data: payments } = await admin
-      .from('billing_payments')
-      .select('amount, schedule_id')
-      .in('schedule_id', scheduleIds)
-
-    for (const sid of scheduleIds) {
-      const lines = (lineItems || []).filter((l) => l.schedule_id === sid)
-      const pays = (payments || []).filter((p) => p.schedule_id === sid)
-      balanceDue += calcBillingSummary(lines, pays).balanceDue
-    }
+function mapScheduleToPortalJob(
+  schedule: {
+    id: string
+    title: string
+    description?: string | null
+    start_time: string
+    end_time: string
+    status: string
+    price: number | null
+    crew?: { id: string; name: string } | { id: string; name: string }[] | null
+  },
+  lineItems: { schedule_id: string; amount: number }[],
+  payments: { schedule_id: string; amount: number }[],
+  serviceAddress: string,
+  now = new Date()
+): PortalJob {
+  const lines = lineItems.filter((l) => l.schedule_id === schedule.id)
+  const pays = payments.filter((p) => p.schedule_id === schedule.id)
+  const summary = calcBillingSummary(lines, pays)
+  const crew = Array.isArray(schedule.crew) ? schedule.crew[0] : schedule.crew
+  const scheduleShape = {
+    status: schedule.status,
+    startTime: schedule.start_time,
+    endTime: schedule.end_time,
+    title: schedule.title,
+    description: schedule.description ?? null,
+    price: schedule.price || 0,
+    id: schedule.id,
+    crew: crew ? { id: crew.id, name: crew.name } : null,
+    serviceAddress,
   }
-
-  const { count: pendingEstimatesCount } = await admin
-    .from('estimates')
-    .select('id', { count: 'exact', head: true })
-    .eq('client_id', clientId)
-    .eq('status', 'sent')
-
-  const { data: nextJob } = await admin
-    .from('schedules')
-    .select('id, title, start_time')
-    .eq('client_id', clientId)
-    .gte('start_time', now)
-    .neq('status', 'archived')
-    .neq('status', 'cancelled')
-    .order('start_time', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+  const billable = isJobBillableForClient(scheduleShape, now)
+  const displayBalance = billable ? summary.balanceDue : 0
 
   return {
-    upcomingJobCount: schedules?.length ?? 0,
-    balanceDue,
-    balanceDueFormatted: formatCurrency(balanceDue),
-    pendingEstimatesCount: pendingEstimatesCount ?? 0,
-    nextJob: nextJob ?? null,
+    ...scheduleShape,
+    balanceDue: displayBalance,
+    balanceDueFormatted: formatCurrency(displayBalance),
+    canPay: billable && summary.balanceDue > 0 && lines.length > 0,
+    isPaid: lines.length > 0 && summary.balanceDue <= 0,
+    totalCharged: summary.totalCharged,
+    totalPaid: summary.totalPaid,
+    isBillable: billable,
   }
 }
 
-export async function getPortalJobsAction() {
-  const { clientId } = await requirePortalClient()
+async function fetchPortalJobsForClient(clientId: string): Promise<PortalJob[]> {
   const admin = createSupabaseAdmin()
 
   const { data: schedules, error } = await admin
     .from('schedules')
-    .select('id, title, start_time, end_time, status, price')
+    .select(
+      `
+      id,
+      title,
+      description,
+      start_time,
+      end_time,
+      status,
+      price,
+      crew:crews!crew_id (id, name)
+    `
+    )
     .eq('client_id', clientId)
     .order('start_time', { ascending: true })
 
@@ -109,52 +139,126 @@ export async function getPortalJobsAction() {
 
   const jobs = schedules || []
   const scheduleIds = jobs.map((j) => j.id)
+  const serviceAddress = await getPortalClientAddress(clientId)
 
   let lineItems: { schedule_id: string; amount: number }[] = []
   let payments: { schedule_id: string; amount: number }[] = []
 
   if (scheduleIds.length > 0) {
-    const { data: lines } = await admin
-      .from('billing_line_items')
-      .select('schedule_id, amount')
-      .in('schedule_id', scheduleIds)
-
-    const { data: pays } = await admin
-      .from('billing_payments')
-      .select('schedule_id, amount')
-      .in('schedule_id', scheduleIds)
+    const [{ data: lines }, { data: pays }] = await Promise.all([
+      admin.from('billing_line_items').select('schedule_id, amount').in('schedule_id', scheduleIds),
+      admin.from('billing_payments').select('schedule_id, amount').in('schedule_id', scheduleIds),
+    ])
 
     lineItems = lines || []
     payments = pays || []
   }
 
-  const jobsWithBilling = jobs.map((job) => {
-    const lines = lineItems.filter((l) => l.schedule_id === job.id)
-    const pays = payments.filter((p) => p.schedule_id === job.id)
-    const summary = calcBillingSummary(lines, pays)
+  const now = new Date()
+  return jobs.map((job) => mapScheduleToPortalJob(job, lineItems, payments, serviceAddress, now))
+}
 
-    return {
-      ...job,
-      balanceDue: summary.balanceDue,
-      balanceDueFormatted: formatCurrency(summary.balanceDue),
-      canPay: summary.balanceDue > 0 && lines.length > 0,
-      isPaid: lines.length > 0 && summary.balanceDue <= 0,
-    }
+export async function getPortalHomeData() {
+  const { clientId, companyId } = await requirePortalClient()
+  // clientId exposed to client for payment flows (portal session only)
+  const admin = createSupabaseAdmin()
+  const timezone = await getPortalCompanyTimezone(companyId)
+  const jobs = await fetchPortalJobsForClient(clientId)
+  const now = new Date()
+  const { activeNow, comingUp } = partitionPortalJobs(jobs, now)
+
+  const balanceDue = sumBillableBalanceDue(jobs)
+
+  const [
+    { data: estimates },
+    { data: allLineItems },
+    { data: recentPayments },
+    { data: scheduleRows },
+  ] = await Promise.all([
+    admin
+      .from('estimates')
+      .select('id, title, total, status, updated_at')
+      .eq('client_id', clientId)
+      .in('status', ['sent', 'accepted', 'declined', 'converted']),
+    admin
+      .from('billing_line_items')
+      .select('schedule_id, created_at')
+      .eq('client_id', clientId),
+    admin
+      .from('billing_payments')
+      .select('id, schedule_id, amount, payment_date, created_at, source')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+      .limit(100),
+    admin
+      .from('schedules')
+      .select('id, title, status, start_time')
+      .eq('client_id', clientId),
+  ])
+
+  const schedulesById = new Map(
+    (scheduleRows || []).map((row) => [row.id, row])
+  )
+
+  const activity = buildPortalActivity({
+    timezone,
+    estimates: estimates || [],
+    jobs,
+    payments: recentPayments || [],
+    lineItems: allLineItems || [],
+    schedulesById,
+    now,
   })
 
-  return { jobs: jobsWithBilling }
+  const payableJobs = toPayableJobRows(jobs)
+
+  return {
+    clientId,
+    timezone,
+    activeJobs: activeNow,
+    upcomingJobs: comingUp,
+    upcomingJobCount: activeNow.length + comingUp.length,
+    balanceDue,
+    balanceDueFormatted: formatCurrency(balanceDue),
+    payableJobs,
+    activity,
+  }
+}
+
+export async function getPortalJobsAction() {
+  const { clientId, companyId } = await requirePortalClient()
+  const jobs = await fetchPortalJobsForClient(clientId)
+  const timezone = await getPortalCompanyTimezone(companyId)
+
+  return { jobs, timezone }
 }
 
 export async function getPortalJobBillingAction(scheduleId: string) {
-  const { clientId } = await requirePortalClient()
+  const { clientId, companyId } = await requirePortalClient()
   const admin = createSupabaseAdmin()
 
-  const { data: schedule } = await admin
-    .from('schedules')
-    .select('id, title, start_time, status, price, client_id')
-    .eq('id', scheduleId)
-    .eq('client_id', clientId)
-    .single()
+  const [{ data: schedule }, serviceAddress, timezone] = await Promise.all([
+    admin
+      .from('schedules')
+      .select(
+        `
+        id,
+        title,
+        description,
+        start_time,
+        end_time,
+        status,
+        price,
+        client_id,
+        crew:crews!crew_id (id, name)
+      `
+      )
+      .eq('id', scheduleId)
+      .eq('client_id', clientId)
+      .single(),
+    getPortalClientAddress(clientId),
+    getPortalCompanyTimezone(companyId),
+  ])
 
   if (!schedule) return { success: false as const, error: 'Job not found' }
 
@@ -175,20 +279,39 @@ export async function getPortalJobBillingAction(scheduleId: string) {
   if (paymentError) throw paymentError
 
   const summary = calcBillingSummary(lineItems || [], payments || [])
+  const crew = Array.isArray((schedule as any).crew)
+    ? (schedule as any).crew[0]
+    : (schedule as any).crew
+  const billable = isJobBillableForClient(
+    { status: schedule.status, startTime: schedule.start_time },
+    new Date()
+  )
+  const canPay = billable && summary.balanceDue > 0 && (lineItems?.length ?? 0) > 0
+  const portalSummary = {
+    ...summary,
+    balanceDue: billable ? summary.balanceDue : 0,
+  }
 
   return {
     success: true as const,
     billing: {
       scheduleId: schedule.id,
       title: schedule.title,
+      description: schedule.description,
       startTime: schedule.start_time,
+      endTime: schedule.end_time,
       status: schedule.status,
       listPrice: schedule.price || 0,
       lineItems: lineItems || [],
       payments: payments || [],
-      summary,
+      summary: portalSummary,
+      canPay,
+      isBillable: billable,
+      crew: crew ? { id: crew.id, name: crew.name } : null,
+      serviceAddress,
     },
     clientId,
+    timezone,
   }
 }
 
@@ -336,6 +459,28 @@ export async function sendPortalMessagingMessageAction(
   }
 }
 
+export async function getPortalClientJobsForDocumentsAction(): Promise<
+  | { success: true; jobs: Array<{ id: string; title: string; start_time: string; status: string }> }
+  | { success: false; error: string }
+> {
+  try {
+    const { clientId } = await requirePortalClient()
+    const admin = createSupabaseAdmin()
+
+    const { data: jobs, error } = await admin
+      .from('schedules')
+      .select('id, title, start_time, status')
+      .eq('client_id', clientId)
+      .order('start_time', { ascending: false })
+
+    if (error) throw error
+    return { success: true, jobs: jobs || [] }
+  } catch (error: any) {
+    console.error('getPortalClientJobsForDocumentsAction error:', error)
+    return { success: false, error: error.message || 'Failed to load jobs' }
+  }
+}
+
 export async function getPortalUploadedDocumentsAction(): Promise<
   { success: true; documents: UploadedDocument[] } | { success: false; error: string }
 > {
@@ -347,8 +492,7 @@ export async function getPortalUploadedDocumentsAction(): Promise<
       .from('client_documents')
       .select('*')
       .eq('client_id', clientId)
-      .eq('source', 'upload')
-      .is('schedule_id', null)
+      .in('source', ['upload', 'estimate', 'invoice'])
       .order('created_at', { ascending: false })
 
     if (error) {

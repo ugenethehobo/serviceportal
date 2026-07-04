@@ -26,6 +26,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { getDashboardData } from "@/app/action"
 import { AppearanceSettings } from '@/components/appearance-settings'
+import {
+  computePlatformMrr,
+  getSubscriptionDisplayLabel,
+  normalizePlatformPlan,
+  normalizeSubscriptionStatus,
+} from '@/lib/platform-billing'
 
 interface Company {
   id: string
@@ -33,10 +39,16 @@ interface Company {
   address?: string
   phone?: string
   logo_url?: string
-  subscription: 'Free Trial' | 'Basic' | 'Pro' | 'Canceled'
+  subscription_plan?: string | null
+  subscription_status?: string | null
+  subscription: string
   status: string
   created_at: string
   users: number
+  seats_used?: number
+  seat_limit?: number | null
+  trial_ends_at?: string | null
+  promo_code?: string | null
 }
 
 export default function AdminDashboard() {
@@ -71,7 +83,15 @@ export default function AdminDashboard() {
 
   const fetchDashboardData = async () => {
     const { companies: companiesData, totalUsers: total } = await getDashboardData()
-    setCompanies(companiesData)
+    const normalized = (companiesData || []).map((company: Company) => {
+      const plan = normalizePlatformPlan(company.subscription_plan)
+      const status = normalizeSubscriptionStatus(company.subscription_status)
+      return {
+        ...company,
+        subscription: getSubscriptionDisplayLabel(plan, status, company.promo_code),
+      }
+    })
+    setCompanies(normalized)
     setTotalUsers(total)
   }
 
@@ -84,6 +104,8 @@ export default function AdminDashboard() {
     const matchesSubscription = subscriptionFilter === 'All' || company.subscription === subscriptionFilter
     return matchesSearch && matchesSubscription
   })
+
+  const billingMetrics = computePlatformMrr(companies)
 
   const getSubscriptionBadge = (sub: string) => {
     const variants: Record<string, any> = {
@@ -251,11 +273,13 @@ export default function AdminDashboard() {
         </Card>
         <Card className="p-4">
           <div className="text-sm text-muted-foreground">Active Subscriptions</div>
-          <div className="text-2xl font-semibold mt-1">19</div>
+          <div className="text-2xl font-semibold mt-1">{billingMetrics.activeSubscriptions}</div>
         </Card>
         <Card className="p-4">
           <div className="text-sm text-muted-foreground">MRR</div>
-          <div className="text-2xl font-semibold mt-1">$12,840</div>
+          <div className="text-2xl font-semibold mt-1">
+            ${billingMetrics.mrr.toLocaleString('en-US')}
+          </div>
         </Card>
       </div>
 
@@ -289,6 +313,7 @@ export default function AdminDashboard() {
                 <TableHead>Company</TableHead>
                 <TableHead>Users</TableHead>
                 <TableHead>Subscription</TableHead>
+                <TableHead>Seats</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -299,7 +324,22 @@ export default function AdminDashboard() {
                 <TableRow key={company.id}>
                   <TableCell className="font-medium">{company.name}</TableCell>
                   <TableCell>{company.users}</TableCell>
-                  <TableCell>{getSubscriptionBadge(company.subscription)}</TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      {getSubscriptionBadge(company.subscription)}
+                      {company.promo_code && (
+                        <p className="text-xs text-emerald-700">Promo: {company.promo_code}</p>
+                      )}
+                      {company.trial_ends_at && company.subscription === 'Free Trial' && (
+                        <p className="text-xs text-muted-foreground">
+                          Ends {new Date(company.trial_ends_at).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {company.seats_used ?? company.users}/{company.seat_limit ?? 10}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={company.status === 'Active' ? 'default' : 'secondary'}>{company.status}</Badge>
                   </TableCell>

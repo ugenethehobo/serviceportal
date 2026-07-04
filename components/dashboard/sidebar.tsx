@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { SidebarNavLink } from '@/components/navigation/sidebar-nav-link'
 import { LogOut, Menu } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getDashboardUserDataAction } from '@/app/action'
@@ -176,21 +176,15 @@ function DashboardNavLinks({
         const Icon = item.icon
 
         return (
-          <Link
+          <SidebarNavLink
             key={item.href}
             href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              'flex items-center rounded-lg font-medium transition-colors',
-              expanded ? 'px-3 py-2.5 text-sm' : 'px-3 py-2 text-sm justify-center',
-              isActive
-                ? 'bg-accent text-accent-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-            )}
-          >
-            <Icon className="h-5 w-5 shrink-0" />
-            {expanded && <span className="ml-3 truncate">{item.label}</span>}
-          </Link>
+            label={item.label}
+            icon={Icon}
+            isActive={isActive}
+            expanded={expanded}
+            onNavigate={onNavigate}
+          />
         )
       })}
     </nav>

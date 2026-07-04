@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { SYSTEM_DOCUMENT_CATEGORY_ESTIMATES } from '@/lib/document-categories'
 import { generateEstimatePdf } from '@/lib/estimate-pdf'
 import { calcEstimateTotal, formatEstimateNumber, resolveAutoEstimateStatus, type EstimateStatus } from '@/lib/estimates'
 import { calcLineAmount } from '@/lib/billing'
@@ -189,6 +190,7 @@ export async function syncEstimateDocument(estimateId: string) {
         name: fileName,
         storage_path: storagePath,
         file_type: 'application/pdf',
+        category: SYSTEM_DOCUMENT_CATEGORY_ESTIMATES,
       })
       .eq('id', existingDoc.id)
   } else {
@@ -199,6 +201,7 @@ export async function syncEstimateDocument(estimateId: string) {
       name: fileName,
       storage_path: storagePath,
       file_type: 'application/pdf',
+      category: SYSTEM_DOCUMENT_CATEGORY_ESTIMATES,
       source: 'estimate',
     })
   }

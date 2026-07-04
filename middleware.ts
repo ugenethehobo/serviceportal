@@ -63,13 +63,10 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (pathname === '/') {
-    const url = request.nextUrl.clone()
-    if (!user) {
-      url.pathname = '/login'
-      return NextResponse.redirect(url)
-    }
+  const isPublicMarketingRoute = pathname === '/' || pathname === '/signup'
 
+  if (pathname === '/' && user) {
+    const url = request.nextUrl.clone()
     const profile = await getProfileRole(user.id)
     url.pathname = getPostLoginPath(
       profile?.role || '',
@@ -85,7 +82,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (user && (isStaffRoute || isPortalRoute || pathname === '/login')) {
+  if (user && (isStaffRoute || isPortalRoute || pathname === '/login' || isPublicMarketingRoute)) {
     const profile = await getProfileRole(user.id)
     const role = profile?.role
 
@@ -111,7 +108,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    if (pathname === '/login') {
+    if (pathname === '/login' || pathname === '/signup') {
       const url = request.nextUrl.clone()
       url.pathname = getPostLoginPath(
         role || '',

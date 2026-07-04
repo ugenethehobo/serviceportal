@@ -1,9 +1,8 @@
 import { getPortalJobsAction } from '@/app/portal/actions'
 import { PortalJobsPageClient } from '@/components/portal/portal-jobs-page-client'
-import type { PortalJobListItem } from '@/components/portal/portal-jobs-list'
 
 export default async function PortalJobsPage() {
-  const { jobs } = await getPortalJobsAction()
+  const { jobs, timezone } = await getPortalJobsAction()
 
-  return <PortalJobsPageClient jobs={jobs as PortalJobListItem[]} />
+  return <PortalJobsPageClient jobs={jobs} timezone={timezone} />
 }

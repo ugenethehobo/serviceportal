@@ -27,6 +27,7 @@ import {
   updateClientAction,
 } from "@/app/action"
 import { toast } from 'sonner'
+import { computeOpenJobBalancesByClient } from '@/lib/billing'
 import { StructuredAddressForm } from '@/components/dashboard/company-address-form'
 import {
   emptyStructuredAddress,
@@ -112,11 +113,27 @@ export default function ClientsPage() {
 
     if (clientIds.length > 0) {
       const now = new Date().toISOString()
-      const { data: schedules } = await supabase
-        .from('schedules')
-        .select('client_id, status, start_time, price')
-        .in('client_id', clientIds)
-        .in('status', ['scheduled', 'in_progress'])
+      const [{ data: schedules }, { data: lineItems }, { data: payments }] = await Promise.all([
+        supabase
+          .from('schedules')
+          .select('id, client_id, status, start_time, price')
+          .in('client_id', clientIds)
+          .in('status', ['scheduled', 'in_progress']),
+        supabase
+          .from('billing_line_items')
+          .select('schedule_id, client_id, amount')
+          .eq('company_id', profile.company_id),
+        supabase
+          .from('billing_payments')
+          .select('schedule_id, amount')
+          .eq('company_id', profile.company_id),
+      ])
+
+      const { byClient: amountDueByClient } = computeOpenJobBalancesByClient(
+        schedules || [],
+        lineItems || [],
+        payments || []
+      )
 
       if (schedules) {
         for (const schedule of schedules) {
@@ -129,16 +146,19 @@ export default function ClientsPage() {
             stats.jobsInProgress++
           }
 
-          if (schedule.status === 'scheduled' || schedule.status === 'in_progress') {
-            stats.amountDue += schedule.price || 0
-          }
-
           if (schedule.status === 'scheduled' && schedule.start_time > now) {
             if (!stats.nextJobDate || schedule.start_time < stats.nextJobDate) {
               stats.nextJobDate = schedule.start_time
             }
           }
         }
+      }
+
+      for (const [clientId, amountDue] of amountDueByClient.entries()) {
+        if (!statsMap[clientId]) {
+          statsMap[clientId] = { jobsInProgress: 0, amountDue: 0 }
+        }
+        statsMap[clientId].amountDue = amountDue
       }
     }
 

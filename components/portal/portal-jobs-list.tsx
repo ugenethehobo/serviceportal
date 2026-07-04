@@ -4,40 +4,29 @@ import { useRouter } from 'next/navigation'
 import { JobStatusBadge } from '@/components/dashboard/job-status-badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { formatCurrency } from '@/lib/billing'
-import { Calendar, ChevronRight, CreditCard } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import {
+  formatPortalArrivalWindow,
+  formatPortalJobDayHeading,
+  isJobActiveNow,
+  type PortalJob,
+} from '@/lib/portal-jobs'
+import { Calendar, ChevronRight, Clock, CreditCard, Users } from 'lucide-react'
 
-export type PortalJobListItem = {
-  id: string
-  title: string
-  start_time: string
-  end_time: string
-  status: string
-  price: number
-  balanceDue: number
-  balanceDueFormatted: string
-  canPay: boolean
-  isPaid: boolean
-}
+export type PortalJobListItem = PortalJob
 
-function formatJobDate(startTime: string) {
-  return new Date(startTime).toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
-function JobRow({ job }: { job: PortalJobListItem }) {
+function JobRow({ job, timezone }: { job: PortalJob; timezone: string }) {
   const router = useRouter()
+  const activeNow = isJobActiveNow(job)
 
   const openJob = () => router.push(`/portal/jobs/${job.id}`)
   const openPayment = (e: React.MouseEvent) => {
     e.stopPropagation()
     router.push(`/portal/jobs/${job.id}?pay=1`)
   }
+
+  const dayLabel = formatPortalJobDayHeading(job.startTime, timezone)
+  const arrivalWindow = formatPortalArrivalWindow(job.startTime, job.endTime, timezone)
 
   return (
     <Card
@@ -50,62 +39,79 @@ function JobRow({ job }: { job: PortalJobListItem }) {
           openJob()
         }
       }}
-      className="p-4 shadow-sm cursor-pointer transition-colors hover:bg-muted/40 hover:border-primary/30 group"
+      className={`p-4 sm:p-5 shadow-sm cursor-pointer transition-colors hover:bg-muted/40 hover:border-primary/30 group ${
+        activeNow ? 'border-primary/30 bg-primary/5' : ''
+      }`}
     >
-      <div className="flex items-start gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold text-base group-hover:text-primary transition-colors">
-              {job.title}
-            </h3>
-            <JobStatusBadge status={job.status} />
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start gap-3 min-w-0">
+          <div
+            className={`rounded-lg p-2.5 shrink-0 ${
+              activeNow ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            <Calendar className="size-5" />
           </div>
 
-          <p className="flex items-center gap-1.5 text-sm text-muted-foreground mt-1.5">
-            <Calendar className="size-3.5 shrink-0" />
-            {formatJobDate(job.start_time)}
-          </p>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {activeNow ? (
+                <Badge className="gap-1">
+                  <span className="size-1.5 rounded-full bg-current animate-pulse" />
+                  In progress
+                </Badge>
+              ) : (
+                <Badge variant="secondary">{dayLabel}</Badge>
+              )}
+              <JobStatusBadge status={job.status} />
+            </div>
 
-          <div className="flex flex-wrap items-center gap-3 mt-2 text-sm">
-            {job.canPay && (
-              <span className="font-medium text-orange-600">
-                {job.balanceDueFormatted} due
-              </span>
-            )}
-            {job.isPaid && (
-              <span className="font-medium text-green-700">Paid in full</span>
-            )}
-            {!job.canPay && !job.isPaid && job.price > 0 && (
-              <span className="text-muted-foreground">
-                Quoted {formatCurrency(job.price)}
-              </span>
+            <h3 className="font-semibold text-base sm:text-lg mt-2 group-hover:text-primary transition-colors">
+              {job.title}
+            </h3>
+
+            <div className="mt-3 space-y-1.5 text-sm">
+              <p className="inline-flex items-center gap-2 font-medium">
+                <Clock className="size-4 shrink-0 text-muted-foreground" />
+                {arrivalWindow}
+              </p>
+              <p className="inline-flex items-center gap-2 text-muted-foreground">
+                <Users className="size-4 shrink-0" />
+                {job.crew?.name || 'Crew to be assigned'}
+              </p>
+            </div>
+
+            {(job.canPay || job.isPaid) && (
+              <p className="mt-2 text-sm font-medium">
+                {job.canPay ? (
+                  <span className="text-orange-600">{job.balanceDueFormatted} due</span>
+                ) : (
+                  <span className="text-green-700">Paid in full</span>
+                )}
+              </p>
             )}
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
-          {job.canPay && (
-            <Button
-              size="sm"
-              onClick={openPayment}
-              className="gap-1.5"
-            >
-              <CreditCard className="size-4" />
-              Pay {job.balanceDueFormatted}
-            </Button>
-          )}
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           <Button
-            size="sm"
-            variant={job.canPay ? 'outline' : 'default'}
+            size="lg"
+            variant="outline"
             onClick={(e) => {
               e.stopPropagation()
               openJob()
             }}
-            className="gap-1"
+            className="w-full sm:w-auto gap-1"
           >
-            View
+            View details
             <ChevronRight className="size-4" />
           </Button>
+          {job.canPay && (
+            <Button size="lg" onClick={openPayment} className="w-full sm:w-auto gap-2">
+              <CreditCard className="size-4" />
+              Pay {job.balanceDueFormatted}
+            </Button>
+          )}
         </div>
       </div>
     </Card>
@@ -114,21 +120,23 @@ function JobRow({ job }: { job: PortalJobListItem }) {
 
 export function PortalJobsList({
   jobs,
+  timezone,
   emptyMessage,
 }: {
-  jobs: PortalJobListItem[]
+  jobs: PortalJob[]
+  timezone: string
   emptyMessage: string
 }) {
   if (jobs.length === 0) {
     return (
-      <div className="py-12 text-center text-sm text-muted-foreground">{emptyMessage}</div>
+      <div className="py-12 text-center text-sm text-muted-foreground px-4">{emptyMessage}</div>
     )
   }
 
   return (
     <div className="space-y-3 p-4">
       {jobs.map((job) => (
-        <JobRow key={job.id} job={job} />
+        <JobRow key={job.id} job={job} timezone={timezone} />
       ))}
     </div>
   )

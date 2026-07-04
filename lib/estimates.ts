@@ -38,7 +38,7 @@ export interface ClientDocument {
   file_name?: string | null
   storage_path: string
   file_type: string
-  source: 'estimate' | 'upload'
+  source: 'estimate' | 'upload' | 'invoice'
   category?: string | null
   file_size?: number | null
   notes?: string | null

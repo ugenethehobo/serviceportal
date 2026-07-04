@@ -41,6 +41,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Add line items before collecting payment' }, { status: 400 })
     }
 
+    if (!billing.billable) {
+      return NextResponse.json(
+        { error: 'Payment is not available until your visit begins' },
+        { status: 400 }
+      )
+    }
+
     if (billing.summary.balanceDue <= 0) {
       return NextResponse.json({ error: 'No balance due on this job' }, { status: 400 })
     }

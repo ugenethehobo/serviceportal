@@ -8,7 +8,10 @@ import { AppearanceSettings } from '@/components/appearance-settings'
 import { CompanyProfileSettings } from '@/components/dashboard/company-profile-settings'
 import { JobPhotoCategoriesSettings } from '@/components/dashboard/job-photo-categories-settings'
 import { NotificationSettings } from '@/components/dashboard/notification-settings'
+import { IntegrationsSettings } from '@/components/dashboard/integrations-settings'
+import { PlatformSubscriptionSettings } from '@/components/dashboard/platform-subscription-settings'
 import { StripeConnectSettings } from '@/components/dashboard/stripe-connect-settings'
+import { InvoiceTemplateSettings } from '@/components/dashboard/invoice-template-settings'
 import { UserProfileSettings } from '@/components/dashboard/user-profile-settings'
 import { UserSignInSettings } from '@/components/dashboard/user-sign-in-settings'
 import { SaveStatusBadge, type SaveStatus } from '@/components/dashboard/save-status-badge'
@@ -19,11 +22,20 @@ import {
   Building2,
   Camera,
   CreditCard,
+  FileText,
   KeyRound,
+  Link2,
   Palette,
+  Sparkles,
   User,
   type LucideIcon,
 } from 'lucide-react'
+import {
+  normalizePlatformPlan,
+  normalizeSubscriptionStatus,
+  type PlatformPlanId,
+  type PlatformSubscriptionStatus,
+} from '@/lib/platform-billing'
 import { toast } from 'sonner'
 
 type SettingsSectionId =
@@ -32,8 +44,11 @@ type SettingsSectionId =
   | 'appearance'
   | 'company'
   | 'billing'
+  | 'subscription'
+  | 'invoice-template'
   | 'job-photos'
   | 'notifications'
+  | 'integrations'
 
 type SettingsSection = {
   id: SettingsSectionId
@@ -71,9 +86,23 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   },
   {
     id: 'billing',
-    label: 'Billing',
-    description: 'Stripe and payments.',
+    label: 'Payments',
+    description: 'Stripe Connect for client payments.',
     icon: CreditCard,
+    adminOnly: true,
+  },
+  {
+    id: 'subscription',
+    label: 'Subscription',
+    description: 'Your platform plan and billing.',
+    icon: Sparkles,
+    adminOnly: true,
+  },
+  {
+    id: 'invoice-template',
+    label: 'Invoice template',
+    description: 'PDF layout and line items placement.',
+    icon: FileText,
     adminOnly: true,
   },
   {
@@ -88,6 +117,13 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Notifications',
     description: 'Email and SMS alerts.',
     icon: Bell,
+    adminOnly: true,
+  },
+  {
+    id: 'integrations',
+    label: 'Integrations',
+    description: 'QuickBooks, Google Calendar, Zapier.',
+    icon: Link2,
     adminOnly: true,
   },
 ]
@@ -152,6 +188,10 @@ function SettingsPageContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [profileSaveStatus, setProfileSaveStatus] = useState<SaveStatus>('idle')
   const [profileSaveMessage, setProfileSaveMessage] = useState('')
+  const [subscriptionPlan, setSubscriptionPlan] = useState<PlatformPlanId>('trial')
+  const [subscriptionStatus, setSubscriptionStatus] =
+    useState<PlatformSubscriptionStatus>('trialing')
+  const [hasPlatformCustomer, setHasPlatformCustomer] = useState(false)
 
   const isAdmin = role === 'company_admin'
 
@@ -218,12 +258,20 @@ function SettingsPageContent() {
                 address_unit,
                 address_city,
                 address_state,
-                address_zip
+                address_zip,
+                subscription_plan,
+                subscription_status,
+                stripe_platform_customer_id
               `)
               .eq('id', profile.company_id)
               .single()
 
             setCompany(companyData)
+            setSubscriptionPlan(normalizePlatformPlan(companyData?.subscription_plan))
+            setSubscriptionStatus(
+              normalizeSubscriptionStatus(companyData?.subscription_status)
+            )
+            setHasPlatformCustomer(Boolean(companyData?.stripe_platform_customer_id))
           }
         }
       }
@@ -340,7 +388,7 @@ function SettingsPageContent() {
             {activeSection === 'billing' && isAdmin && (
               <div className="space-y-6 max-w-3xl">
                 <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Billing & payments</h2>
+                  <h2 className="text-xl font-semibold tracking-tight">Client payments</h2>
                   <p className="text-sm text-muted-foreground mt-1">
                     Connect Stripe to enable invoicing and client payments.
                   </p>
@@ -352,6 +400,28 @@ function SettingsPageContent() {
                 >
                   <StripeConnectSettings embedded />
                 </Suspense>
+              </div>
+            )}
+
+            {activeSection === 'subscription' && isAdmin && (
+              <div className="space-y-6 max-w-3xl">
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight">Platform subscription</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Manage your Service Portal plan and platform billing.
+                  </p>
+                </div>
+                <PlatformSubscriptionSettings
+                  plan={subscriptionPlan}
+                  status={subscriptionStatus}
+                  hasCustomer={hasPlatformCustomer}
+                />
+              </div>
+            )}
+
+            {activeSection === 'invoice-template' && isAdmin && (
+              <div className="space-y-6 max-w-3xl">
+                <InvoiceTemplateSettings />
               </div>
             )}
 
@@ -370,6 +440,18 @@ function SettingsPageContent() {
             {activeSection === 'notifications' && isAdmin && (
               <div className="space-y-6 max-w-3xl">
                 <NotificationSettings embedded />
+              </div>
+            )}
+
+            {activeSection === 'integrations' && isAdmin && (
+              <div className="space-y-6 max-w-3xl">
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight">Integrations</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Connect accounting, calendar, and automation tools.
+                  </p>
+                </div>
+                <IntegrationsSettings />
               </div>
             )}
 

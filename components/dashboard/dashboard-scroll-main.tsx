@@ -1,6 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
+import { NavigationProgress } from '@/components/navigation/navigation-progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 const FULL_SCREEN_ROUTE_PREFIXES = [
@@ -21,14 +22,16 @@ export function DashboardScrollMain({ children }: { children: React.ReactNode })
 
   if (isFullScreenRoute(pathname)) {
     return (
-      <main className="flex-1 min-h-0 overflow-hidden">
+      <main className="relative flex-1 min-h-0 overflow-hidden">
+        <NavigationProgress />
         {children}
       </main>
     )
   }
 
   return (
-    <main className="flex-1 min-h-0">
+    <main className="relative flex-1 min-h-0">
+      <NavigationProgress />
       <ScrollArea className="h-full" viewportClassName="scroll-fade">
         {children}
       </ScrollArea>

@@ -1,6 +1,6 @@
 'use client'
 
-import { UploadedDocumentsPanel } from '@/components/dashboard/uploaded-documents-panel'
+import { FolderDocumentsPanel } from '@/components/dashboard/folder-documents-panel'
 
 interface JobDocumentsPanelProps {
   scheduleId: string
@@ -9,10 +9,11 @@ interface JobDocumentsPanelProps {
 
 export function JobDocumentsPanel({ scheduleId, clientId }: JobDocumentsPanelProps) {
   return (
-    <UploadedDocumentsPanel
+    <FolderDocumentsPanel
       clientId={clientId}
       scheduleId={scheduleId}
-      variant="staff"
+      title="Job Documents"
+      description="Files for this job, grouped by category folder. Invoice PDFs appear under Invoices once billing has line items."
     />
   )
 }

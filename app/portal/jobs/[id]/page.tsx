@@ -18,6 +18,7 @@ export default async function PortalJobDetailPage({
         jobId={id}
         clientId={result.clientId}
         billing={result.billing}
+        timezone={result.timezone}
       />
     </Suspense>
   )

@@ -1,4 +1,9 @@
-import { DEFAULT_DOCUMENT_CATEGORY } from '@/lib/document-categories'
+import {
+  DEFAULT_DOCUMENT_CATEGORY,
+  SYSTEM_DOCUMENT_CATEGORY_ESTIMATES,
+  SYSTEM_DOCUMENT_CATEGORY_INVOICES,
+  SYSTEM_DOCUMENT_CATEGORY_ORDER,
+} from '@/lib/document-categories'
 
 export const CLIENT_DOCUMENTS_BUCKET = 'client-documents'
 
@@ -31,12 +36,45 @@ export type UploadedDocument = {
   file_name: string | null
   storage_path: string
   file_type: string
-  source: 'estimate' | 'upload'
+  source: 'estimate' | 'upload' | 'invoice'
   category: string | null
   file_size: number | null
   notes: string | null
   uploaded_by: string | null
   created_at: string
+}
+
+export type GalleryDocument = UploadedDocument & {
+  displayCategory: string
+  isSystemDocument: boolean
+}
+
+export function toGalleryDocument(document: UploadedDocument): GalleryDocument {
+  if (document.source === 'invoice') {
+    return {
+      ...document,
+      displayCategory: SYSTEM_DOCUMENT_CATEGORY_INVOICES,
+      isSystemDocument: true,
+    }
+  }
+
+  if (document.source === 'estimate') {
+    return {
+      ...document,
+      displayCategory: SYSTEM_DOCUMENT_CATEGORY_ESTIMATES,
+      isSystemDocument: true,
+    }
+  }
+
+  return {
+    ...document,
+    displayCategory: document.category?.trim() || DEFAULT_DOCUMENT_CATEGORY,
+    isSystemDocument: false,
+  }
+}
+
+export function toGalleryDocuments(documents: UploadedDocument[]) {
+  return documents.map(toGalleryDocument)
 }
 
 export function formatDocumentSize(bytes: number | null | undefined) {
@@ -50,20 +88,33 @@ export function isImageDocument(fileType: string) {
   return fileType.startsWith('image/')
 }
 
+export function isPdfDocument(fileType: string) {
+  return fileType === 'application/pdf'
+}
+
+export function isPreviewableDocument(fileType: string) {
+  return (
+    isPdfDocument(fileType) ||
+    isImageDocument(fileType) ||
+    fileType === 'text/plain'
+  )
+}
+
 export function getDocumentDisplayName(doc: UploadedDocument) {
   return doc.notes?.trim() || doc.file_name || doc.name
 }
 
-export function getDocumentCategoryLabel(doc: UploadedDocument) {
-  return doc.category?.trim() || DEFAULT_DOCUMENT_CATEGORY
+export function getDocumentCategoryLabel(doc: Pick<GalleryDocument, 'displayCategory'>) {
+  return doc.displayCategory
 }
 
-export function deriveDocumentCategories(documents: UploadedDocument[]) {
+export function deriveUploadCategorySuggestions(documents: GalleryDocument[]) {
   const seen = new Set<string>()
   const categories: string[] = []
 
   for (const document of documents) {
-    const label = getDocumentCategoryLabel(document)
+    if (document.isSystemDocument) continue
+    const label = document.displayCategory
     const key = label.toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
@@ -81,35 +132,54 @@ export function deriveDocumentCategories(documents: UploadedDocument[]) {
   return categories
 }
 
+export function buildDocumentCategoryTabs(documents: GalleryDocument[]) {
+  const uploadCategories = deriveUploadCategorySuggestions(documents)
+  const reservedKeys = new Set(
+    SYSTEM_DOCUMENT_CATEGORY_ORDER.map((category) => category.toLowerCase())
+  )
+
+  const tabs: string[] = [...SYSTEM_DOCUMENT_CATEGORY_ORDER]
+
+  for (const category of uploadCategories) {
+    if (reservedKeys.has(category.toLowerCase())) continue
+    tabs.push(category)
+  }
+
+  return tabs
+}
+
 export function groupDocumentsByCategory(
-  documents: UploadedDocument[],
+  documents: GalleryDocument[],
   categories: string[]
 ) {
-  const groups = new Map<string, UploadedDocument[]>()
+  const groups = new Map<string, GalleryDocument[]>()
 
   for (const document of documents) {
-    const category = getDocumentCategoryLabel(document)
+    const category = document.displayCategory
     const existing = groups.get(category) || []
     existing.push(document)
     groups.set(category, existing)
   }
 
-  const ordered: Array<{ key: string; label: string; documents: UploadedDocument[] }> = []
+  const ordered: Array<{ key: string; label: string; documents: GalleryDocument[] }> = []
   const seen = new Set<string>()
 
   for (const category of categories) {
-    const items = groups.get(category)
-    if (!items?.length) continue
+    const items = groups.get(category) || []
     ordered.push({ key: category, label: category, documents: items })
     seen.add(category.toLowerCase())
     groups.delete(category)
   }
 
   for (const [category, items] of groups.entries()) {
-    if (items.length > 0 && !seen.has(category.toLowerCase())) {
+    if (!seen.has(category.toLowerCase())) {
       ordered.push({ key: category, label: category, documents: items })
     }
   }
 
   return ordered
+}
+
+export function countDocumentsInCategory(documents: GalleryDocument[], category: string) {
+  return documents.filter((document) => document.displayCategory === category).length
 }

@@ -2,10 +2,34 @@ export type DocumentCategory = string
 
 export const DEFAULT_DOCUMENT_CATEGORY = 'General'
 
+export const SYSTEM_DOCUMENT_CATEGORY_INVOICES = 'Invoices'
+export const SYSTEM_DOCUMENT_CATEGORY_ESTIMATES = 'Estimates'
+
+const RESERVED_UPLOAD_CATEGORY_KEYS = new Set([
+  SYSTEM_DOCUMENT_CATEGORY_INVOICES.toLowerCase(),
+  SYSTEM_DOCUMENT_CATEGORY_ESTIMATES.toLowerCase(),
+])
+
+export const SYSTEM_DOCUMENT_CATEGORY_ORDER = [
+  SYSTEM_DOCUMENT_CATEGORY_INVOICES,
+  SYSTEM_DOCUMENT_CATEGORY_ESTIMATES,
+] as const
+
+export function isReservedUploadCategory(category: string) {
+  return RESERVED_UPLOAD_CATEGORY_KEYS.has(category.trim().toLowerCase())
+}
+
 export function resolveUploadCategory(
   category: string | null | undefined
 ): { valid: true; category: DocumentCategory } | { valid: false; error: string } {
   const resolved = category?.trim() || DEFAULT_DOCUMENT_CATEGORY
+
+  if (isReservedUploadCategory(resolved)) {
+    return {
+      valid: false,
+      error: `${resolved} is reserved for auto-generated PDFs. Choose another category.`,
+    }
+  }
 
   if (resolved.length > 40) {
     return { valid: false, error: 'Category must be 40 characters or fewer' }

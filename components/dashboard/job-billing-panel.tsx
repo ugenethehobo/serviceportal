@@ -9,6 +9,8 @@ import {
   deleteBillingLineItemAction,
   addBillingPaymentAction,
   deleteBillingPaymentAction,
+  sendJobInvoiceAction,
+  generateJobInvoiceAction,
 } from '@/app/action'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,10 +36,12 @@ import {
   type JobBillingData,
   type BillingLineItem,
 } from '@/lib/billing'
+import { DocumentViewerDialog } from '@/components/dashboard/document-viewer-dialog'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
-import { Banknote, Trash2, User, X, Check } from 'lucide-react'
+import Link from 'next/link'
+import { Banknote, Copy, ExternalLink, FileText, Loader2, Mail, Trash2, User, X, Check } from 'lucide-react'
 
 interface JobBillingPanelProps {
   scheduleId: string
@@ -53,6 +57,9 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
   const [editingLineId, setEditingLineId] = useState<string | null>(null)
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSendingInvoice, setIsSendingInvoice] = useState(false)
+  const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false)
+  const [invoiceViewerOpen, setInvoiceViewerOpen] = useState(false)
 
   const [lineForm, setLineForm] = useState({
     description: '',
@@ -179,10 +186,49 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
     setShowPaymentForm(true)
   }
 
+  const copyPaymentLink = async () => {
+    const url = `${window.location.origin}/portal/jobs/${scheduleId}?pay=1`
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success('Payment link copied — send it to your client')
+    } catch {
+      toast.error('Could not copy link')
+    }
+  }
+
+  const handleCreateInvoice = async () => {
+    setIsGeneratingInvoice(true)
+    const result = await generateJobInvoiceAction(scheduleId, clientId)
+    if (result.success) {
+      toast.success('Invoice created — view it on the Documents tab')
+      await fetchBilling()
+    } else {
+      toast.error(result.error || 'Failed to create invoice')
+    }
+    setIsGeneratingInvoice(false)
+  }
+
+  const handleSendInvoice = async () => {
+    setIsSendingInvoice(true)
+    const result = await sendJobInvoiceAction(scheduleId, clientId)
+    if (result.success) {
+      toast.success('Invoice sent to client')
+      await fetchBilling()
+    } else {
+      toast.error(result.error || 'Failed to send invoice')
+    }
+    setIsSendingInvoice(false)
+  }
+
   const handleSavePayment = async () => {
     const amount = parseFloat(paymentForm.amount)
     if (!amount || amount <= 0) {
       toast.error('Enter a valid payment amount')
+      return
+    }
+
+    if (billing && amount > billing.summary.balanceDue + 0.009) {
+      toast.error(`Payment cannot exceed ${formatCurrency(billing.summary.balanceDue)}`)
       return
     }
 
@@ -250,15 +296,62 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
         />
       </div>
 
-      {summary.balanceDue > 0 && billing.lineItems.length > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4 text-sm">
-          <User className="size-4 mt-0.5 shrink-0 text-muted-foreground" />
-          <div>
-            <p className="font-medium">Awaiting client payment</p>
-            <p className="text-muted-foreground mt-0.5">
-              The client will pay this balance through the client portal. Use Record Cash Payment
-              below if they paid with cash or check in person.
-            </p>
+      {billing.lineItems.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 text-sm">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <User className="size-4 mt-0.5 shrink-0 text-muted-foreground" />
+              <div>
+                <p className="font-medium">
+                  {summary.balanceDue > 0
+                    ? `Balance due: ${formatCurrency(summary.balanceDue)}`
+                    : 'Paid in full'}
+                </p>
+                <p className="text-muted-foreground mt-0.5">
+                  The invoice PDF lives on the Documents tab under Invoices. Send notifies your
+                  client; payment links work when a balance is due.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <Button
+                size="sm"
+                onClick={() => void handleCreateInvoice()}
+                disabled={isGeneratingInvoice}
+              >
+                {isGeneratingInvoice ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <FileText className="size-4" />
+                )}
+                {isGeneratingInvoice ? 'Creating…' : 'Create invoice'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSendInvoice}
+                disabled={isSendingInvoice}
+              >
+                <Mail className="size-4" />
+                {isSendingInvoice ? 'Sending…' : 'Send invoice'}
+              </Button>
+              {billing.invoiceDocument && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setInvoiceViewerOpen(true)}
+                >
+                  <ExternalLink className="size-4" />
+                  View PDF
+                </Button>
+              )}
+              {summary.balanceDue > 0 && (
+                <Button size="sm" variant="outline" onClick={copyPaymentLink}>
+                  <Copy className="size-4" />
+                  Copy payment link
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -423,16 +516,25 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                 Client portal and Stripe payments appear here automatically.
               </p>
             </div>
-            {summary.balanceDue > 0 && (
-              <Button
-                size="sm"
-                variant={showPaymentForm ? 'secondary' : 'outline'}
-                onClick={() => (showPaymentForm ? setShowPaymentForm(false) : openRecordCash())}
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard/payments"
+                className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
               >
-                <Banknote className="size-4" />
-                {showPaymentForm ? 'Cancel' : 'Record Cash Payment'}
-              </Button>
-            )}
+                All transactions
+                <ExternalLink className="size-3.5" />
+              </Link>
+              {summary.balanceDue > 0 && (
+                <Button
+                  size="sm"
+                  variant={showPaymentForm ? 'secondary' : 'outline'}
+                  onClick={() => (showPaymentForm ? setShowPaymentForm(false) : openRecordCash())}
+                >
+                  <Banknote className="size-4" />
+                  {showPaymentForm ? 'Cancel' : 'Record payment'}
+                </Button>
+              )}
+            </div>
           </div>
 
           {billing.payments.length > 0 ? (
@@ -502,7 +604,8 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                 Record cash payment
               </p>
               <p className="text-sm text-muted-foreground">
-                Use when the client paid in person with cash or check.
+                Record cash, check, or other in-person payments. Partial payments are fine — up to{' '}
+                <span className="font-medium text-foreground">{formatCurrency(summary.balanceDue)}</span>.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -510,11 +613,21 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                   <Input
                     type="number"
                     min="0.01"
+                    max={summary.balanceDue}
                     step="0.01"
                     value={paymentForm.amount}
                     onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
                     className="mt-1"
                   />
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground mt-1 underline underline-offset-2"
+                    onClick={() =>
+                      setPaymentForm({ ...paymentForm, amount: String(summary.balanceDue) })
+                    }
+                  >
+                    Fill full balance ({formatCurrency(summary.balanceDue)})
+                  </button>
                 </div>
                 <div>
                   <Label className="text-xs">Payment date</Label>
@@ -562,6 +675,20 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
         </section>
         </div>
       </ScrollArea>
+
+      {billing.invoiceDocument && (
+        <DocumentViewerDialog
+          document={{
+            id: billing.invoiceDocument.id,
+            name: billing.invoiceDocument.name,
+            file_name: billing.invoiceDocument.name,
+            file_type: 'application/pdf',
+            notes: null,
+          }}
+          open={invoiceViewerOpen}
+          onOpenChange={setInvoiceViewerOpen}
+        />
+      )}
     </div>
   )
 }

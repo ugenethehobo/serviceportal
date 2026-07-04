@@ -6,8 +6,16 @@ import {
   checkJobConflict,
   suggestAlternativeCrews
 } from '@/lib/scheduling'
-import { calcBillingSummary, calcLineAmount } from '@/lib/billing'
+import {
+  calcBillingSummary,
+  calcLineAmount,
+  summarizePayments,
+  type CompanyPaymentRow,
+  type PaymentsSummary,
+} from '@/lib/billing'
 import { seedBillingFromJobPrice, duplicateBillingToSchedule } from '@/lib/billing-server'
+import { SYSTEM_DOCUMENT_CATEGORY_INVOICES } from '@/lib/document-categories'
+import { syncJobInvoiceDocument } from '@/lib/invoices-server'
 import { getCompanyStripeStatus } from '@/lib/stripe-connect'
 import {
   recalcEstimateTotal,
@@ -21,6 +29,7 @@ import {
   type NotificationPreferences,
 } from '@/lib/notifications'
 import {
+  notifyClientInvoiceSent,
   notifyClientMessageFromStaff,
   notifyStaffMessageFromClient,
   queueNotification,
@@ -59,7 +68,9 @@ import {
 } from '@/lib/leads'
 import {
   buildReportsData,
+  getReportsPeriodBounds,
   getReportsPeriodStart,
+  isInReportsPeriod,
   type ReportsData,
   type ReportsPeriod,
 } from '@/lib/reports'
@@ -144,6 +155,26 @@ export async function createCompanyUser(data: {
   )
 
   try {
+    const { countCompanySeats } = await import('@/lib/platform-signup-server')
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select('seat_limit')
+      .eq('id', data.companyId)
+      .single()
+
+    if (companyError) {
+      return { success: false, error: companyError.message }
+    }
+
+    const seatsUsed = await countCompanySeats(supabaseAdmin, data.companyId)
+    const seatLimit = Number(company?.seat_limit) || 10
+    if (seatsUsed >= seatLimit) {
+      return {
+        success: false,
+        error: `Seat limit reached (${seatLimit}). Upgrade your plan to add more team members.`,
+      }
+    }
+
     // 1. Create the user in auth.users
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: data.email,
@@ -205,7 +236,9 @@ export async function getCompanyData(companyId: string) {
   // Fetch company
   const { data: companyData } = await supabaseAdmin
     .from('companies')
-    .select('id, name')
+    .select(
+      'id, name, subscription_plan, subscription_status, seat_limit, trial_ends_at, created_at'
+    )
     .eq('id', companyId)
     .single()
 
@@ -251,10 +284,11 @@ export async function getDashboardData() {
   // Get all profiles for counting
   const { data: profilesData } = await supabaseAdmin
     .from('profiles')
-    .select('company_id')
+    .select('company_id, role')
 
   // Build user counts
   const userCountMap: Record<string, number> = {}
+  const seatCountMap: Record<string, number> = {}
   let totalUsers = 0
 
   if (profilesData) {
@@ -262,6 +296,9 @@ export async function getDashboardData() {
       if (profile.company_id) {
         userCountMap[profile.company_id] = (userCountMap[profile.company_id] || 0) + 1
         totalUsers++
+        if (profile.role === 'company_admin' || profile.role === 'team_member') {
+          seatCountMap[profile.company_id] = (seatCountMap[profile.company_id] || 0) + 1
+        }
       }
     })
   }
@@ -270,6 +307,7 @@ export async function getDashboardData() {
   const companiesWithCounts = companiesData?.map((company: any) => ({
     ...company,
     users: userCountMap[company.id] || 0,
+    seats_used: seatCountMap[company.id] || 0,
   })) || []
 
   return {
@@ -786,8 +824,7 @@ export async function createJobAction(data: {
 
         if (error) throw error
 
-        const stripeStatus = await getCompanyStripeStatus(data.companyId)
-        if (stripeStatus.billingEnabled && newSchedule && (data.price || 0) > 0) {
+        if (newSchedule && (data.price || 0) > 0) {
           await seedBillingFromJobPrice(
             supabaseAdmin,
             newSchedule.id,
@@ -796,6 +833,11 @@ export async function createJobAction(data: {
             data.title,
             data.price || 0
           )
+          try {
+            await syncJobInvoiceDocument(newSchedule.id)
+          } catch (invoiceError) {
+            console.error('createJobAction invoice sync error:', invoiceError)
+          }
         }
 
         revalidatePath(`/dashboard/clients/${data.clientId}`)
@@ -957,19 +999,21 @@ async function generateNextRecurringInstance(currentSchedule: any, supabaseAdmin
   }
 
   if (client?.company_id) {
-    const stripeStatus = await getCompanyStripeStatus(client.company_id)
-    if (stripeStatus.billingEnabled) {
-      await duplicateBillingToSchedule(
-        supabaseAdmin,
-        currentSchedule.id,
-        newSchedule.id,
-        currentSchedule.client_id,
-        client.company_id,
-        {
-          title: currentSchedule.title,
-          price: currentSchedule.price || 0,
-        }
-      )
+    await duplicateBillingToSchedule(
+      supabaseAdmin,
+      currentSchedule.id,
+      newSchedule.id,
+      currentSchedule.client_id,
+      client.company_id,
+      {
+        title: currentSchedule.title,
+        price: currentSchedule.price || 0,
+      }
+    )
+    try {
+      await syncJobInvoiceDocument(newSchedule.id)
+    } catch (invoiceError) {
+      console.error('generateNextRecurringInstance invoice sync error:', invoiceError)
     }
   }
 
@@ -1112,6 +1156,30 @@ export async function updateJobAction(data: {
 
     if (error) throw error
 
+    if (data.price !== undefined && data.price > 0) {
+      const { data: existingLines } = await supabaseAdmin
+        .from('billing_line_items')
+        .select('id')
+        .eq('schedule_id', data.jobId)
+        .limit(1)
+
+      if (!existingLines || existingLines.length === 0) {
+        await seedBillingFromJobPrice(
+          supabaseAdmin,
+          data.jobId,
+          data.clientId,
+          data.companyId,
+          (data.title ?? existing.title) as string,
+          data.price
+        )
+        try {
+          await syncJobInvoiceDocument(data.jobId)
+        } catch (invoiceError) {
+          console.error('updateJobAction invoice sync error:', invoiceError)
+        }
+      }
+    }
+
     revalidatePath(`/dashboard/clients/${data.clientId}`)
     revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.jobId}`)
 
@@ -1244,6 +1312,34 @@ async function verifyScheduleOwnership(scheduleId: string, clientId: string) {
 
   if (error || !data) return null
   return data
+}
+
+async function fetchInvoiceDocumentMeta(
+  supabaseAdmin: ReturnType<typeof createSupabaseAdmin>,
+  scheduleId: string
+) {
+  const { data: invoiceDoc } = await supabaseAdmin
+    .from('client_documents')
+    .select('id, name, created_at')
+    .eq('schedule_id', scheduleId)
+    .eq('source', 'invoice')
+    .maybeSingle()
+
+  if (invoiceDoc) return invoiceDoc
+
+  const { data: legacyDoc } = await supabaseAdmin
+    .from('client_documents')
+    .select('id, name, created_at')
+    .eq('schedule_id', scheduleId)
+    .eq('source', 'upload')
+    .eq('category', SYSTEM_DOCUMENT_CATEGORY_INVOICES)
+    .maybeSingle()
+
+  return legacyDoc
+}
+
+async function refreshJobInvoice(scheduleId: string) {
+  return syncJobInvoiceDocument(scheduleId)
 }
 
 async function getCompanyIdForClient(clientId: string) {
@@ -1605,6 +1701,197 @@ export async function updateDocumentCategoriesAction(
   }
 }
 
+export async function getInvoiceTemplateAction(): Promise<
+  | { success: true; template: import('@/lib/invoice-template').InvoiceTemplate }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    const { normalizeInvoiceTemplate } = await import('@/lib/invoice-template')
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: company, error } = await supabaseAdmin
+      .from('companies')
+      .select('invoice_template')
+      .eq('id', check.companyId)
+      .single()
+    if (error?.code === '42703') {
+      return { success: true, template: normalizeInvoiceTemplate(null) }
+    }
+    if (error) throw error
+    return { success: true, template: normalizeInvoiceTemplate(company?.invoice_template) }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to load invoice template' }
+  }
+}
+
+export async function updateInvoiceTemplateAction(
+  template: import('@/lib/invoice-template').InvoiceTemplate
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    if (check.session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can edit invoice templates' }
+    }
+    const { normalizeInvoiceTemplate } = await import('@/lib/invoice-template')
+    const normalized = normalizeInvoiceTemplate(template)
+    const supabaseAdmin = createSupabaseAdmin()
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .update({ invoice_template: normalized })
+      .eq('id', check.companyId)
+    if (error?.code === '42703') {
+      return {
+        success: false,
+        error: 'Invoice templates are not enabled yet. Add invoice_template JSONB column to companies.',
+      }
+    }
+    if (error) return { success: false, error: error.message }
+    revalidatePath('/dashboard/settings')
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to save invoice template' }
+  }
+}
+
+export async function getCompanyIntegrationsAction(): Promise<
+  | { success: true; integrations: import('@/lib/integrations').IntegrationRecord[] }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    if (check.session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can manage integrations' }
+    }
+
+    const { INTEGRATION_PROVIDERS, normalizeIntegrationRecord } = await import('@/lib/integrations')
+    const providers = Object.keys(INTEGRATION_PROVIDERS) as import('@/lib/integrations').IntegrationProvider[]
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data, error } = await supabaseAdmin
+      .from('company_integrations')
+      .select('provider, status, config, connected_at')
+      .eq('company_id', check.companyId)
+
+    if (error?.code === '42P01') {
+      return {
+        success: true,
+        integrations: providers.map((provider) => normalizeIntegrationRecord(null, provider)),
+      }
+    }
+    if (error) return { success: false, error: error.message }
+
+    const byProvider = new Map((data || []).map((row) => [row.provider, row]))
+    const integrations = providers.map((provider) =>
+      normalizeIntegrationRecord(byProvider.get(provider), provider)
+    )
+
+    return { success: true, integrations }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to load integrations' }
+  }
+}
+
+export async function saveZapierIntegrationAction(webhookUrl: string): Promise<
+  { success: true } | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    if (check.session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can manage integrations' }
+    }
+
+    const { isValidZapierWebhookUrl } = await import('@/lib/integrations')
+    const trimmed = webhookUrl.trim()
+    if (!trimmed) {
+      return { success: false, error: 'Webhook URL is required' }
+    }
+    if (!isValidZapierWebhookUrl(trimmed)) {
+      return { success: false, error: 'Enter a valid HTTPS webhook URL' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const now = new Date().toISOString()
+    const { error } = await supabaseAdmin.from('company_integrations').upsert(
+      {
+        company_id: check.companyId,
+        provider: 'zapier',
+        status: 'connected',
+        config: { webhook_url: trimmed },
+        connected_at: now,
+        updated_at: now,
+      },
+      { onConflict: 'company_id,provider' }
+    )
+
+    if (error?.code === '42P01') {
+      return {
+        success: false,
+        error: 'Integrations are not enabled yet. Run supabase/integrations-schema.sql.',
+      }
+    }
+    if (error) return { success: false, error: error.message }
+
+    revalidatePath('/dashboard/settings')
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to save Zapier integration' }
+  }
+}
+
+export async function testZapierIntegrationAction(): Promise<
+  { success: true } | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    if (check.session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can manage integrations' }
+    }
+
+    const { dispatchCompanyZapierEvent } = await import('@/lib/integration-events')
+    const supabaseAdmin = createSupabaseAdmin()
+    const result = await dispatchCompanyZapierEvent(supabaseAdmin, {
+      companyId: check.companyId,
+      event: 'invoice_sent',
+      data: { test: true, message: 'Zapier integration test from Service Portal' },
+    })
+
+    if (!result.delivered) {
+      return {
+        success: false,
+        error:
+          result.reason === 'not_connected'
+            ? 'Save a Zapier webhook URL first'
+            : 'Webhook delivery failed — check the URL',
+      }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Test failed' }
+  }
+}
+
+export async function getClientJobsForDocumentsAction(clientId: string) {
+  try {
+    const access = await verifyClientCompanyAccess(clientId)
+    if (!access.ok) return { success: false as const, error: access.error }
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: jobs, error } = await supabaseAdmin
+      .from('schedules')
+      .select('id, title, start_time, status')
+      .eq('client_id', clientId)
+      .order('start_time', { ascending: false })
+    if (error) throw error
+    return { success: true as const, jobs: jobs || [] }
+  } catch (error: any) {
+    return { success: false as const, error: error.message || 'Failed to load jobs' }
+  }
+}
+
 export async function getUploadedDocumentsAction(
   clientId: string,
   scheduleId?: string | null
@@ -1626,13 +1913,11 @@ export async function getUploadedDocumentsAction(
       .select('*')
       .eq('client_id', clientId)
       .eq('company_id', access.companyId)
-      .eq('source', 'upload')
+      .in('source', ['upload', 'estimate', 'invoice'])
       .order('created_at', { ascending: false })
 
     if (scheduleId) {
       query = query.eq('schedule_id', scheduleId)
-    } else {
-      query = query.is('schedule_id', null)
     }
 
     const { data: documents, error } = await query
@@ -1805,14 +2090,6 @@ export async function deleteUploadedDocumentAction(
   }
 }
 
-async function assertBillingEnabled(companyId: string) {
-  const status = await getCompanyStripeStatus(companyId)
-  if (!status.billingEnabled) {
-    return { ok: false as const, error: 'Connect Stripe in Settings to enable billing' }
-  }
-  return { ok: true as const, status }
-}
-
 export async function getJobBillingAction(scheduleId: string, clientId: string) {
   const supabaseAdmin = createSupabaseAdmin()
 
@@ -1838,6 +2115,17 @@ export async function getJobBillingAction(scheduleId: string, clientId: string) 
 
     const summary = calcBillingSummary(lineItems || [], payments || [])
 
+    let invoiceDocument = await fetchInvoiceDocumentMeta(supabaseAdmin, scheduleId)
+
+    if ((lineItems || []).length > 0 && !invoiceDocument) {
+      try {
+        await syncJobInvoiceDocument(scheduleId)
+        invoiceDocument = await fetchInvoiceDocumentMeta(supabaseAdmin, scheduleId)
+      } catch (error) {
+        console.error('getJobBillingAction invoice sync error:', error)
+      }
+    }
+
     return {
       success: true,
       billing: {
@@ -1849,6 +2137,7 @@ export async function getJobBillingAction(scheduleId: string, clientId: string) 
         lineItems: lineItems || [],
         payments: payments || [],
         summary,
+        invoiceDocument: invoiceDocument || null,
       },
     }
   } catch (error: any) {
@@ -1927,9 +2216,6 @@ export async function addBillingLineItemAction(data: {
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    const billingCheck = await assertBillingEnabled(data.companyId)
-    if (!billingCheck.ok) return { success: false, error: billingCheck.error }
-
     const schedule = await verifyScheduleOwnership(data.scheduleId, data.clientId)
     if (!schedule) return { success: false, error: 'Job not found' }
 
@@ -1951,8 +2237,16 @@ export async function addBillingLineItemAction(data: {
 
     if (error) throw error
 
+    try {
+      await refreshJobInvoice(data.scheduleId)
+    } catch (invoiceError) {
+      console.error('addBillingLineItemAction invoice sync error:', invoiceError)
+    }
+
     revalidatePath(`/dashboard/clients/${data.clientId}`)
     revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.scheduleId}`)
+    revalidatePath('/dashboard/payments')
+    revalidatePath('/dashboard/reports')
 
     return { success: true, item }
   } catch (error: any) {
@@ -1973,9 +2267,6 @@ export async function updateBillingLineItemAction(data: {
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    const billingCheck = await assertBillingEnabled(data.companyId)
-    if (!billingCheck.ok) return { success: false, error: billingCheck.error }
-
     const schedule = await verifyScheduleOwnership(data.scheduleId, data.clientId)
     if (!schedule) return { success: false, error: 'Job not found' }
 
@@ -1996,8 +2287,16 @@ export async function updateBillingLineItemAction(data: {
 
     if (error) throw error
 
+    try {
+      await refreshJobInvoice(data.scheduleId)
+    } catch (invoiceError) {
+      console.error('updateBillingLineItemAction invoice sync error:', invoiceError)
+    }
+
     revalidatePath(`/dashboard/clients/${data.clientId}`)
     revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.scheduleId}`)
+    revalidatePath('/dashboard/payments')
+    revalidatePath('/dashboard/reports')
 
     return { success: true, item }
   } catch (error: any) {
@@ -2015,9 +2314,6 @@ export async function deleteBillingLineItemAction(
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    const billingCheck = await assertBillingEnabled(companyId)
-    if (!billingCheck.ok) return { success: false, error: billingCheck.error }
-
     const schedule = await verifyScheduleOwnership(scheduleId, clientId)
     if (!schedule) return { success: false, error: 'Job not found' }
 
@@ -2029,8 +2325,16 @@ export async function deleteBillingLineItemAction(
 
     if (error) throw error
 
+    try {
+      await refreshJobInvoice(scheduleId)
+    } catch (invoiceError) {
+      console.error('deleteBillingLineItemAction invoice sync error:', invoiceError)
+    }
+
     revalidatePath(`/dashboard/clients/${clientId}`)
     revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+    revalidatePath('/dashboard/payments')
+    revalidatePath('/dashboard/reports')
 
     return { success: true }
   } catch (error: any) {
@@ -2051,11 +2355,36 @@ export async function addBillingPaymentAction(data: {
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    const billingCheck = await assertBillingEnabled(data.companyId)
-    if (!billingCheck.ok) return { success: false, error: billingCheck.error }
-
     const schedule = await verifyScheduleOwnership(data.scheduleId, data.clientId)
     if (!schedule) return { success: false, error: 'Job not found' }
+
+    const [{ data: lineItems }, { data: existingPayments }, { data: client }] = await Promise.all([
+      supabaseAdmin.from('billing_line_items').select('amount').eq('schedule_id', data.scheduleId),
+      supabaseAdmin.from('billing_payments').select('amount').eq('schedule_id', data.scheduleId),
+      supabaseAdmin
+        .from('clients')
+        .select('name, email')
+        .eq('id', data.clientId)
+        .eq('company_id', data.companyId)
+        .single(),
+    ])
+
+    const summary = calcBillingSummary(lineItems || [], existingPayments || [])
+    if (summary.balanceDue <= 0) {
+      return { success: false, error: 'This job has no balance due' }
+    }
+
+    const roundedAmount = Math.round(data.amount * 100) / 100
+    if (roundedAmount <= 0) {
+      return { success: false, error: 'Enter a valid payment amount' }
+    }
+
+    if (roundedAmount > summary.balanceDue + 0.009) {
+      return {
+        success: false,
+        error: `Payment cannot exceed balance due ($${summary.balanceDue.toFixed(2)})`,
+      }
+    }
 
     const { data: payment, error } = await supabaseAdmin
       .from('billing_payments')
@@ -2063,7 +2392,7 @@ export async function addBillingPaymentAction(data: {
         schedule_id: data.scheduleId,
         client_id: data.clientId,
         company_id: data.companyId,
-        amount: data.amount,
+        amount: roundedAmount,
         payment_date: data.paymentDate,
         method: data.method,
         notes: data.notes?.trim() || null,
@@ -2074,8 +2403,36 @@ export async function addBillingPaymentAction(data: {
 
     if (error) throw error
 
+    const { notifyPaymentReceived } = await import('@/lib/notifications-server')
+    const { data: company } = await supabaseAdmin
+      .from('companies')
+      .select('name')
+      .eq('id', data.companyId)
+      .single()
+
+    void queueNotification(supabaseAdmin, async (admin) => {
+      await notifyPaymentReceived(admin, {
+        companyId: data.companyId,
+        companyName: company?.name,
+        clientEmail: client?.email,
+        clientName: client?.name,
+        jobTitle: schedule.title || 'Job',
+        amount: roundedAmount,
+        scheduleId: data.scheduleId,
+        clientId: data.clientId,
+      })
+    })
+
+    try {
+      await refreshJobInvoice(data.scheduleId)
+    } catch (invoiceError) {
+      console.error('addBillingPaymentAction invoice sync error:', invoiceError)
+    }
+
     revalidatePath(`/dashboard/clients/${data.clientId}`)
     revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.scheduleId}`)
+    revalidatePath('/dashboard/payments')
+    revalidatePath('/dashboard/reports')
 
     return { success: true, payment }
   } catch (error: any) {
@@ -2093,11 +2450,23 @@ export async function deleteBillingPaymentAction(
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    const billingCheck = await assertBillingEnabled(companyId)
-    if (!billingCheck.ok) return { success: false, error: billingCheck.error }
-
     const schedule = await verifyScheduleOwnership(scheduleId, clientId)
     if (!schedule) return { success: false, error: 'Job not found' }
+
+    const { data: payment, error: fetchError } = await supabaseAdmin
+      .from('billing_payments')
+      .select('source')
+      .eq('id', id)
+      .eq('schedule_id', scheduleId)
+      .single()
+
+    if (fetchError || !payment) {
+      return { success: false, error: 'Payment not found' }
+    }
+
+    if (payment.source === 'stripe') {
+      return { success: false, error: 'Client portal payments cannot be deleted here' }
+    }
 
     const { error } = await supabaseAdmin
       .from('billing_payments')
@@ -2107,13 +2476,235 @@ export async function deleteBillingPaymentAction(
 
     if (error) throw error
 
+    try {
+      await refreshJobInvoice(scheduleId)
+    } catch (invoiceError) {
+      console.error('deleteBillingPaymentAction invoice sync error:', invoiceError)
+    }
+
     revalidatePath(`/dashboard/clients/${clientId}`)
     revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+    revalidatePath('/dashboard/payments')
+    revalidatePath('/dashboard/reports')
 
     return { success: true }
   } catch (error: any) {
     console.error('deleteBillingPaymentAction error:', error)
     return { success: false, error: error.message }
+  }
+}
+
+export async function generateJobInvoiceAction(scheduleId: string, clientId: string) {
+  try {
+    const access = await verifyScheduleCompanyAccess(scheduleId, clientId)
+    if (!access.ok) return { success: false, error: access.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: lineItems } = await supabaseAdmin
+      .from('billing_line_items')
+      .select('id')
+      .eq('schedule_id', scheduleId)
+      .limit(1)
+
+    if (!lineItems || lineItems.length === 0) {
+      return { success: false, error: 'Add at least one line item to generate an invoice' }
+    }
+
+    const invoice = await syncJobInvoiceDocument(scheduleId)
+    if (!invoice) {
+      return { success: false, error: 'Could not generate invoice' }
+    }
+
+    revalidatePath(`/dashboard/clients/${clientId}`)
+    revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+
+    return { success: true, documentId: invoice.documentId }
+  } catch (error: any) {
+    console.error('generateJobInvoiceAction error:', error)
+    return {
+      success: false,
+      error: error.message || 'Failed to generate invoice',
+    }
+  }
+}
+
+export async function sendJobInvoiceAction(scheduleId: string, clientId: string) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const schedule = await verifyScheduleOwnership(scheduleId, clientId)
+    if (!schedule) return { success: false, error: 'Job not found' }
+
+    const { data: lineItems } = await supabaseAdmin
+      .from('billing_line_items')
+      .select('id')
+      .eq('schedule_id', scheduleId)
+      .limit(1)
+
+    if (!lineItems || lineItems.length === 0) {
+      return { success: false, error: 'Add line items before sending an invoice' }
+    }
+
+    const generated = await generateJobInvoiceAction(scheduleId, clientId)
+    if (!generated.success) {
+      return generated
+    }
+
+    const companyId = await getCompanyIdForClient(clientId)
+    if (!companyId) return { success: false, error: 'Client not found' }
+
+    const [{ data: fullLineItems }, { data: payments }, { data: client }, { data: company }] =
+      await Promise.all([
+        supabaseAdmin.from('billing_line_items').select('amount').eq('schedule_id', scheduleId),
+        supabaseAdmin.from('billing_payments').select('amount').eq('schedule_id', scheduleId),
+        supabaseAdmin
+          .from('clients')
+          .select('name, email, phone')
+          .eq('id', clientId)
+          .single(),
+        supabaseAdmin.from('companies').select('name').eq('id', companyId).single(),
+      ])
+
+    const summary = calcBillingSummary(fullLineItems || [], payments || [])
+
+    void queueNotification(supabaseAdmin, async (admin) => {
+      await notifyClientInvoiceSent(admin, {
+        companyId,
+        companyName: company?.name,
+        clientEmail: client?.email,
+        clientPhone: client?.phone,
+        clientName: client?.name,
+        jobTitle: schedule.title || 'Job',
+        balanceDue: summary.balanceDue,
+        scheduleId,
+      })
+    })
+
+    revalidatePath(`/dashboard/clients/${clientId}`)
+    revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+
+    return { success: true, documentId: generated.documentId }
+  } catch (error: any) {
+    console.error('sendJobInvoiceAction error:', error)
+    return { success: false, error: error.message || 'Failed to send invoice' }
+  }
+}
+
+export type PaymentsFilterSource = 'all' | 'manual' | 'stripe'
+
+export async function getCompanyPaymentsAction(options?: {
+  period?: ReportsPeriod
+  source?: PaymentsFilterSource
+  search?: string
+}): Promise<
+  | {
+      success: true
+      payments: CompanyPaymentRow[]
+      summary: PaymentsSummary
+      periodLabel: string
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    if (check.session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can view all transactions' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const companyId = check.companyId
+    const period = options?.period ?? '30d'
+    const source = options?.source ?? 'all'
+    const search = options?.search?.trim().toLowerCase() ?? ''
+
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select('timezone')
+      .eq('id', companyId)
+      .single()
+
+    if (companyError || !company) {
+      return { success: false, error: 'Company not found' }
+    }
+
+    const timezone = company.timezone || 'America/Chicago'
+    const bounds = getReportsPeriodBounds(period, timezone)
+
+    const { data: payments, error: paymentsError } = await supabaseAdmin
+      .from('billing_payments')
+      .select(
+        `
+        id,
+        schedule_id,
+        client_id,
+        company_id,
+        amount,
+        payment_date,
+        method,
+        notes,
+        source,
+        stripe_payment_intent_id,
+        created_at,
+        schedule:schedules!schedule_id (title, status),
+        client:clients!client_id (name)
+      `
+      )
+      .eq('company_id', companyId)
+      .order('payment_date', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (paymentsError) throw paymentsError
+
+    const rows: CompanyPaymentRow[] = (payments || [])
+      .map((payment: any) => {
+        const schedule = Array.isArray(payment.schedule) ? payment.schedule[0] : payment.schedule
+        const client = Array.isArray(payment.client) ? payment.client[0] : payment.client
+
+        return {
+          id: payment.id,
+          scheduleId: payment.schedule_id,
+          clientId: payment.client_id,
+          companyId: payment.company_id,
+          amount: Number(payment.amount),
+          paymentDate: payment.payment_date,
+          method: payment.method,
+          notes: payment.notes,
+          source: (payment.source === 'stripe' ? 'stripe' : 'manual') as 'manual' | 'stripe',
+          stripePaymentIntentId: payment.stripe_payment_intent_id,
+          createdAt: payment.created_at,
+          clientName: client?.name || 'Unknown client',
+          jobTitle: schedule?.title || 'Job',
+          jobStatus: schedule?.status || 'unknown',
+        }
+      })
+      .filter((payment) => {
+        if (!isInReportsPeriod(payment.paymentDate, bounds)) return false
+        if (source !== 'all' && payment.source !== source) return false
+        if (!search) return true
+        const haystack = [
+          payment.clientName,
+          payment.jobTitle,
+          payment.method,
+          payment.notes || '',
+          payment.source,
+        ]
+          .join(' ')
+          .toLowerCase()
+        return haystack.includes(search)
+      })
+
+    return {
+      success: true,
+      payments: rows,
+      summary: summarizePayments(rows),
+      periodLabel: bounds.start
+        ? `${bounds.start.toLocaleDateString()} – ${bounds.end.toLocaleDateString()}`
+        : 'All time',
+    }
+  } catch (error: any) {
+    console.error('getCompanyPaymentsAction error:', error)
+    return { success: false, error: error.message || 'Failed to load payments' }
   }
 }
 
@@ -2208,12 +2799,16 @@ export async function getClientDocumentsAction(clientId: string) {
       .from('client_documents')
       .select('*')
       .eq('client_id', clientId)
-      .eq('source', 'estimate')
+      .in('source', ['estimate', 'invoice'])
       .order('created_at', { ascending: false })
 
     if (error) throw error
 
-    return { success: true, documents: documents || [] }
+    const allDocuments = documents || []
+    const estimates = allDocuments.filter((doc) => doc.source === 'estimate')
+    const invoices = allDocuments.filter((doc) => doc.source === 'invoice')
+
+    return { success: true, documents: estimates, invoices }
   } catch (error: any) {
     console.error('getClientDocumentsAction error:', error)
     return { success: false, error: error.message }
@@ -4429,15 +5024,21 @@ export async function getReportsDataAction(
     let schedules: Array<{
       id: string
       client_id: string
+      title: string
       status: string
       start_time: string
       end_time: string
       price: number | null
       recurring_rule_id: string | null
     }> = []
+    let invoiceDocuments: Array<{
+      schedule_id: string
+      id: string
+      created_at: string
+    }> = []
 
     if (clientIds.length > 0) {
-      const [linesResult, paymentsResult, schedulesResult] = await Promise.all([
+      const [linesResult, paymentsResult, schedulesResult, invoiceDocsResult] = await Promise.all([
         supabaseAdmin
           .from('billing_line_items')
           .select('id, client_id, schedule_id, amount, created_at')
@@ -4448,17 +5049,27 @@ export async function getReportsDataAction(
           .eq('company_id', companyId),
         supabaseAdmin
           .from('schedules')
-          .select('id, client_id, status, start_time, end_time, price, recurring_rule_id')
+          .select('id, client_id, title, status, start_time, end_time, price, recurring_rule_id')
           .in('client_id', clientIds),
+        supabaseAdmin
+          .from('client_documents')
+          .select('id, schedule_id, created_at')
+          .eq('company_id', companyId)
+          .eq('source', 'invoice')
+          .not('schedule_id', 'is', null),
       ])
 
       if (linesResult.error) throw linesResult.error
       if (paymentsResult.error) throw paymentsResult.error
       if (schedulesResult.error) throw schedulesResult.error
+      if (invoiceDocsResult.error && invoiceDocsResult.error.code !== '42703') {
+        throw invoiceDocsResult.error
+      }
 
       lineItems = linesResult.data || []
       payments = paymentsResult.data || []
       schedules = schedulesResult.data || []
+      invoiceDocuments = invoiceDocsResult.error ? [] : invoiceDocsResult.data || []
     }
 
     const periodStart = getReportsPeriodStart(period, timezone, now)
@@ -4502,6 +5113,7 @@ export async function getReportsDataAction(
       payments,
       schedules,
       clients: clients || [],
+      invoiceDocuments,
       leadsConverted,
       estimatesSent,
       now,

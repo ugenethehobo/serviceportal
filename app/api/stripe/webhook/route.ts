@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe } from '@/lib/stripe'
-import { recordStripePayment } from '@/lib/billing-server'
+import { handleStripeRefund, recordStripePayment } from '@/lib/billing-server'
 
 function createSupabaseAdmin() {
   return createClient(
@@ -63,6 +63,34 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 })
       }
     }
+  }
+
+  if (event.type === 'charge.refunded') {
+    const charge = event.data.object
+    const paymentIntentId =
+      typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
+
+    if (paymentIntentId) {
+      try {
+        await handleStripeRefund(paymentIntentId, charge.amount_refunded / 100)
+      } catch (error) {
+        console.error('Failed to process Stripe refund:', error)
+        return NextResponse.json({ error: 'Failed to process refund' }, { status: 500 })
+      }
+    }
+  }
+
+  if (event.type === 'account.application.deauthorized') {
+    const account = event.data.object
+    const supabaseAdmin = createSupabaseAdmin()
+    await supabaseAdmin
+      .from('companies')
+      .update({
+        stripe_account_id: null,
+        stripe_charges_enabled: false,
+        stripe_onboarding_complete: false,
+      })
+      .eq('stripe_account_id', account.id)
   }
 
   return NextResponse.json({ received: true })

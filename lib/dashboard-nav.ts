@@ -7,6 +7,7 @@ import {
   Route,
   Settings,
   CalendarDays,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -22,6 +23,7 @@ export const adminNavItems: DashboardNavItem[] = [
   { href: '/dashboard/leads', label: 'Leads', icon: UserPlus },
   { href: '/dashboard/crews', label: 'Crews', icon: CheckSquare },
   { href: '/dashboard/routes', label: 'Routes', icon: Route },
+  { href: '/dashboard/payments', label: 'Payments', icon: Wallet },
   { href: '/dashboard/reports', label: 'Reports', icon: BarChart3 },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]

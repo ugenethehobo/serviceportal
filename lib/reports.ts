@@ -1,4 +1,10 @@
-import { formatCurrency } from '@/lib/billing'
+import { buildArAgingData, type ArAgingData } from '@/lib/ar-aging'
+import {
+  computeClientBillingTotals,
+  computeOpenJobBalancesByClient,
+  formatCurrency,
+  sumAmountsBySchedule,
+} from '@/lib/billing'
 import { getCompanyDateString, parseAsCompanyTime } from '@/lib/timezone'
 
 export type ReportsPeriod = '30d' | '90d' | 'ytd' | 'all'
@@ -50,6 +56,7 @@ export type ReportsData = {
   revenueByMonth: RevenueMonthPoint[]
   jobsByStatus: JobStatusPoint[]
   outstandingClients: ClientBalanceRow[]
+  arAging: ArAgingData
 }
 
 type RawLineItem = {
@@ -71,6 +78,7 @@ type RawPayment = {
 type RawSchedule = {
   id: string
   client_id: string
+  title?: string
   status: string
   start_time: string
   end_time: string
@@ -78,7 +86,11 @@ type RawSchedule = {
   recurring_rule_id?: string | null
 }
 
-const OPEN_JOB_STATUSES = new Set(['scheduled', 'in_progress'])
+type InvoiceDocumentMeta = {
+  schedule_id: string
+  id: string
+  created_at: string
+}
 
 type RawClient = {
   id: string
@@ -162,30 +174,13 @@ function monthLabelFromKey(monthKey: string) {
   return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 }
 
-/**
- * Completed-job revenue uses list price (same source as Amount Due on clients).
- * Line items are ignored here because recurring copies can duplicate them.
- */
-export function getCompletedJobBilledAmount(schedule: Pick<RawSchedule, 'price'>) {
-  return Number(schedule.price) || 0
-}
-
-/** Matches the Amount Due column on the clients list (open job list prices). */
-export function computeOpenJobsAmountDue(
-  schedules: Array<Pick<RawSchedule, 'client_id' | 'status' | 'price'>>
+function getCompletedJobBilledAmount(
+  schedule: Pick<RawSchedule, 'id' | 'price'>,
+  chargedBySchedule: Map<string, number>
 ) {
-  const byClient = new Map<string, number>()
-  let total = 0
-
-  for (const schedule of schedules) {
-    if (!OPEN_JOB_STATUSES.has(schedule.status)) continue
-    const amount = Number(schedule.price) || 0
-    if (amount <= 0) continue
-    total += amount
-    byClient.set(schedule.client_id, (byClient.get(schedule.client_id) || 0) + amount)
-  }
-
-  return { total, byClient }
+  const fromLineItems = chargedBySchedule.get(schedule.id) || 0
+  if (fromLineItems > 0) return fromLineItems
+  return Number(schedule.price) || 0
 }
 
 function isCompletedJobInPeriod(schedule: RawSchedule, bounds: PeriodBounds) {
@@ -200,6 +195,7 @@ export function buildReportsData(input: {
   payments: RawPayment[]
   schedules: RawSchedule[]
   clients: RawClient[]
+  invoiceDocuments?: InvoiceDocumentMeta[]
   leadsConverted: number
   estimatesSent: number
   now?: Date
@@ -218,8 +214,16 @@ export function buildReportsData(input: {
     return isInReportsPeriod(payment.payment_date, bounds)
   })
 
-  const { total: balanceDue, byClient: openAmountByClient } = computeOpenJobsAmountDue(
-    input.schedules
+  const chargedBySchedule = sumAmountsBySchedule(input.lineItems)
+  const { total: balanceDue } = computeOpenJobBalancesByClient(
+    input.schedules,
+    input.lineItems,
+    input.payments
+  )
+  const clientBillingTotals = computeClientBillingTotals(
+    input.schedules,
+    input.lineItems,
+    input.payments
   )
 
   const jobsCompleted = completedJobsInPeriod.length
@@ -241,7 +245,7 @@ export function buildReportsData(input: {
 
   let totalBilled = 0
   for (const schedule of completedJobsInPeriod) {
-    const amount = getCompletedJobBilledAmount(schedule)
+    const amount = getCompletedJobBilledAmount(schedule, chargedBySchedule)
     if (amount <= 0) continue
     totalBilled += amount
     const key = monthKeyFromIso(schedule.end_time, input.timezone)
@@ -285,17 +289,33 @@ export function buildReportsData(input: {
     .sort((a, b) => b.count - a.count)
 
   const clientNameById = new Map(input.clients.map((client) => [client.id, client.name]))
-  const outstandingClients = Array.from(openAmountByClient.entries())
-    .map(([clientId, amountDue]) => ({
+  const outstandingClients = Array.from(clientBillingTotals.entries())
+    .map(([clientId, totals]) => ({
       clientId,
       clientName: clientNameById.get(clientId) || 'Unknown client',
-      totalBilled: amountDue,
-      totalCollected: 0,
-      balanceDue: amountDue,
+      totalBilled: Math.round(totals.totalCharged * 100) / 100,
+      totalCollected: Math.round(totals.totalPaid * 100) / 100,
+      balanceDue: Math.round((totals.totalCharged - totals.totalPaid) * 100) / 100,
     }))
     .filter((row) => row.balanceDue > 0)
     .sort((a, b) => b.balanceDue - a.balanceDue)
     .slice(0, 10)
+
+  const arAging = buildArAgingData({
+    schedules: input.schedules.map((schedule) => ({
+      id: schedule.id,
+      client_id: schedule.client_id,
+      title: schedule.title || 'Job',
+      status: schedule.status,
+      start_time: schedule.start_time,
+      end_time: schedule.end_time,
+    })),
+    lineItems: input.lineItems,
+    payments: input.payments,
+    clients: input.clients,
+    invoiceDocuments: input.invoiceDocuments || [],
+    now,
+  })
 
   return {
     period: input.period,
@@ -314,6 +334,7 @@ export function buildReportsData(input: {
     revenueByMonth,
     jobsByStatus,
     outstandingClients,
+    arAging,
   }
 }
 

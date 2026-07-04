@@ -62,11 +62,17 @@ function PaymentFormInner({
         Charging <span className="font-medium text-foreground">{amountLabel}</span>
       </p>
       <PaymentElement options={{ layout: 'tabs' }} />
-      <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={isProcessing}>
+      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={isProcessing}
+          className="w-full sm:w-auto"
+        >
           Cancel
         </Button>
-        <Button type="submit" disabled={!stripe || isProcessing}>
+        <Button type="submit" disabled={!stripe || isProcessing} size="lg" className="w-full sm:w-auto">
           {isProcessing ? 'Processing...' : 'Pay Now'}
         </Button>
       </div>
