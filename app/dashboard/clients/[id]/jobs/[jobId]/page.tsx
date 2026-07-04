@@ -12,6 +12,7 @@ import {
   cancelJobAction,
   deleteJobAction,
 } from '@/app/action'
+import { JobDetailsPanel } from '@/components/dashboard/job-details-panel'
 import { JobPhotosPanel } from '@/components/dashboard/job-photos-panel'
 import { JobDocumentsPanel } from '@/components/dashboard/job-documents-panel'
 import { JobMessagingPanel } from '@/components/dashboard/job-messaging-panel'
@@ -406,83 +407,101 @@ export default function JobDetailPage() {
     ? getDisplayAddressFromClient(job.client) || 'No address on file'
     : 'No address on file'
 
-  return (
-    <div className="flex flex-col h-full min-h-0 p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
-        <div className="min-w-0">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href={isTeamMember ? '/dashboard/team' : '/dashboard/clients'}>
-                  {isTeamMember ? 'My Day' : 'Clients'}
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              {!isTeamMember && (
-                <>
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    <BreadcrumbLink href={`/dashboard/clients/${clientId}`}>
-                      {clientName || 'Client'}
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                </>
-              )}
+  const jobTabSwitcher = (
+    <div className="flex items-center justify-center gap-1 bg-card/50 rounded-lg p-1 overflow-x-auto w-max max-w-full">
+      {jobTabs.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => handleTabChange(tab.id)}
+          className={`px-3 sm:px-4 py-2 text-sm rounded-md transition-colors whitespace-nowrap ${
+            activeTab === tab.id ? 'bg-card shadow-sm font-medium' : 'hover:bg-background'
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
+
+  const jobActionButtons = (
+    <div className="flex items-center gap-2 flex-wrap justify-end">
+      {activeTab === 'details' && canEdit && !isEditing && (
+        <Button variant="outline" onClick={handleStartEditing}>Edit</Button>
+      )}
+      {activeTab === 'details' && isEditing && (
+        <>
+          <Button variant="outline" onClick={() => { setIsEditing(false); setConflictInfo(null) }}>
+            Cancel Edit
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </>
+      )}
+      {canCancel && !isEditing && (
+        <Button variant="outline" onClick={() => setConfirmAction('cancel')}>
+          Cancel Job
+        </Button>
+      )}
+      {canArchive && !isEditing && (
+        <Button variant="outline" onClick={() => setConfirmAction('archive')}>Complete Early</Button>
+      )}
+      {canDelete && !isEditing && (
+        <Button variant="destructive" onClick={() => setConfirmAction('delete')}>Delete</Button>
+      )}
+    </div>
+  )
+
+  const jobTitleBlock = (
+    <div className="min-w-0">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href={isTeamMember ? '/dashboard/team' : '/dashboard/clients'}>
+              {isTeamMember ? 'My Day' : 'Clients'}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          {!isTeamMember && (
+            <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>{job.title}</BreadcrumbPage>
+                <BreadcrumbLink href={`/dashboard/clients/${clientId}`}>
+                  {clientName || 'Client'}
+                </BreadcrumbLink>
               </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-2">{job.title}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{jobMeta}</p>
-          {isTeamMember && (
-            <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{jobAddress}</p>
-          )}
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3 lg:items-center">
-          <div className="flex items-center gap-1 bg-card/50 rounded-lg p-1 overflow-x-auto">
-            {jobTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`px-3 sm:px-4 py-2 text-sm rounded-md transition-colors whitespace-nowrap ${
-                  activeTab === tab.id ? 'bg-card shadow-sm font-medium' : 'hover:bg-background'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-          {activeTab === 'details' && canEdit && !isEditing && (
-            <Button variant="outline" onClick={handleStartEditing}>Edit</Button>
-          )}
-          {activeTab === 'details' && isEditing && (
-            <>
-              <Button variant="outline" onClick={() => { setIsEditing(false); setConflictInfo(null) }}>
-                Cancel Edit
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving ? 'Saving...' : 'Save Changes'}
-              </Button>
             </>
           )}
-          {canCancel && !isEditing && (
-            <Button variant="outline" onClick={() => setConfirmAction('cancel')}>
-              Cancel Job
-            </Button>
-          )}
-          {canArchive && !isEditing && (
-            <Button variant="outline" onClick={() => setConfirmAction('archive')}>Complete Early</Button>
-          )}
-          {canDelete && !isEditing && (
-            <Button variant="destructive" onClick={() => setConfirmAction('delete')}>Delete</Button>
-          )}
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{job.title}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-2">{job.title}</h1>
+      <p className="text-sm text-muted-foreground mt-1">{jobMeta}</p>
+      {isTeamMember && (
+        <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{jobAddress}</p>
+      )}
+    </div>
+  )
+
+  return (
+    <div className="flex flex-col h-full min-h-0 p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-6">
+      {isTeamMember ? (
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
+          {jobTitleBlock}
+          <div className="flex flex-col sm:flex-row gap-3 lg:items-center">
+            {jobTabSwitcher}
+            {jobActionButtons}
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 mb-4 sm:mb-6 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center">
+          <div className="min-w-0 lg:justify-self-start">{jobTitleBlock}</div>
+          <div className="flex justify-center lg:justify-self-center">{jobTabSwitcher}</div>
+          <div className="lg:justify-self-end">{jobActionButtons}</div>
+        </div>
+      )}
 
       <Card className="flex-1 flex flex-col p-4 sm:p-6 min-h-0">
         {activeTab === 'details' && (
@@ -503,70 +522,13 @@ export default function JobDetailPage() {
                 />
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
-                <Card className="p-4 sm:p-6 flex flex-col">
-                  <h2 className="font-semibold text-lg mb-4">Job Information</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                    <div>
-                      <div className="text-sm text-muted-foreground">Status</div>
-                      <div className="font-medium">{statusLabels[job.status] ?? job.status}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Crew</div>
-                      <div className="font-medium">
-                        {job.crew?.name || <span className="text-muted-foreground italic">Unassigned</span>}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Date</div>
-                      <div className="font-medium">
-                        {new Date(job.start_time).toLocaleDateString([], {
-                          weekday: 'long',
-                          month: 'long',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Time</div>
-                      <div className="font-medium">
-                        {new Date(job.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                        {' – '}
-                        {new Date(job.end_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Price</div>
-                      <div className="font-medium">
-                        {job.price > 0 ? `$${job.price.toFixed(2)}` : <span className="text-muted-foreground italic">Not set</span>}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground">Recurrence</div>
-                      <div className="font-medium">
-                        {job.recurring_rule_id ? 'Recurring' : 'One-time'}
-                      </div>
-                    </div>
-                    {isTeamMember && (
-                      <div className="md:col-span-2">
-                        <div className="text-sm text-muted-foreground">Address</div>
-                        <div className="font-medium">{jobAddress}</div>
-                        <div className="mt-3 hidden sm:block max-w-sm">
-                          <MapsNavigateButton address={jobAddress} className="w-full" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-
-                <Card className="p-4 sm:p-6 flex flex-col">
-                  <h2 className="font-semibold text-lg mb-4">Description</h2>
-                  <p className="text-sm flex-1">
-                    {job.description || <span className="text-muted-foreground italic">No description provided.</span>}
-                  </p>
-                </Card>
-              </div>
+              <JobDetailsPanel
+                job={job}
+                clientName={clientName}
+                clientId={clientId}
+                jobAddress={jobAddress}
+                isTeamMember={isTeamMember}
+              />
             )}
           </ScrollArea>
         )}
