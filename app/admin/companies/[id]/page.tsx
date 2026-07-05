@@ -26,6 +26,7 @@ import { deleteUserCompletely } from '@/app/action'
 import { createCompanyUser } from '@/app/action'
 import { getCompanyData } from '@/app/action'
 import { updateCompanyUser } from '@/app/action'
+import { ImageAttachmentField } from '@/components/admin/image-attachment-field'
 
 interface User {
   id: string
@@ -43,6 +44,14 @@ interface Company {
   subscription_status?: string | null
   seat_limit?: number | null
   trial_ends_at?: string | null
+}
+
+function isBlobUrl(url: string | null | undefined): url is string {
+  return Boolean(url?.startsWith('blob:'))
+}
+
+function revokeBlobUrl(url: string | null) {
+  if (isBlobUrl(url)) URL.revokeObjectURL(url)
 }
 
 export default function CompanyUsersPage() {
@@ -107,27 +116,6 @@ export default function CompanyUsersPage() {
     if (companyId) fetchData()
   }, [companyId])
 
-  // Prefill form when editing a user
-useEffect(() => {
-  if (isAddUserModalOpen && editingUser) {
-    setNewUser({
-      displayName: editingUser.name || '',
-      email: editingUser.email || '',
-      password: '',           // Never prefill password for security
-      role: editingUser.role || 'team_member',
-    })
-    setPhotoPreview(editingUser.avatar_url || null)
-    setUserPhotoFile(null)
-  } else if (!isAddUserModalOpen) {
-    // Reset form when modal is closed
-    setNewUser({ displayName: '', email: '', password: '', role: 'team_member' })
-    setUserPhotoFile(null)
-    setPhotoPreview(null)
-    setEditingUser(null)
-  }
-}, [isAddUserModalOpen, editingUser])
-
-  // Add User form state
   const [newUser, setNewUser] = useState({
     displayName: '',
     email: '',
@@ -136,16 +124,50 @@ useEffect(() => {
   })
   const [userPhotoFile, setUserPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [avatarRemoved, setAvatarRemoved] = useState(false)
 
+  const resetPhotoState = (preview: string | null = null) => {
+    revokeBlobUrl(photoPreview)
+    setUserPhotoFile(null)
+    setPhotoPreview(preview)
+    setAvatarRemoved(false)
+  }
 
-  // Handle photo preview
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setUserPhotoFile(file)
-      const previewUrl = URL.createObjectURL(file)
-      setPhotoPreview(previewUrl)
+  useEffect(() => {
+    if (!isAddUserModalOpen) {
+      setNewUser({ displayName: '', email: '', password: '', role: 'team_member' })
+      resetPhotoState(null)
+      setEditingUser(null)
+      return
     }
+
+    if (editingUser) {
+      setNewUser({
+        displayName: editingUser.name || '',
+        email: editingUser.email || '',
+        password: '',
+        role: editingUser.role || 'team_member',
+      })
+      resetPhotoState(editingUser.avatar_url || null)
+      return
+    }
+
+    resetPhotoState(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAddUserModalOpen, editingUser])
+
+  const handlePhotoFileSelect = (file: File) => {
+    revokeBlobUrl(photoPreview)
+    setUserPhotoFile(file)
+    setPhotoPreview(URL.createObjectURL(file))
+    setAvatarRemoved(false)
+  }
+
+  const handlePhotoRemove = () => {
+    revokeBlobUrl(photoPreview)
+    setUserPhotoFile(null)
+    setPhotoPreview(null)
+    setAvatarRemoved(true)
   }
 
   const handleSaveUser = async () => {
@@ -158,6 +180,7 @@ useEffect(() => {
 
     try {
       let avatarUrl = editingUser?.avatar_url || null
+      if (avatarRemoved) avatarUrl = null
 
       if (userPhotoFile) {
         const fileExt = userPhotoFile.name.split('.').pop()
@@ -211,8 +234,7 @@ useEffect(() => {
       setIsAddUserModalOpen(false)
       setEditingUser(null)
       setNewUser({ displayName: '', email: '', password: '', role: 'team_member' })
-      setUserPhotoFile(null)
-      setPhotoPreview(null)
+      resetPhotoState(null)
 
       alert(editingUser ? 'User updated successfully!' : 'User created successfully!')
 
@@ -374,15 +396,17 @@ useEffect(() => {
       </Dialog>
 
       {/* Add / Edit User Modal */}
-      <Dialog open={isAddUserModalOpen} onOpenChange={(open) => {
-  if (!open) {
-    setEditingUser(null)
-    setNewUser({ displayName: '', email: '', password: '', role: 'team_member' })
-    setUserPhotoFile(null)
-    setPhotoPreview(null)
-  }
-  setIsAddUserModalOpen(open)
-}}>
+      <Dialog
+        open={isAddUserModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingUser(null)
+            setNewUser({ displayName: '', email: '', password: '', role: 'team_member' })
+            resetPhotoState(null)
+          }
+          setIsAddUserModalOpen(open)
+        }}
+      >
         <DialogContent className="!max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -442,20 +466,23 @@ useEffect(() => {
               </select>
             </div>
 
-            {/* Profile Photo with Preview */}
-            <div>
-              <Label>Profile Photo</Label>
-              <Input type="file" accept="image/*" onChange={handlePhotoChange} />
-              {photoPreview ? (
-                <div className="mt-3 flex justify-center">
-                  <img src={photoPreview} alt="Preview" className="h-20 w-20 rounded-full object-cover border" />
-                </div>
-              ) : editingUser?.avatar_url ? (
-                <div className="mt-3 flex justify-center">
-                  <img src={editingUser.avatar_url} alt="Current" className="h-20 w-20 rounded-full object-cover border" />
-                </div>
-              ) : null}
-            </div>
+            <ImageAttachmentField
+              label="Profile photo"
+              imageSrc={photoPreview}
+              fileName={userPhotoFile?.name || (photoPreview && !avatarRemoved ? 'Current photo' : null)}
+              description={
+                userPhotoFile
+                  ? 'New photo will be saved when you create the user'
+                  : editingUser?.avatar_url && !avatarRemoved
+                    ? 'Current profile photo'
+                    : undefined
+              }
+              isUploading={isCreatingUser && Boolean(userPhotoFile)}
+              onFileSelect={handlePhotoFileSelect}
+              onRemove={handlePhotoRemove}
+              idleTitle="Upload profile photo"
+              idleDescription="Shown on the dashboard and in team views"
+            />
           </div>
 
           <div className="flex justify-end gap-2">

@@ -2,7 +2,21 @@
 
 import { completePlatformSignup } from '@/lib/platform-signup-server'
 import type { PlatformPlanId } from '@/lib/platform-billing'
+import { getPlatformPlanPricing } from '@/lib/platform-pricing-server'
+import type { PlatformPlanPricing } from '@/lib/platform-pricing'
 import { validatePlatformDevPromoCode } from '@/lib/platform-promo'
+
+export async function getPlatformPricingAction(): Promise<
+  { success: true; plans: PlatformPlanPricing[] } | { success: false; error: string }
+> {
+  try {
+    const plans = await getPlatformPlanPricing()
+    return { success: true, plans }
+  } catch (error: any) {
+    console.error('getPlatformPricingAction error:', error)
+    return { success: false, error: error.message || 'Failed to load pricing' }
+  }
+}
 
 export async function validatePlatformPromoAction(
   code: string,

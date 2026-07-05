@@ -1,7 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Building2, Clock, MapPin } from 'lucide-react'
+import { Building2, Clock, MapPin, User } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { updateCompanySoloModeAction } from '@/app/action'
+import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -39,6 +42,7 @@ type CompanyRow = {
   address_city?: string | null
   address_state?: string | null
   address_zip?: string | null
+  is_solo_business?: boolean | null
 } | null
 
 interface CompanyProfileSettingsProps {
@@ -100,6 +104,8 @@ export function CompanyProfileSettings({
   const [addressErrors, setAddressErrors] = useState<StructuredAddressErrors>({})
   const [legacyAddress, setLegacyAddress] = useState<string | null>(null)
   const [businessHours, setBusinessHours] = useState<BusinessHours>(DEFAULT_BUSINESS_HOURS)
+  const [isSoloBusiness, setIsSoloBusiness] = useState(false)
+  const [isSavingSoloMode, setIsSavingSoloMode] = useState(false)
   const isReadyRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedSnapshotRef = useRef('')
@@ -130,6 +136,7 @@ export function CompanyProfileSettings({
       company.address_state,
       company.address_zip,
       company.address,
+      company.is_solo_business,
     ].join('|')
 
     if (hydrationKeyRef.current === hydrationKey) return
@@ -152,6 +159,7 @@ export function CompanyProfileSettings({
     setCompanyAddress(nextSnapshot.companyAddress)
     setBusinessHours(nextSnapshot.businessHours)
     setLegacyAddress(structured.street ? null : company.address?.trim() || null)
+    setIsSoloBusiness(Boolean(company.is_solo_business))
     setAddressErrors({})
 
     savedSnapshotRef.current = serializeSnapshot(nextSnapshot)
@@ -259,6 +267,28 @@ export function CompanyProfileSettings({
 
   const previewAddress = formatAddressForDisplay(normalizeStructuredAddress(companyAddress))
   const hasAddressPreview = previewAddress.replace(/,\s*/g, '').length > 0
+
+  const handleSoloModeChange = async (checked: boolean) => {
+    const previous = isSoloBusiness
+    setIsSoloBusiness(checked)
+    setIsSavingSoloMode(true)
+
+    const result = await updateCompanySoloModeAction(checked)
+    setIsSavingSoloMode(false)
+
+    if (!result.success) {
+      setIsSoloBusiness(previous)
+      toast.error(result.error || 'Failed to update business mode')
+      return
+    }
+
+    toast.success(
+      checked
+        ? 'Solo business mode enabled'
+        : 'Team business mode enabled — you can now manage multiple crews'
+    )
+    window.dispatchEvent(new Event('dashboard-profile-updated'))
+  }
 
   return (
     <div className="space-y-4">
@@ -385,6 +415,27 @@ export function CompanyProfileSettings({
         </div>
       </SettingsSubsection>
 
+      <SettingsSubsection
+        icon={User}
+        title="Business mode"
+        description="Choose how crew scheduling works for your company."
+      >
+        <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Solo business</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              You work alone or don&apos;t need multiple crews. Jobs assign to you automatically,
+              and crew management is simplified across the dashboard.
+            </p>
+          </div>
+          <Switch
+            checked={isSoloBusiness}
+            onCheckedChange={(checked) => void handleSoloModeChange(Boolean(checked))}
+            disabled={isSavingSoloMode}
+            aria-label="Solo business mode"
+          />
+        </div>
+      </SettingsSubsection>
     </div>
   )
 }

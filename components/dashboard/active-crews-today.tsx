@@ -7,6 +7,7 @@ import type { DashboardCrewSummary } from '@/lib/dashboard-overview'
 
 interface ActiveCrewsTodayProps {
   crews: DashboardCrewSummary[]
+  isSoloBusiness?: boolean
 }
 
 function statusVariant(status: DashboardCrewSummary['status']) {
@@ -15,15 +16,19 @@ function statusVariant(status: DashboardCrewSummary['status']) {
   return 'secondary' as const
 }
 
-export function ActiveCrewsToday({ crews }: ActiveCrewsTodayProps) {
+export function ActiveCrewsToday({ crews, isSoloBusiness = false }: ActiveCrewsTodayProps) {
   if (crews.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg">
         <div className="text-center px-4">
-          <p className="text-sm text-muted-foreground">No crews set up yet.</p>
-          <Link href="/dashboard/crews" className="text-sm text-primary hover:underline mt-1 inline-block">
-            Create your first crew
-          </Link>
+          <p className="text-sm text-muted-foreground">
+            {isSoloBusiness ? 'No jobs scheduled for today yet.' : 'No crews set up yet.'}
+          </p>
+          {!isSoloBusiness && (
+            <Link href="/dashboard/crews" className="text-sm text-primary hover:underline mt-1 inline-block">
+              Create your first crew
+            </Link>
+          )}
         </div>
       </div>
     )

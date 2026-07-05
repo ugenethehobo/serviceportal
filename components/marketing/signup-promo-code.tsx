@@ -2,21 +2,21 @@
 
 import { useState } from 'react'
 import { validatePlatformPromoAction } from '@/app/signup/actions'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { PlatformPlanId } from '@/lib/platform-billing'
+import { promoAppliedLabel } from '@/lib/platform-promo'
 import { Loader2, Ticket } from 'lucide-react'
 
 interface SignupPromoCodeProps {
   plan: Exclude<PlatformPlanId, 'trial'>
-  appliedCode: string | null
+  isApplied: boolean
   onApplied: (code: string) => void
   onClear: () => void
 }
 
-export function SignupPromoCode({ plan, appliedCode, onApplied, onClear }: SignupPromoCodeProps) {
+export function SignupPromoCode({ plan, isApplied, onApplied, onClear }: SignupPromoCodeProps) {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isApplying, setIsApplying] = useState(false)
@@ -32,20 +32,19 @@ export function SignupPromoCode({ plan, appliedCode, onApplied, onClear }: Signu
       return
     }
 
-    onApplied(code.trim())
+    const trimmed = code.trim()
+    onApplied(trimmed)
+    setCode('')
     setIsApplying(false)
   }
 
-  if (appliedCode) {
+  if (isApplied) {
     return (
       <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 flex items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Ticket className="size-4 text-emerald-600" />
-            <span className="font-medium text-sm">Promo applied</span>
-            <Badge variant="outline" className="text-emerald-700 border-emerald-500/40">
-              {appliedCode}
-            </Badge>
+            <span className="font-medium text-sm">{promoAppliedLabel()}</span>
           </div>
           <p className="text-sm text-muted-foreground">
             Dev access enabled — skip payment and create your account.
@@ -71,10 +70,17 @@ export function SignupPromoCode({ plan, appliedCode, onApplied, onClear }: Signu
       <div className="flex flex-col sm:flex-row gap-2">
         <Input
           id="signup-promo-code"
+          type="password"
           value={code}
           onChange={(e) => setCode(e.target.value)}
           placeholder="Enter promo code"
           disabled={isApplying}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          data-1p-ignore
+          data-lpignore="true"
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault()

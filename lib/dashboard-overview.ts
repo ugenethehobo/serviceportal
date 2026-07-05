@@ -193,4 +193,5 @@ export type DashboardOverviewData = {
   laneCount: number
   timelineMode: TimelineDayMode
   timelineDateLabel: string
+  isSoloBusiness?: boolean
 }

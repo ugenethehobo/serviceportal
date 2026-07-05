@@ -35,7 +35,14 @@ import {
   queueNotification,
 } from '@/lib/notifications-server'
 import { cookies } from 'next/headers'
-import { getSessionProfile, isStaffRole } from '@/lib/portal-auth'
+import {
+  assertPlatformAdminSession,
+  getSessionProfile,
+  isStaffRole,
+  TRIAL_EXPIRED_ERROR,
+  verifyStaffSubscriptionAccess,
+} from '@/lib/portal-auth'
+import { getCompanySubscriptionAccessForCompany } from '@/lib/platform-trial-server'
 import {
   isThemePreference,
   THEME_COOKIE_NAME,
@@ -118,6 +125,7 @@ import {
   assertPortalEmailAvailable,
   findAuthUserByEmail,
   findProfileByClientId,
+  findProfileByEmail,
   isEmailAlreadyRegisteredError,
   linkClientPortalAccess,
   upsertClientPortalProfile,
@@ -310,9 +318,101 @@ export async function getDashboardData() {
     seats_used: seatCountMap[company.id] || 0,
   })) || []
 
+  const { getPlatformMonthlyPriceMap } = await import('@/lib/platform-pricing-server')
+  const { computePlatformMrr } = await import('@/lib/platform-billing')
+  const monthlyPriceByPlan = await getPlatformMonthlyPriceMap()
+  const billingMetrics = computePlatformMrr(companiesWithCounts, monthlyPriceByPlan)
+
   return {
     companies: companiesWithCounts,
     totalUsers,
+    billingMetrics,
+  }
+}
+
+async function assertPlatformAdmin() {
+  return assertPlatformAdminSession()
+}
+
+export async function adminUpsertCompanyAction(data: {
+  id?: string
+  name: string
+  address?: string | null
+  phone?: string | null
+  logo_url?: string | null
+  subscription_plan: string
+  subscription_status: string
+  trial_ends_at?: string | null
+}) {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false as const, error: adminCheck.error }
+  }
+
+  if (!data.name.trim()) {
+    return { success: false as const, error: 'Company name is required' }
+  }
+
+  const {
+    getSeatLimitForPlan,
+    getTrialEndsAt,
+    normalizePlatformPlan,
+    normalizeSubscriptionStatus,
+  } = await import('@/lib/platform-billing')
+
+  const plan = normalizePlatformPlan(data.subscription_plan)
+  const status = normalizeSubscriptionStatus(data.subscription_status)
+  const seat_limit = getSeatLimitForPlan(plan)
+
+  let trial_ends_at = data.trial_ends_at ?? null
+  if (plan === 'trial') {
+    if (!trial_ends_at) {
+      trial_ends_at = getTrialEndsAt()
+    }
+  } else {
+    trial_ends_at = null
+  }
+
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  )
+
+  const payload = {
+    name: data.name.trim(),
+    address: data.address?.trim() || null,
+    phone: data.phone?.trim() || null,
+    logo_url: data.logo_url ?? null,
+    subscription_plan: plan,
+    subscription_status: status,
+    seat_limit,
+    trial_ends_at,
+  }
+
+  try {
+    if (data.id) {
+      const { error } = await supabaseAdmin
+        .from('companies')
+        .update(payload)
+        .eq('id', data.id)
+
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin.from('companies').insert(payload)
+      if (error) throw error
+    }
+
+    revalidatePath('/admin')
+    return { success: true as const }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to save company'
+    return { success: false as const, error: message }
   }
 }
 
@@ -379,16 +479,32 @@ export async function createCrew(data: {
   crewLeadId?: string | null
   companyId: string
 }) {
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return { success: false, error: check.error }
+  if (check.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data: companyRow } = await supabaseAdmin
+    .from('companies')
+    .select('is_solo_business')
+    .eq('id', data.companyId)
+    .single()
+
+  if (companyRow?.is_solo_business) {
+    return {
+      success: false,
+      error:
+        'Solo businesses use a single owner crew. Turn off solo mode in Settings → Company to manage multiple crews.',
     }
+  }
+
+  const { assertCompanyCrewCreationAllowed } = await import(
+    '@/lib/platform-entitlements-server'
   )
+  const crewGate = await assertCompanyCrewCreationAllowed(data.companyId)
+  if (!crewGate.ok) return { success: false, error: crewGate.error }
 
   try {
     // Create the crew
@@ -1766,6 +1882,12 @@ export async function getCompanyIntegrationsAction(): Promise<
       return { success: false, error: 'Only company admins can manage integrations' }
     }
 
+    const { assertCompanyPlatformFeature } = await import(
+      '@/lib/platform-entitlements-server'
+    )
+    const featureGate = await assertCompanyPlatformFeature(check.companyId, 'integrations')
+    if (!featureGate.ok) return { success: false, error: featureGate.error }
+
     const { INTEGRATION_PROVIDERS, normalizeIntegrationRecord } = await import('@/lib/integrations')
     const providers = Object.keys(INTEGRATION_PROVIDERS) as import('@/lib/integrations').IntegrationProvider[]
     const supabaseAdmin = createSupabaseAdmin()
@@ -1802,6 +1924,12 @@ export async function saveZapierIntegrationAction(webhookUrl: string): Promise<
     if (check.session.profile.role !== 'company_admin') {
       return { success: false, error: 'Only company admins can manage integrations' }
     }
+
+    const { assertCompanyPlatformFeature } = await import(
+      '@/lib/platform-entitlements-server'
+    )
+    const featureGate = await assertCompanyPlatformFeature(check.companyId, 'integrations')
+    if (!featureGate.ok) return { success: false, error: featureGate.error }
 
     const { isValidZapierWebhookUrl } = await import('@/lib/integrations')
     const trimmed = webhookUrl.trim()
@@ -1850,6 +1978,12 @@ export async function testZapierIntegrationAction(): Promise<
     if (check.session.profile.role !== 'company_admin') {
       return { success: false, error: 'Only company admins can manage integrations' }
     }
+
+    const { assertCompanyPlatformFeature } = await import(
+      '@/lib/platform-entitlements-server'
+    )
+    const featureGate = await assertCompanyPlatformFeature(check.companyId, 'integrations')
+    if (!featureGate.ok) return { success: false, error: featureGate.error }
 
     const { dispatchCompanyZapierEvent } = await import('@/lib/integration-events')
     const supabaseAdmin = createSupabaseAdmin()
@@ -4033,7 +4167,7 @@ export async function getDashboardOverviewAction(): Promise<
     const supabaseAdmin = createSupabaseAdmin()
     const { data: company, error: companyError } = await supabaseAdmin
       .from('companies')
-      .select('timezone, business_hours_start, business_hours_end')
+      .select('timezone, business_hours_start, business_hours_end, is_solo_business')
       .eq('id', companyId)
       .single()
 
@@ -4124,8 +4258,15 @@ export async function getDashboardOverviewAction(): Promise<
       return { success: false, error: crewsError.message }
     }
 
+    const { getCompanySoloContext } = await import('@/lib/solo-business-server')
+    const soloContext = await getCompanySoloContext(companyId)
+    const filteredCrewsData =
+      soloContext.isSoloBusiness && soloContext.soloCrewId
+        ? (crewsData || []).filter((crew) => crew.id === soloContext.soloCrewId)
+        : crewsData || []
+
     const timelineJobs = assignTimelineLanes(buildTimelineJobs(timelineSchedules, timezone, now))
-    const crews = buildCrewSummaries(crewsData || [], todaySchedules, timezone, now)
+    const crews = buildCrewSummaries(filteredCrewsData, todaySchedules, timezone, now)
     const laneCount = timelineJobs.reduce((max, job) => Math.max(max, job.lane + 1), 1)
 
     return {
@@ -4138,6 +4279,7 @@ export async function getDashboardOverviewAction(): Promise<
         laneCount,
         timelineMode,
         timelineDateLabel: formatCompanyDateLabel(timezone, now, timelineDayOffset),
+        isSoloBusiness: soloContext.isSoloBusiness,
       },
     }
   } catch (error: any) {
@@ -4255,6 +4397,11 @@ export async function getRoutePlannerDataAction(): Promise<
     }
 
     const companyId = session.profile.company_id
+    const { assertCompanyPlatformFeature } = await import(
+      '@/lib/platform-entitlements-server'
+    )
+    const featureGate = await assertCompanyPlatformFeature(companyId, 'routes')
+    if (!featureGate.ok) return { success: false, error: featureGate.error }
     const supabaseAdmin = createSupabaseAdmin()
     const now = new Date()
 
@@ -4565,6 +4712,7 @@ export async function updateCompanySettingsAction(data: {
   businessHours: BusinessHours
   companyAddress?: StructuredAddress
   companyName?: string
+  isSoloBusiness?: boolean
 }) {
   try {
     const session = await getSessionProfile()
@@ -4592,43 +4740,501 @@ export async function updateCompanySettingsAction(data: {
       return { success: false, error: 'Company name is required' }
     }
 
-    const supabaseAdmin = createSupabaseAdmin()
-    const { error } = await supabaseAdmin
-      .from('companies')
-      .update({
-        ...(companyName !== undefined ? { name: companyName } : {}),
-        timezone: data.timezone,
-        business_hours_start: data.businessHours.start,
-        business_hours_end: data.businessHours.end,
-        address_street: normalizedAddress.street,
-        address_unit: normalizedAddress.unit || null,
-        address_city: normalizedAddress.city,
-        address_state: normalizedAddress.state,
-        address_zip: normalizedAddress.zip,
-        address: formatAddressForDisplay(normalizedAddress),
-      })
-      .eq('id', session.profile.company_id)
+  const supabaseAdmin = createSupabaseAdmin()
+  const companyUpdate: Record<string, unknown> = {
+    ...(companyName !== undefined ? { name: companyName } : {}),
+    timezone: data.timezone,
+    business_hours_start: data.businessHours.start,
+    business_hours_end: data.businessHours.end,
+    address_street: normalizedAddress.street,
+    address_unit: normalizedAddress.unit || null,
+    address_city: normalizedAddress.city,
+    address_state: normalizedAddress.state,
+    address_zip: normalizedAddress.zip,
+    address: formatAddressForDisplay(normalizedAddress),
+  }
 
-    if (error) {
-      return { success: false, error: error.message }
+  if (data.isSoloBusiness !== undefined) {
+    companyUpdate.is_solo_business = data.isSoloBusiness
+  }
+
+  const { error } = await supabaseAdmin
+    .from('companies')
+    .update(companyUpdate)
+    .eq('id', session.profile.company_id)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  if (data.isSoloBusiness) {
+    const { ensureSoloCrewForCompany } = await import('@/lib/solo-business-server')
+    const soloSetup = await ensureSoloCrewForCompany(session.profile.company_id)
+    if (!soloSetup.ok) {
+      return { success: false, error: soloSetup.error }
     }
+  }
 
-    const geocodeResult = await geocodeStructuredAddress(normalizedAddress)
+  const geocodeResult = await geocodeStructuredAddress(normalizedAddress)
 
-    revalidatePath('/dashboard')
-    revalidatePath('/dashboard/settings')
+  revalidatePath('/dashboard')
+  revalidatePath('/dashboard/settings')
+  revalidatePath('/dashboard/crews')
 
-    return {
-      success: true,
-      companyName: companyName,
-      mapReady: geocodeResult.success,
-      mapWarning: geocodeResult.success
-        ? undefined
-        : geocodeResult.reason,
-    }
+  return {
+    success: true,
+    companyName: companyName,
+    isSoloBusiness: data.isSoloBusiness,
+    mapReady: geocodeResult.success,
+    mapWarning: geocodeResult.success
+      ? undefined
+      : geocodeResult.reason,
+  }
   } catch (error: any) {
     console.error('updateCompanySettingsAction error:', error)
     return { success: false, error: error.message || 'Failed to save settings' }
+  }
+}
+
+export async function getCompanySubscriptionAccessAction() {
+  const session = await getSessionProfile()
+  if (!session?.profile.company_id) {
+    return { success: false as const, error: 'No company associated with this account' }
+  }
+
+  const access = await getCompanySubscriptionAccessForCompany(session.profile.company_id)
+  if (!access) {
+    return { success: false as const, error: 'Company not found' }
+  }
+
+  const { getPlanEntitlements } = await import('@/lib/platform-entitlements')
+  const { getCompanySoloContext } = await import('@/lib/solo-business-server')
+  const soloContext = await getCompanySoloContext(session.profile.company_id)
+
+  return {
+    success: true as const,
+    access,
+    entitlements: getPlanEntitlements(access.plan),
+    role: session.profile.role,
+    isSoloBusiness: soloContext.isSoloBusiness,
+    soloCrewId: soloContext.soloCrewId,
+  }
+}
+
+export async function getCompanyCrewSettingsAction() {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return { success: false as const, error: check.error }
+
+  const { getCompanySoloContext } = await import('@/lib/solo-business-server')
+  const soloContext = await getCompanySoloContext(check.companyId)
+
+  return {
+    success: true as const,
+    isSoloBusiness: soloContext.isSoloBusiness,
+    soloCrewId: soloContext.soloCrewId,
+    canManageMultipleCrews: !soloContext.isSoloBusiness,
+  }
+}
+
+export async function updateCompanySoloModeAction(isSoloBusiness: boolean) {
+  const session = await getSessionProfile()
+  if (!session?.profile?.company_id) {
+    return { success: false as const, error: 'Not authenticated' }
+  }
+  if (session.profile.role !== 'company_admin') {
+    return { success: false as const, error: 'Only company admins can change business mode' }
+  }
+
+  const supabaseAdmin = createSupabaseAdmin()
+  const { error } = await supabaseAdmin
+    .from('companies')
+    .update({ is_solo_business: isSoloBusiness })
+    .eq('id', session.profile.company_id)
+
+  if (error) {
+    return { success: false as const, error: error.message }
+  }
+
+  if (isSoloBusiness) {
+    const { ensureSoloCrewForCompany } = await import('@/lib/solo-business-server')
+    const soloSetup = await ensureSoloCrewForCompany(session.profile.company_id)
+    if (!soloSetup.ok) {
+      return { success: false as const, error: soloSetup.error }
+    }
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath('/dashboard/settings')
+  revalidatePath('/dashboard/crews')
+
+  return { success: true as const, isSoloBusiness }
+}
+
+export type CompanyTeamMember = {
+  id: string
+  name: string
+  email: string
+  role: string
+  status: string
+  avatar_url: string | null
+  crew_id: string | null
+  crew_name: string | null
+}
+
+async function verifyCompanyAdmin() {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return check
+  if (check.session.profile.role !== 'company_admin') {
+    return { ok: false as const, error: 'Only company admins can manage team members' }
+  }
+  return check
+}
+
+async function assertStaffEmailAvailableForCompany(
+  supabaseAdmin: ReturnType<typeof createSupabaseAdmin>,
+  email: string,
+  companyId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const profile = await findProfileByEmail(supabaseAdmin, email)
+  if (!profile) return { ok: true }
+
+  const { data: fullProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('id, company_id, role, client_id')
+    .eq('id', profile.id)
+    .maybeSingle()
+
+  if (!fullProfile) return { ok: true }
+
+  if (fullProfile.company_id === companyId) {
+    return { ok: false, error: 'This person is already on your team' }
+  }
+
+  if (fullProfile.role === 'client') {
+    return { ok: false, error: 'This email is linked to a client portal account' }
+  }
+
+  return { ok: false, error: 'This email is already used by another account' }
+}
+
+async function verifyTeamMemberInCompany(userId: string, companyId: string) {
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data: profile, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, company_id, role, avatar_url, crew_id')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (error || !profile) {
+    return { ok: false as const, error: 'Team member not found' }
+  }
+
+  if (profile.company_id !== companyId) {
+    return { ok: false as const, error: 'Unauthorized' }
+  }
+
+  if (!['company_admin', 'team_member'].includes(profile.role)) {
+    return { ok: false as const, error: 'This account cannot be managed here' }
+  }
+
+  return { ok: true as const, profile }
+}
+
+async function assertCompanySeatAvailable(companyId: string) {
+  const { countCompanySeats } = await import('@/lib/platform-signup-server')
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data: company, error } = await supabaseAdmin
+    .from('companies')
+    .select('seat_limit')
+    .eq('id', companyId)
+    .single()
+
+  if (error) {
+    return { ok: false as const, error: error.message }
+  }
+
+  const seatsUsed = await countCompanySeats(supabaseAdmin, companyId)
+  const seatLimit = Number(company?.seat_limit) || 10
+
+  if (seatsUsed >= seatLimit) {
+    return {
+      ok: false as const,
+      error: `Seat limit reached (${seatLimit}). Upgrade your plan to add more team members.`,
+      seatsUsed,
+      seatLimit,
+    }
+  }
+
+  return { ok: true as const, seatsUsed, seatLimit }
+}
+
+export async function getCompanyTeamMembersAction() {
+  const check = await verifyCompanyAdmin()
+  if (!check.ok) return { success: false as const, error: check.error }
+
+  try {
+    const supabaseAdmin = createSupabaseAdmin()
+    const { countCompanySeats } = await import('@/lib/platform-signup-server')
+
+    const [{ data: company }, { data: profiles }] = await Promise.all([
+      supabaseAdmin
+        .from('companies')
+        .select('seat_limit')
+        .eq('id', check.companyId)
+        .single(),
+      supabaseAdmin
+        .from('profiles')
+        .select('id, full_name, email, role, status, avatar_url, crew_id')
+        .eq('company_id', check.companyId)
+        .in('role', ['company_admin', 'team_member'])
+        .order('full_name'),
+    ])
+
+    const crewIds = [
+      ...new Set((profiles || []).map((row) => row.crew_id).filter(Boolean)),
+    ] as string[]
+
+    let crewNameById = new Map<string, string>()
+    if (crewIds.length > 0) {
+      const { data: crews } = await supabaseAdmin
+        .from('crews')
+        .select('id, name')
+        .in('id', crewIds)
+      crewNameById = new Map((crews || []).map((crew) => [crew.id, crew.name]))
+    }
+
+    const members: CompanyTeamMember[] = (profiles || []).map((profile) => ({
+      id: profile.id,
+      name: profile.full_name || 'Unnamed User',
+      email: profile.email || '',
+      role: profile.role || 'team_member',
+      status: profile.status || 'Active',
+      avatar_url: profile.avatar_url,
+      crew_id: profile.crew_id,
+      crew_name: profile.crew_id ? crewNameById.get(profile.crew_id) || null : null,
+    }))
+
+    const seatsUsed = await countCompanySeats(supabaseAdmin, check.companyId)
+    const seatLimit = Number(company?.seat_limit) || 10
+
+    return {
+      success: true as const,
+      members,
+      seatsUsed,
+      seatLimit,
+      currentUserId: check.userId,
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to load team members'
+    return { success: false as const, error: message }
+  }
+}
+
+export async function createCompanyTeamMemberAction(data: {
+  email: string
+  displayName: string
+  password?: string
+  role: 'team_member' | 'company_admin'
+  avatarUrl?: string | null
+  origin: string
+}) {
+  const check = await verifyCompanyAdmin()
+  if (!check.ok) return { success: false as const, error: check.error }
+
+  const email = data.email.trim().toLowerCase()
+  const displayName = data.displayName.trim()
+
+  if (!email || !displayName) {
+    return { success: false as const, error: 'Display name and email are required' }
+  }
+
+  const seatGate = await assertCompanySeatAvailable(check.companyId)
+  if (!seatGate.ok) return { success: false as const, error: seatGate.error }
+
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const emailCheck = await assertStaffEmailAvailableForCompany(
+      supabaseAdmin,
+      email,
+      check.companyId
+    )
+    if (!emailCheck.ok) return { success: false as const, error: emailCheck.error }
+
+    let userId: string
+
+    if (data.password?.trim()) {
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password: data.password.trim(),
+        email_confirm: true,
+        user_metadata: {
+          full_name: displayName,
+          role: data.role,
+          company_id: check.companyId,
+        },
+      })
+
+      if (authError) {
+        return { success: false as const, error: authError.message }
+      }
+      if (!authData.user) {
+        return { success: false as const, error: 'Failed to create user' }
+      }
+      userId = authData.user.id
+    } else {
+      const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, email)
+      if (existingAuthUser) {
+        return {
+          success: false as const,
+          error: 'This email already has an account. Set a password to link it, or use a different email.',
+        }
+      }
+
+      const { data: inviteData, error: inviteError } =
+        await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+          redirectTo: `${data.origin}/login`,
+          data: {
+            full_name: displayName,
+            role: data.role,
+            company_id: check.companyId,
+          },
+        })
+
+      if (inviteError) {
+        return { success: false as const, error: inviteError.message }
+      }
+      if (!inviteData.user) {
+        return { success: false as const, error: 'Failed to send invite' }
+      }
+      userId = inviteData.user.id
+    }
+
+    const { error: profileError } = await supabaseAdmin.from('profiles').insert({
+      id: userId,
+      full_name: displayName,
+      email,
+      avatar_url: data.avatarUrl || null,
+      company_id: check.companyId,
+      status: 'Active',
+      role: data.role,
+    })
+
+    if (profileError) {
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+      return { success: false as const, error: profileError.message }
+    }
+
+    revalidatePath('/dashboard/crews')
+    return { success: true as const, invited: !data.password?.trim() }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to add team member'
+    return { success: false as const, error: message }
+  }
+}
+
+export async function updateCompanyTeamMemberAction(data: {
+  userId: string
+  displayName: string
+  password?: string
+  role: 'team_member' | 'company_admin'
+  avatarUrl?: string | null
+}) {
+  const check = await verifyCompanyAdmin()
+  if (!check.ok) return { success: false as const, error: check.error }
+
+  const displayName = data.displayName.trim()
+  if (!displayName) {
+    return { success: false as const, error: 'Display name is required' }
+  }
+
+  const target = await verifyTeamMemberInCompany(data.userId, check.companyId)
+  if (!target.ok) return { success: false as const, error: target.error }
+
+  if (data.userId === check.userId && data.role !== 'company_admin') {
+    return { success: false as const, error: 'You cannot remove your own admin access' }
+  }
+
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const updateData: {
+      password?: string
+      user_metadata: { full_name: string; role: string; company_id: string }
+    } = {
+      user_metadata: {
+        full_name: displayName,
+        role: data.role,
+        company_id: check.companyId,
+      },
+    }
+
+    if (data.password?.trim()) {
+      updateData.password = data.password.trim()
+    }
+
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+      data.userId,
+      updateData
+    )
+    if (authError) return { success: false as const, error: authError.message }
+
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        full_name: displayName,
+        avatar_url: data.avatarUrl,
+        role: data.role,
+      })
+      .eq('id', data.userId)
+
+    if (profileError) return { success: false as const, error: profileError.message }
+
+    revalidatePath('/dashboard/crews')
+    return { success: true as const }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to update team member'
+    return { success: false as const, error: message }
+  }
+}
+
+export async function deleteCompanyTeamMemberAction(
+  userId: string,
+  avatarUrl?: string | null
+) {
+  const check = await verifyCompanyAdmin()
+  if (!check.ok) return { success: false as const, error: check.error }
+
+  if (userId === check.userId) {
+    return { success: false as const, error: 'You cannot remove your own account' }
+  }
+
+  const target = await verifyTeamMemberInCompany(userId, check.companyId)
+  if (!target.ok) return { success: false as const, error: target.error }
+
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    await supabaseAdmin.from('crews').update({ crew_lead_id: null }).eq('crew_lead_id', userId)
+    await supabaseAdmin.from('profiles').update({ crew_id: null }).eq('id', userId)
+
+    if (avatarUrl) {
+      const path = avatarUrl.split('/user-avatars/')[1]
+      if (path) {
+        await supabaseAdmin.storage.from('user-avatars').remove([path])
+      }
+    }
+
+    await supabaseAdmin.from('profiles').delete().eq('id', userId)
+
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId)
+    if (error) return { success: false as const, error: error.message }
+
+    revalidatePath('/dashboard/crews')
+    return { success: true as const }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to remove team member'
+    return { success: false as const, error: message }
   }
 }
 
@@ -4643,6 +5249,12 @@ async function verifyCompanyStaff() {
   if (!['company_admin', 'team_member'].includes(session.profile.role)) {
     return { ok: false as const, error: 'Unauthorized' }
   }
+
+  const subscription = await verifyStaffSubscriptionAccess(session.profile.company_id)
+  if (!subscription.ok) {
+    return { ok: false as const, error: TRIAL_EXPIRED_ERROR }
+  }
+
   return {
     ok: true as const,
     session,
@@ -4981,6 +5593,12 @@ export async function getReportsDataAction(
   try {
     const check = await verifyCompanyStaff()
     if (!check.ok) return { success: false, error: check.error }
+
+    const { assertCompanyPlatformFeature } = await import(
+      '@/lib/platform-entitlements-server'
+    )
+    const featureGate = await assertCompanyPlatformFeature(check.companyId, 'reports')
+    if (!featureGate.ok) return { success: false, error: featureGate.error }
 
     const supabaseAdmin = createSupabaseAdmin()
     const companyId = check.companyId

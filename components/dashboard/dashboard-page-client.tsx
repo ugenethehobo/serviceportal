@@ -7,6 +7,7 @@ import { getDashboardMapDataAction, getDashboardOverviewAction } from '@/app/act
 import { ActiveCrewsToday } from '@/components/dashboard/active-crews-today'
 import { JobsTimeline } from '@/components/dashboard/jobs-timeline'
 import { LiveCrewLocationsMap } from '@/components/dashboard/live-crew-locations-map'
+import { getActiveCrewsHeading } from '@/lib/company-operations'
 import type { DashboardOverviewData } from '@/lib/dashboard-overview'
 import type { DashboardMapData } from '@/lib/dashboard-map'
 
@@ -66,12 +67,14 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-0 overflow-hidden">
           <div className="lg:col-span-2 lg:border-r lg:pr-6 flex flex-col min-h-0 border-border/70">
             <div className="flex items-center justify-between mb-3 pb-2 border-b flex-shrink-0">
-              <h2 className="text-lg font-semibold tracking-tight">Active Crews Today</h2>
+              <h2 className="text-lg font-semibold tracking-tight">
+                {getActiveCrewsHeading(Boolean(data.isSoloBusiness))}
+              </h2>
               {isRefreshing && (
                 <span className="text-[10px] text-muted-foreground">Updating…</span>
               )}
             </div>
-            <ActiveCrewsToday crews={data.crews} />
+            <ActiveCrewsToday crews={data.crews} isSoloBusiness={data.isSoloBusiness} />
           </div>
 
           <div className="lg:col-span-3 lg:pl-6 flex flex-col min-h-0">

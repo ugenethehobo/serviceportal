@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { parseAsCompanyTime, formatForDatetimeLocal } from '@/lib/timezone'
 import {
+  getCompanyCrewSettingsAction,
   getDashboardUserDataAction,
   getJobAction,
   updateJobAction,
@@ -12,6 +13,7 @@ import {
   cancelJobAction,
   deleteJobAction,
 } from '@/app/action'
+import { SOLO_CREW_NAME } from '@/lib/company-operations'
 import { JobDetailsPanel } from '@/components/dashboard/job-details-panel'
 import { JobPhotosPanel } from '@/components/dashboard/job-photos-panel'
 import { JobDocumentsPanel } from '@/components/dashboard/job-documents-panel'
@@ -92,6 +94,8 @@ export default function JobDetailPage() {
   const [confirmAction, setConfirmAction] = useState<'archive' | 'cancel' | 'delete' | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [isSoloBusiness, setIsSoloBusiness] = useState(false)
+  const [soloCrewId, setSoloCrewId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<
     'details' | 'billing' | 'photos' | 'documents' | 'messaging'
   >('details')
@@ -177,6 +181,12 @@ export default function JobDetailPage() {
     getDashboardUserDataAction().then((result) => {
       if (result.success) {
         setUserRole(result.profile.role)
+      }
+    })
+    void getCompanyCrewSettingsAction().then((result) => {
+      if (result.success) {
+        setIsSoloBusiness(result.isSoloBusiness)
+        setSoloCrewId(result.soloCrewId)
       }
     })
   }, [fetchJob, fetchCompanyContext])
@@ -317,13 +327,16 @@ export default function JobDetailPage() {
     const startTimeUTC = parseAsCompanyTime(formValues.startTime, companyTimezone)
     const endTimeUTC = parseAsCompanyTime(formValues.endTime, companyTimezone)
 
+    const resolvedCrewId =
+      isSoloBusiness && soloCrewId ? soloCrewId : formValues.crewId || null
+
     const updatePayload: Parameters<typeof updateJobAction>[0] = {
       jobId,
       clientId,
       companyId,
       description: formValues.description,
       endTime: endTimeUTC,
-      crewId: formValues.crewId || null,
+      crewId: resolvedCrewId,
       price: parseFloat(formValues.price) || 0,
     }
 
@@ -519,6 +532,8 @@ export default function JobDetailPage() {
                   onCrewChange={handleCrewChange}
                   showRecurrence={false}
                   disabledFields={disabledFields}
+                  isSoloBusiness={isSoloBusiness}
+                  soloCrewName={SOLO_CREW_NAME}
                 />
               </div>
             ) : (

@@ -52,3 +52,15 @@ export function isDevCompedCompany(company: {
 }): boolean {
   return Boolean(company.promo_code?.trim())
 }
+
+/** Never show raw dev codes in the UI */
+export function maskPromoCode(code: string | null | undefined): string {
+  const trimmed = code?.trim()
+  if (!trimmed) return ''
+  if (trimmed.length <= 2) return '••'
+  return `${trimmed.slice(0, 1)}${'•'.repeat(Math.min(trimmed.length - 2, 8))}${trimmed.slice(-1)}`
+}
+
+export function promoAppliedLabel(): string {
+  return 'Dev access applied'
+}

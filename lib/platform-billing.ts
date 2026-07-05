@@ -3,13 +3,14 @@ export type PlatformPlanId = 'trial' | 'basic' | 'pro'
 export const PLATFORM_TRIAL_DAYS = 14
 
 export const PLATFORM_SEAT_LIMITS: Record<PlatformPlanId, number> = {
-  trial: 10,
+  trial: 2,
   basic: 10,
   pro: 30,
 }
 
 export type PlatformSubscriptionStatus =
   | 'trialing'
+  | 'trial_expired'
   | 'active'
   | 'past_due'
   | 'canceled'
@@ -23,17 +24,17 @@ export const PLATFORM_PLANS: Record<
   trial: {
     label: 'Free Trial',
     monthlyPrice: 0,
-    description: `Full access for ${PLATFORM_TRIAL_DAYS} days — no credit card required.`,
+    description: `${PLATFORM_TRIAL_DAYS}-day trial with ${PLATFORM_SEAT_LIMITS.trial} seats, 2 crews, and core scheduling.`,
   },
   basic: {
     label: 'Basic',
     monthlyPrice: 49,
-    description: `Scheduling, clients, billing, and up to ${PLATFORM_SEAT_LIMITS.basic} team seats.`,
+    description: `${PLATFORM_SEAT_LIMITS.basic} seats, 5 crews, reports, and client billing.`,
   },
   pro: {
     label: 'Pro',
     monthlyPrice: 99,
-    description: `Everything in Basic plus reports, integrations, and ${PLATFORM_SEAT_LIMITS.pro} team seats.`,
+    description: `${PLATFORM_SEAT_LIMITS.pro} seats, unlimited crews, routes, reports, and integrations.`,
   },
 }
 
@@ -65,7 +66,8 @@ export function normalizeSubscriptionStatus(
     value === 'past_due' ||
     value === 'canceled' ||
     value === 'unpaid' ||
-    value === 'incomplete'
+    value === 'incomplete' ||
+    value === 'trial_expired'
   ) {
     return value
   }
@@ -78,6 +80,7 @@ export function getSubscriptionDisplayLabel(
   promoCode?: string | null
 ): string {
   if (status === 'canceled') return 'Canceled'
+  if (status === 'trial_expired') return 'Trial ended'
   if (plan === 'trial' && status === 'trialing') return 'Free Trial'
   const base = PLATFORM_PLANS[plan].label
   if (promoCode?.trim()) return `${base} (Promo)`
@@ -85,7 +88,12 @@ export function getSubscriptionDisplayLabel(
 }
 
 export function computePlatformMrr(
-  companies: Array<{ subscription_plan?: string | null; subscription_status?: string | null }>
+  companies: Array<{
+    subscription_plan?: string | null
+    subscription_status?: string | null
+    promo_code?: string | null
+  }>,
+  monthlyPriceByPlan?: Partial<Record<Exclude<PlatformPlanId, 'trial'>, number>>
 ) {
   let mrr = 0
   let activeSubscriptions = 0
@@ -95,11 +103,15 @@ export function computePlatformMrr(
     const status = normalizeSubscriptionStatus(company.subscription_status)
     if (status !== 'active' && status !== 'past_due') continue
     if (plan === 'trial') continue
-    mrr += PLATFORM_PLANS[plan].monthlyPrice
+    if (company.promo_code?.trim()) continue
+
+    const monthlyPrice =
+      monthlyPriceByPlan?.[plan] ?? PLATFORM_PLANS[plan].monthlyPrice
+    mrr += monthlyPrice
     activeSubscriptions += 1
   }
 
-  return { mrr, activeSubscriptions }
+  return { mrr: Math.round(mrr * 100) / 100, activeSubscriptions }
 }
 
 export function mapStripeSubscriptionToPlatform(

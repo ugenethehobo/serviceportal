@@ -11,11 +11,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { createCrew, updateCrew, deleteCrew } from '@/app/action'
+import { createCrew, updateCrew, deleteCrew, getCompanySubscriptionAccessAction } from '@/app/action'
+import { CREW_ASSIGNABLE_ROLES } from '@/lib/company-operations'
+import { getCrewLimitMessage, type PlanEntitlements } from '@/lib/platform-entitlements'
+import { TeamMembersPanel } from '@/components/dashboard/team-members-panel'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { X } from 'lucide-react'
 
 interface Profile {
@@ -57,6 +67,16 @@ export default function CrewsPage() {
   // Delete confirmation
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [crewToDelete, setCrewToDelete] = useState<CrewWithMembers | null>(null)
+  const [entitlements, setEntitlements] = useState<PlanEntitlements | null>(null)
+  const [isSoloBusiness, setIsSoloBusiness] = useState(false)
+  const [activeTab, setActiveTab] = useState('crews')
+
+  const crewLimit = entitlements?.crewLimit ?? null
+  const atCrewLimit = crewLimit !== null && crews.length >= crewLimit
+  const crewUpgradeMessage =
+    entitlements && crewLimit !== null && atCrewLimit
+      ? getCrewLimitMessage(entitlements.plan, crewLimit)
+      : null
 
   const fetchData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -97,14 +117,24 @@ export default function CrewsPage() {
       .from('profiles')
       .select('id, full_name, avatar_url')
       .eq('company_id', profile.company_id)
-      .eq('role', 'team_member')
+      .in('role', CREW_ASSIGNABLE_ROLES)
       .is('crew_id', null)
 
     setAvailableMembers(membersData || [])
   }
 
   useEffect(() => {
-    fetchData()
+    void (async () => {
+      const accessResult = await getCompanySubscriptionAccessAction()
+      if (accessResult.success) {
+        setEntitlements(accessResult.entitlements)
+        setIsSoloBusiness(accessResult.isSoloBusiness)
+        if (accessResult.isSoloBusiness) {
+          setActiveTab('team')
+        }
+      }
+      await fetchData()
+    })()
   }, [])
 
   const openEditModal = (crew: CrewWithMembers) => {
@@ -206,19 +236,63 @@ export default function CrewsPage() {
     }
   }
 
+  const addCrewButton = (
+    <Button onClick={() => setIsAddModalOpen(true)} disabled={atCrewLimit}>
+      + Add Crew
+    </Button>
+  )
+
   return (
-    <div className="p-6 flex flex-col h-[100vh]"> {/* Adjust height if your layout has a different top bar */}
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Crews</h1>
-          <p className="text-muted-foreground">Manage your field crews</p>
-        </div>
-        <Button onClick={() => setIsAddModalOpen(true)}>+ Add Crew</Button>
+    <div className="p-6 flex flex-col h-[100vh]">
+      <div className="mb-4 flex-shrink-0">
+        <h1 className="text-3xl font-bold tracking-tight">
+          {isSoloBusiness ? 'Team' : 'Crews & Team'}
+        </h1>
+        <p className="text-muted-foreground">
+          {isSoloBusiness
+            ? 'Manage team member accounts for your solo business'
+            : 'Manage field crews and team member accounts'}
+        </p>
       </div>
 
-      {/* Main Scrollable Card */}
-      <Card className="flex-1 flex flex-col overflow-hidden p-6">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="flex flex-1 flex-col min-h-0 gap-4"
+      >
+        {!isSoloBusiness && (
+          <TabsList>
+            <TabsTrigger value="crews">Crews</TabsTrigger>
+            <TabsTrigger value="team">Team Members</TabsTrigger>
+          </TabsList>
+        )}
+
+        {!isSoloBusiness && (
+        <TabsContent value="crews" className="flex flex-1 flex-col min-h-0 mt-0 gap-4">
+          <div className="flex items-center justify-between flex-shrink-0">
+            <p className="text-sm text-muted-foreground">
+              Organize team members into field crews
+              {crewLimit !== null && (
+                <span className="ml-1">
+                  · {crews.length}/{crewLimit} used
+                </span>
+              )}
+            </p>
+            <TooltipProvider>
+              {atCrewLimit && crewUpgradeMessage ? (
+                <Tooltip>
+                  <TooltipTrigger render={addCrewButton} />
+                  <TooltipContent side="left" className="max-w-xs">
+                    {crewUpgradeMessage}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                addCrewButton
+              )}
+            </TooltipProvider>
+          </div>
+
+      <Card className="flex-1 flex flex-col overflow-hidden p-6 min-h-0">
         <ScrollArea className="flex-1 pr-2" viewportClassName="scroll-fade">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {crews.length > 0 ? (
@@ -268,6 +342,13 @@ export default function CrewsPage() {
           </div>
         </ScrollArea>
       </Card>
+        </TabsContent>
+        )}
+
+        <TabsContent value="team" className="flex flex-1 flex-col min-h-0 mt-0">
+          <TeamMembersPanel />
+        </TabsContent>
+      </Tabs>
 
       {/* Add Crew Modal */}
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>

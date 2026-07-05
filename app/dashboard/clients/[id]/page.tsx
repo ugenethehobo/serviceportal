@@ -31,10 +31,12 @@ import {
   archiveClientAction,
   createJobAction,
   convertEstimateToJobAction,
+  getCompanyCrewSettingsAction,
   restoreClientAction,
   syncScheduleStatusesAction,
   updateClientAction,
 } from '@/app/action'
+import { SOLO_CREW_NAME } from '@/lib/company-operations'
 import { toast } from 'sonner'
 import { StructuredAddressForm } from '@/components/dashboard/company-address-form'
 import {
@@ -97,6 +99,8 @@ export default function ClientDetailPage() {
   const [isCreatingJob, setIsCreatingJob] = useState(false)
   const [availableCrews, setAvailableCrews] = useState<any[]>([])
   const [conflictInfo, setConflictInfo] = useState<any>(null)
+  const [isSoloBusiness, setIsSoloBusiness] = useState(false)
+  const [soloCrewId, setSoloCrewId] = useState<string | null>(null)
 
   const [showArchived, setShowArchived] = useState(false)
   const [jobSearchQuery, setJobSearchQuery] = useState('')
@@ -387,13 +391,15 @@ export default function ClientDetailPage() {
     const endTimeUTC = parseAsCompanyTime(newJob.endTime, companyTimezone)
 
     const estimateBeingConverted = convertingEstimate
+    const resolvedCrewId =
+      isSoloBusiness && soloCrewId ? soloCrewId : newJob.crewId || null
 
     const result = estimateBeingConverted
       ? await convertEstimateToJobAction({
           estimateId: estimateBeingConverted.id,
           clientId,
           companyId: profile?.company_id || '',
-          crewId: newJob.crewId || null,
+          crewId: resolvedCrewId,
           title: newJob.title,
           description: newJob.description,
           startTime: startTimeUTC,
@@ -402,7 +408,7 @@ export default function ClientDetailPage() {
         })
       : await createJobAction({
           clientId,
-          crewId: newJob.crewId || null,
+          crewId: resolvedCrewId,
           title: newJob.title,
           description: newJob.description,
           startTime: startTimeUTC,
@@ -487,6 +493,22 @@ export default function ClientDetailPage() {
 
     console.log('=== Sync complete ===')
   }
+
+  useEffect(() => {
+    void (async () => {
+      const crewSettings = await getCompanyCrewSettingsAction()
+      if (crewSettings.success) {
+        setIsSoloBusiness(crewSettings.isSoloBusiness)
+        setSoloCrewId(crewSettings.soloCrewId)
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (isSoloBusiness && soloCrewId && isAddJobModalOpen) {
+      setNewJob((prev) => ({ ...prev, crewId: soloCrewId }))
+    }
+  }, [isSoloBusiness, soloCrewId, isAddJobModalOpen])
 
   useEffect(() => {
     if (clientId) {
@@ -1000,6 +1022,8 @@ export default function ClientDetailPage() {
               onEndTimeChange={handleEndTimeChange}
               onCrewChange={handleCrewChange}
               disabledFields={convertingEstimate ? { price: true } : undefined}
+              isSoloBusiness={isSoloBusiness}
+              soloCrewName={SOLO_CREW_NAME}
             />
           </div>
 

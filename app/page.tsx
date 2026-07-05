@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { LandingPage } from '@/components/marketing/landing-page'
 import { getPostLoginPath, getSessionProfile } from '@/lib/portal-auth'
+import { getPlatformPlanPricing } from '@/lib/platform-pricing-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,5 +18,6 @@ export default async function HomePage() {
     )
   }
 
-  return <LandingPage />
+  const plans = await getPlatformPlanPricing()
+  return <LandingPage plans={plans} />
 }

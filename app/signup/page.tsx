@@ -1,7 +1,10 @@
 import { Suspense } from 'react'
 import { SignupPageClient } from '@/components/marketing/signup-page-client'
+import { getPlatformPlanPricing } from '@/lib/platform-pricing-server'
 
-export default function SignupPage() {
+export default async function SignupPage() {
+  const plans = await getPlatformPlanPricing()
+
   return (
     <Suspense
       fallback={
@@ -10,7 +13,7 @@ export default function SignupPage() {
         </div>
       }
     >
-      <SignupPageClient />
+      <SignupPageClient plans={plans} />
     </Suspense>
   )
 }

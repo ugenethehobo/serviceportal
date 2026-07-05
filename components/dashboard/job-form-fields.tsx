@@ -35,6 +35,8 @@ interface JobFormFieldsProps {
   onCrewChange: (crewId: string) => void
   showRecurrence?: boolean
   disabledFields?: Partial<Record<keyof JobFormValues, boolean>>
+  isSoloBusiness?: boolean
+  soloCrewName?: string | null
 }
 
 export function JobFormFields({
@@ -47,6 +49,8 @@ export function JobFormFields({
   onCrewChange,
   showRecurrence = true,
   disabledFields = {},
+  isSoloBusiness = false,
+  soloCrewName,
 }: JobFormFieldsProps) {
   const isDisabled = (field: keyof JobFormValues) => disabledFields[field] ?? false
 
@@ -151,30 +155,39 @@ export function JobFormFields({
         </div>
       )}
 
-      <div>
-        <Label>Assign Crew</Label>
-        <Select
-          value={values.crewId}
-          onValueChange={(value) => onCrewChange(value ?? '')}
-          disabled={isDisabled('crewId')}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue>
-              {values.crewId
-                ? availableCrews.find((crew) => crew.id === values.crewId)?.name
-                : 'Unassigned'}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">Unassigned</SelectItem>
-            {availableCrews.map((crew) => (
-              <SelectItem key={crew.id} value={crew.id}>
-                {crew.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {isSoloBusiness ? (
+        <div>
+          <Label>Assigned to</Label>
+          <p className="mt-1 rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            {soloCrewName || 'Owner'} (solo business — jobs assign to you automatically)
+          </p>
+        </div>
+      ) : (
+        <div>
+          <Label>Assign Crew</Label>
+          <Select
+            value={values.crewId}
+            onValueChange={(value) => onCrewChange(value ?? '')}
+            disabled={isDisabled('crewId')}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                {values.crewId
+                  ? availableCrews.find((crew) => crew.id === values.crewId)?.name
+                  : 'Unassigned'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Unassigned</SelectItem>
+              {availableCrews.map((crew) => (
+                <SelectItem key={crew.id} value={crew.id}>
+                  {crew.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
     </div>
   )
 }

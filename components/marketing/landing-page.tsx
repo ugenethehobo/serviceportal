@@ -1,16 +1,12 @@
 'use client'
 
 import Link from 'next/link'
+import { PricingCards } from '@/components/marketing/pricing-cards'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import {
-  PLATFORM_PLANS,
-  PLATFORM_SEAT_LIMITS,
-  PLATFORM_TRIAL_DAYS,
-  type PlatformPlanId,
-} from '@/lib/platform-billing'
-import { Calendar, Check, CreditCard, Users, Wrench } from 'lucide-react'
+import { PLATFORM_TRIAL_DAYS, type PlatformPlanPricing } from '@/lib/platform-pricing'
+import { Calendar, CreditCard, Users, Wrench } from 'lucide-react'
 
 const FEATURES = [
   {
@@ -35,9 +31,11 @@ const FEATURES = [
   },
 ]
 
-const PLAN_ORDER: PlatformPlanId[] = ['trial', 'basic', 'pro']
+interface LandingPageProps {
+  plans: PlatformPlanPricing[]
+}
 
-export function LandingPage() {
+export function LandingPage({ plans }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
@@ -98,45 +96,12 @@ export function LandingPage() {
         <div className="text-center max-w-2xl mx-auto mb-10">
           <h2 className="text-3xl font-bold tracking-tight">Simple, transparent pricing</h2>
           <p className="text-muted-foreground mt-2">
-            Start with a free trial, then subscribe in-page when you&apos;re ready. No redirects.
+            Prices sync from Stripe — start with a free trial, then subscribe in-page when you&apos;re
+            ready.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {PLAN_ORDER.map((planId) => {
-            const plan = PLATFORM_PLANS[planId]
-            const highlighted = planId === 'basic'
-            return (
-              <Card
-                key={planId}
-                className={`p-6 flex flex-col ${highlighted ? 'border-primary shadow-md' : 'shadow-sm'}`}
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">{plan.label}</h3>
-                  {planId === 'trial' && <Badge variant="outline">{PLATFORM_TRIAL_DAYS} days</Badge>}
-                </div>
-                <p className="text-3xl font-bold mt-4">
-                  {plan.monthlyPrice === 0 ? 'Free' : `$${plan.monthlyPrice}`}
-                  {plan.monthlyPrice > 0 && (
-                    <span className="text-sm font-normal text-muted-foreground">/month</span>
-                  )}
-                </p>
-                <p className="text-sm text-muted-foreground mt-2 flex-1">{plan.description}</p>
-                <ul className="mt-4 space-y-2 text-sm">
-                  <li className="flex items-center gap-2">
-                    <Check className="size-4 text-primary" />
-                    {PLATFORM_SEAT_LIMITS[planId]} team seats included
-                  </li>
-                </ul>
-                <Link href={`/signup?plan=${planId}`} className="block mt-6">
-                  <Button className="w-full" variant={highlighted ? 'default' : 'outline'}>
-                    {planId === 'trial' ? 'Start free trial' : `Get ${plan.label}`}
-                  </Button>
-                </Link>
-              </Card>
-            )
-          })}
-        </div>
+        <PricingCards plans={plans} />
       </section>
 
       <footer className="border-t py-8 text-center text-sm text-muted-foreground">

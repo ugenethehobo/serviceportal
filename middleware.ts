@@ -2,8 +2,13 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getPostLoginPath } from '@/lib/portal-auth'
+import { isDashboardPathAllowed } from '@/lib/platform-entitlements'
+import {
+  getCompanySubscriptionAccessForClient,
+  getCompanySubscriptionAccessForCompany,
+} from '@/lib/platform-trial-server'
 
-async function getProfileRole(userId: string) {
+async function getProfileContext(userId: string) {
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -12,11 +17,22 @@ async function getProfileRole(userId: string) {
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('role, client_id')
+    .select('role, client_id, company_id')
     .eq('id', userId)
     .single()
 
   return profile
+}
+
+function isTrialGraceRoute(pathname: string, role: string | undefined) {
+  if (pathname === '/dashboard/trial-expired') return true
+  if (pathname === '/dashboard/settings' || pathname.startsWith('/dashboard/settings/')) {
+    return true
+  }
+  if (role === 'team_member' && (pathname === '/dashboard/team' || pathname.startsWith('/dashboard/team/'))) {
+    return false
+  }
+  return false
 }
 
 export async function middleware(request: NextRequest) {
@@ -67,7 +83,7 @@ export async function middleware(request: NextRequest) {
 
   if (pathname === '/' && user) {
     const url = request.nextUrl.clone()
-    const profile = await getProfileRole(user.id)
+    const profile = await getProfileContext(user.id)
     url.pathname = getPostLoginPath(
       profile?.role || '',
       process.env.NEXT_PUBLIC_ADMIN_EMAIL,
@@ -83,7 +99,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && (isStaffRoute || isPortalRoute || pathname === '/login' || isPublicMarketingRoute)) {
-    const profile = await getProfileRole(user.id)
+    const profile = await getProfileContext(user.id)
     const role = profile?.role
 
     if (isPortalRoute && role !== 'client') {
@@ -118,13 +134,57 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
+    if (isStaffRoute && profile?.company_id && role !== undefined && user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
+      const access = await getCompanySubscriptionAccessForCompany(profile.company_id)
+      if (access && !access.hasAccess && !isTrialGraceRoute(pathname, role)) {
+        const url = request.nextUrl.clone()
+        if (role === 'company_admin') {
+          url.pathname = '/dashboard/settings'
+          url.searchParams.set('section', 'subscription')
+          url.searchParams.set('trial', 'expired')
+        } else {
+          url.pathname = '/dashboard/trial-expired'
+        }
+        return NextResponse.redirect(url)
+      }
+
+      if (
+        access?.hasAccess &&
+        role === 'company_admin' &&
+        !isDashboardPathAllowed(pathname, access.plan, request.nextUrl.searchParams)
+      ) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/dashboard/settings'
+        url.searchParams.set('section', 'subscription')
+        if (pathname.startsWith('/dashboard/routes')) {
+          url.searchParams.set('upgrade', 'routes')
+        } else if (pathname.startsWith('/dashboard/reports')) {
+          url.searchParams.set('upgrade', 'reports')
+        } else {
+          url.searchParams.set('upgrade', 'integrations')
+        }
+        return NextResponse.redirect(url)
+      }
+    }
+
+    if (isPortalRoute && role === 'client' && profile?.client_id) {
+      const access = await getCompanySubscriptionAccessForClient(profile.client_id)
+      if (access && !access.hasAccess) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/login'
+        url.searchParams.set('error', 'provider_unavailable')
+        return NextResponse.redirect(url)
+      }
+    }
+
     if (isStaffRoute && role === 'team_member') {
       const isTeamHome = pathname === '/dashboard/team' || pathname.startsWith('/dashboard/team/')
       const isSettingsRoute =
         pathname === '/dashboard/settings' || pathname.startsWith('/dashboard/settings/')
+      const isTrialExpiredRoute = pathname === '/dashboard/trial-expired'
       const isAssignedJobRoute = /^\/dashboard\/clients\/[^/]+\/jobs\/[^/]+/.test(pathname)
 
-      if (!isTeamHome && !isSettingsRoute && !isAssignedJobRoute) {
+      if (!isTeamHome && !isSettingsRoute && !isTrialExpiredRoute && !isAssignedJobRoute) {
         const url = request.nextUrl.clone()
         url.pathname = '/dashboard/team'
         return NextResponse.redirect(url)

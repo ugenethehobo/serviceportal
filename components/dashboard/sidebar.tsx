@@ -6,14 +6,18 @@ import { usePathname } from 'next/navigation'
 import { SidebarNavLink } from '@/components/navigation/sidebar-nav-link'
 import { LogOut, Menu } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { getDashboardUserDataAction } from '@/app/action'
+import { getCompanySubscriptionAccessAction, getDashboardUserDataAction } from '@/app/action'
+import { SidebarSubscriptionIndicator } from '@/components/dashboard/sidebar-subscription-indicator'
+import type { CompanySubscriptionAccess } from '@/lib/platform-trial'
+
 import { CompanyLogoImage } from '@/components/dashboard/company-logo-image'
 import { subscribeCompanyBrandingUpdates } from '@/lib/company-branding'
 import {
   getDashboardNavItems,
   isDashboardNavItemActive,
-  type DashboardNavItem,
+  type DashboardNavItemWithAccess,
 } from '@/lib/dashboard-nav'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -43,10 +47,17 @@ function useDashboardNav() {
   const pathname = usePathname()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [company, setCompany] = useState<Company | null>(null)
+  const [subscriptionAccess, setSubscriptionAccess] =
+    useState<CompanySubscriptionAccess | null>(null)
+  const [isSoloBusiness, setIsSoloBusiness] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const fetchUserData = useCallback(async () => {
-    const result = await getDashboardUserDataAction()
+    const [result, subscriptionResult] = await Promise.all([
+      getDashboardUserDataAction(),
+      getCompanySubscriptionAccessAction(),
+    ])
+
     if (!result.success) {
       console.error('Error fetching profile:', result.error)
       return
@@ -62,6 +73,17 @@ function useDashboardNav() {
 
     if (result.company) {
       setCompany(result.company)
+    }
+
+    if (
+      subscriptionResult.success &&
+      (result.profile.role === 'company_admin' || result.profile.role === 'team_member')
+    ) {
+      setSubscriptionAccess(subscriptionResult.access)
+      setIsSoloBusiness(subscriptionResult.isSoloBusiness)
+    } else {
+      setSubscriptionAccess(null)
+      setIsSoloBusiness(false)
     }
   }, [])
 
@@ -112,7 +134,11 @@ function useDashboardNav() {
         : userProfile?.role || 'Member'
   const companyName = company?.name || 'Your Company'
   const companyLogoRef = company?.logo_url
-  const visibleNavItems = getDashboardNavItems(userProfile?.role)
+  const visibleNavItems = getDashboardNavItems(
+    userProfile?.role,
+    subscriptionAccess?.plan,
+    isSoloBusiness
+  )
 
   return {
     pathname,
@@ -122,6 +148,7 @@ function useDashboardNav() {
     companyName,
     companyLogoRef,
     visibleNavItems,
+    subscriptionAccess,
     isLoggingOut,
     handleLogout,
   }
@@ -131,22 +158,22 @@ function UserAvatar({
   displayName,
   avatarUrl,
   className,
+  subscriptionAccess,
+  showSubscriptionDot = false,
 }: {
   displayName: string
   avatarUrl?: string | null
   className?: string
+  subscriptionAccess?: CompanySubscriptionAccess | null
+  showSubscriptionDot?: boolean
 }) {
-  if (avatarUrl) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={displayName}
-        className={cn('rounded-full object-cover ring-1 ring-border', className)}
-      />
-    )
-  }
-
-  return (
+  const avatar = avatarUrl ? (
+    <img
+      src={avatarUrl}
+      alt={displayName}
+      className={cn('rounded-full object-cover ring-1 ring-border', className)}
+    />
+  ) : (
     <div
       className={cn(
         'rounded-full bg-muted ring-1 ring-border flex items-center justify-center',
@@ -154,6 +181,17 @@ function UserAvatar({
       )}
     >
       <span className="text-xs font-medium">{displayName.slice(0, 2).toUpperCase()}</span>
+    </div>
+  )
+
+  if (!showSubscriptionDot || !subscriptionAccess) {
+    return avatar
+  }
+
+  return (
+    <div className="relative shrink-0">
+      {avatar}
+      <SidebarSubscriptionIndicator access={subscriptionAccess} expanded={false} />
     </div>
   )
 }
@@ -164,30 +202,34 @@ function DashboardNavLinks({
   expanded = true,
   onNavigate,
 }: {
-  items: DashboardNavItem[]
+  items: DashboardNavItemWithAccess[]
   pathname: string
   expanded?: boolean
   onNavigate?: () => void
 }) {
   return (
-    <nav className="flex flex-col gap-1">
-      {items.map((item) => {
-        const isActive = isDashboardNavItemActive(pathname, item.href)
-        const Icon = item.icon
+    <TooltipProvider>
+      <nav className="flex flex-col gap-1">
+        {items.map((item) => {
+          const isActive = isDashboardNavItemActive(pathname, item.href)
+          const Icon = item.icon
 
-        return (
-          <SidebarNavLink
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={Icon}
-            isActive={isActive}
-            expanded={expanded}
-            onNavigate={onNavigate}
-          />
-        )
-      })}
-    </nav>
+          return (
+            <SidebarNavLink
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={Icon}
+              isActive={isActive}
+              expanded={expanded}
+              onNavigate={onNavigate}
+              locked={item.locked}
+              upgradeMessage={item.upgradeMessage}
+            />
+          )
+        })}
+      </nav>
+    </TooltipProvider>
   )
 }
 
@@ -198,6 +240,7 @@ function MobileDashboardHeader({
   companyName,
   companyLogoRef,
   visibleNavItems,
+  subscriptionAccess,
   userProfile,
   isLoggingOut,
   handleLogout,
@@ -243,10 +286,13 @@ function MobileDashboardHeader({
                 displayName={displayName}
                 avatarUrl={userProfile?.avatar_url}
                 className="h-10 w-10 shrink-0"
+                subscriptionAccess={subscriptionAccess}
+                showSubscriptionDot
               />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{displayName}</p>
                 <p className="truncate text-xs text-muted-foreground">{displayRole}</p>
+                <SidebarSubscriptionIndicator access={subscriptionAccess} expanded />
               </div>
             </div>
           </div>
@@ -296,6 +342,7 @@ function DesktopSidebar({
   companyName,
   companyLogoRef,
   visibleNavItems,
+  subscriptionAccess,
   userProfile,
   isLoggingOut,
   handleLogout,
@@ -340,12 +387,15 @@ function DesktopSidebar({
               displayName={displayName}
               avatarUrl={userProfile?.avatar_url}
               className="h-8 w-8 shrink-0"
+              subscriptionAccess={subscriptionAccess}
+              showSubscriptionDot={!isExpanded}
             />
 
             {isExpanded && (
               <div className="min-w-0 flex-1 overflow-hidden">
                 <div className="truncate text-sm font-medium">{displayName}</div>
                 <div className="truncate text-xs text-muted-foreground">{displayRole}</div>
+                <SidebarSubscriptionIndicator access={subscriptionAccess} expanded />
               </div>
             )}
           </div>

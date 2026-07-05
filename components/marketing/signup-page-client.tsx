@@ -4,32 +4,34 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { EmbeddedPlatformCheckout } from '@/components/marketing/embedded-platform-checkout'
+import { PricingCards } from '@/components/marketing/pricing-cards'
 import { SignupAccountForm } from '@/components/marketing/signup-account-form'
 import { SignupPromoCode } from '@/components/marketing/signup-promo-code'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import {
-  PLATFORM_PLANS,
-  PLATFORM_SEAT_LIMITS,
-  PLATFORM_TRIAL_DAYS,
-  type PlatformPlanId,
-} from '@/lib/platform-billing'
-import { ArrowLeft, Check } from 'lucide-react'
+import { PLATFORM_TRIAL_DAYS, type PlatformPlanId } from '@/lib/platform-billing'
+import { formatPlanPriceLine, pricingByPlanId, type PlatformPlanPricing } from '@/lib/platform-pricing'
+import { promoAppliedLabel } from '@/lib/platform-promo'
+import { ArrowLeft } from 'lucide-react'
 
 type SignupStep = 'plan' | 'payment' | 'account'
-
-const PLAN_ORDER: PlatformPlanId[] = ['trial', 'basic', 'pro']
 
 function isValidPlan(value: string | null): value is PlatformPlanId {
   return value === 'trial' || value === 'basic' || value === 'pro'
 }
 
-export function SignupPageClient() {
+interface SignupPageClientProps {
+  plans: PlatformPlanPricing[]
+}
+
+export function SignupPageClient({ plans }: SignupPageClientProps) {
   const searchParams = useSearchParams()
   const planParam = searchParams.get('plan')
   const initialPlan = isValidPlan(planParam) ? planParam : null
   const initialSessionId = searchParams.get('session_id')
+
+  const pricingMap = useMemo(() => pricingByPlanId(plans), [plans])
 
   const [selectedPlan, setSelectedPlan] = useState<PlatformPlanId | null>(initialPlan)
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | undefined>(
@@ -43,10 +45,7 @@ export function SignupPageClient() {
     return 'plan'
   })
 
-  const planMeta = useMemo(
-    () => (selectedPlan ? PLATFORM_PLANS[selectedPlan] : null),
-    [selectedPlan]
-  )
+  const planMeta = selectedPlan ? pricingMap[selectedPlan] : null
 
   const choosePlan = (plan: PlatformPlanId) => {
     setSelectedPlan(plan)
@@ -111,52 +110,22 @@ export function SignupPageClient() {
         )}
 
         {step === 'plan' && (
-          <div className="grid gap-4 md:grid-cols-3">
-            {PLAN_ORDER.map((planId) => {
-              const plan = PLATFORM_PLANS[planId]
-              const highlighted = planId === 'basic'
-              return (
-                <Card
-                  key={planId}
-                  className={`p-6 flex flex-col shadow-sm ${highlighted ? 'border-primary/40 ring-1 ring-primary/20' : ''}`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <h2 className="text-lg font-semibold">{plan.label}</h2>
-                    {planId === 'trial' && (
-                      <Badge variant="outline">{PLATFORM_TRIAL_DAYS}-day trial</Badge>
-                    )}
-                  </div>
-                  <p className="text-3xl font-bold mt-3">
-                    {plan.monthlyPrice === 0 ? 'Free' : `$${plan.monthlyPrice}`}
-                    {plan.monthlyPrice > 0 && (
-                      <span className="text-sm font-normal text-muted-foreground">/mo</span>
-                    )}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-2 flex-1">{plan.description}</p>
-                  <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-                    <li className="flex items-center gap-2">
-                      <Check className="size-4 text-primary shrink-0" />
-                      {PLATFORM_SEAT_LIMITS[planId]} team seats
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <Check className="size-4 text-primary shrink-0" />
-                      Clients, jobs, billing & portal
-                    </li>
-                  </ul>
-                  <Button className="mt-6 w-full" onClick={() => choosePlan(planId)}>
-                    {planId === 'trial' ? 'Start free trial' : `Choose ${plan.label}`}
-                  </Button>
-                </Card>
-              )
-            })}
-          </div>
+          <PricingCards plans={plans} onSelectPlan={choosePlan} />
         )}
 
         {step === 'payment' && selectedPlan && (selectedPlan === 'basic' || selectedPlan === 'pro') && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold">Subscribe to {planMeta?.label}</h2>
+                <h2 className="text-xl font-semibold">
+                  Subscribe to {planMeta?.label}
+                  {planMeta && (
+                    <span className="text-muted-foreground font-normal">
+                      {' '}
+                      · {formatPlanPriceLine(planMeta)}
+                    </span>
+                  )}
+                </h2>
                 <p className="text-sm text-muted-foreground mt-1">
                   {appliedPromoCode
                     ? 'Promo applied — continue to create your account.'
@@ -170,7 +139,7 @@ export function SignupPageClient() {
 
             <SignupPromoCode
               plan={selectedPlan}
-              appliedCode={appliedPromoCode}
+              isApplied={Boolean(appliedPromoCode)}
               onApplied={(code) => {
                 setAppliedPromoCode(code)
                 setCheckoutSessionId(undefined)
@@ -184,7 +153,7 @@ export function SignupPageClient() {
           </div>
         )}
 
-        {step === 'account' && selectedPlan && (
+        {step === 'account' && selectedPlan && planMeta && (
           <Card className="p-6 max-w-lg shadow-sm">
             <div className="mb-6 space-y-1">
               <h2 className="text-xl font-semibold">Create your account</h2>
@@ -192,16 +161,16 @@ export function SignupPageClient() {
                 {selectedPlan === 'trial'
                   ? `Your ${PLATFORM_TRIAL_DAYS}-day trial starts when you finish setup.`
                   : appliedPromoCode
-                    ? `Dev promo active on ${planMeta?.label} — set up your admin login.`
-                    : `Your ${planMeta?.label} subscription is ready — set up your admin login.`}
+                    ? `${promoAppliedLabel()} on ${planMeta.label} — set up your admin login.`
+                    : `Your ${planMeta.label} subscription is ready — set up your admin login.`}
               </p>
               <div className="flex flex-wrap gap-2 mt-2">
                 <Badge variant="secondary">
-                  {planMeta?.label} · {PLATFORM_SEAT_LIMITS[selectedPlan]} seats
+                  {planMeta.label} · {planMeta.seatLimit} seats
                 </Badge>
                 {appliedPromoCode && (
                   <Badge variant="outline" className="text-emerald-700 border-emerald-500/40">
-                    Promo: {appliedPromoCode}
+                    {promoAppliedLabel()}
                   </Badge>
                 )}
               </div>

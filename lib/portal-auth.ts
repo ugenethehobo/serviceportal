@@ -19,10 +19,13 @@ export function createSupabaseAdmin() {
   )
 }
 
-export async function getSessionProfile(): Promise<{
-  userId: string
-  profile: PortalProfile
-} | null> {
+function normalizeEmail(value: string | null | undefined): string | null {
+  if (!value) return null
+  const trimmed = value.trim().toLowerCase()
+  return trimmed || null
+}
+
+export async function getAuthUser() {
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,7 +53,33 @@ export async function getSessionProfile(): Promise<{
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  return user
+}
+
+export async function assertPlatformAdminSession() {
+  const user = await getAuthUser()
+  if (!user) {
+    return { ok: false as const, error: 'Not authenticated' }
+  }
+
+  const adminEmail = normalizeEmail(process.env.NEXT_PUBLIC_ADMIN_EMAIL)
+  const userEmail = normalizeEmail(user.email)
+  if (!adminEmail || userEmail !== adminEmail) {
+    return { ok: false as const, error: 'Unauthorized' }
+  }
+
+  return { ok: true as const, userId: user.id, email: user.email! }
+}
+
+export async function getSessionProfile(): Promise<{
+  userId: string
+  profile: PortalProfile
+} | null> {
+  const user = await getAuthUser()
   if (!user) return null
 
   const admin = createSupabaseAdmin()
@@ -67,6 +96,20 @@ export async function getSessionProfile(): Promise<{
 
 export function isStaffRole(role: string) {
   return role === 'company_admin' || role === 'team_member'
+}
+
+export const TRIAL_EXPIRED_ERROR =
+  'Your free trial has ended. Subscribe to continue using the platform.'
+
+export async function verifyStaffSubscriptionAccess(companyId: string) {
+  const { getCompanySubscriptionAccessForCompany } = await import(
+    '@/lib/platform-trial-server'
+  )
+  const access = await getCompanySubscriptionAccessForCompany(companyId)
+  if (!access?.hasAccess) {
+    return { ok: false as const, error: TRIAL_EXPIRED_ERROR, access }
+  }
+  return { ok: true as const, access }
 }
 
 export async function assertClientPortalAccess(clientId: string) {

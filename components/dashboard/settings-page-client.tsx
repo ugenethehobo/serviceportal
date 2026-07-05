@@ -3,7 +3,11 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { getAccountSettingsAction } from '@/app/action'
+import { getAccountSettingsAction, getCompanySubscriptionAccessAction } from '@/app/action'
+import {
+  getPlatformFeatureUpgradeMessage,
+  type PlanEntitlements,
+} from '@/lib/platform-entitlements'
 import { AppearanceSettings } from '@/components/appearance-settings'
 import { CompanyProfileSettings } from '@/components/dashboard/company-profile-settings'
 import { JobPhotoCategoriesSettings } from '@/components/dashboard/job-photo-categories-settings'
@@ -16,6 +20,12 @@ import { UserProfileSettings } from '@/components/dashboard/user-profile-setting
 import { UserSignInSettings } from '@/components/dashboard/user-sign-in-settings'
 import { SaveStatusBadge, type SaveStatus } from '@/components/dashboard/save-status-badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import {
   Bell,
@@ -140,38 +150,64 @@ type CompanySettings = {
   address_city?: string | null
   address_state?: string | null
   address_zip?: string | null
+  is_solo_business?: boolean | null
 } | null
 
 function SettingsSectionButton({
   section,
   isActive,
   onClick,
+  locked = false,
+  lockedTooltip,
 }: {
   section: SettingsSection
   isActive: boolean
   onClick: () => void
+  locked?: boolean
+  lockedTooltip?: string
 }) {
   const Icon = section.icon
 
-  return (
+  const button = (
     <button
       type="button"
-      onClick={onClick}
+      onClick={locked ? undefined : onClick}
+      disabled={locked}
+      aria-disabled={locked || undefined}
       className={cn(
         'w-full rounded-lg px-3 py-2.5 text-left transition-colors',
-        isActive
-          ? 'bg-accent text-accent-foreground'
-          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+        locked
+          ? 'cursor-not-allowed text-muted-foreground/45'
+          : isActive
+            ? 'bg-accent text-accent-foreground'
+            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
       )}
     >
       <span className="flex items-start gap-3">
-        <Icon className="size-4 mt-0.5 shrink-0" />
+        <Icon className={cn('size-4 mt-0.5 shrink-0', locked && 'opacity-50')} />
         <span className="min-w-0">
-          <span className="block text-sm font-medium">{section.label}</span>
-          <span className="block text-xs opacity-80 mt-0.5">{section.description}</span>
+          <span className={cn('block text-sm font-medium', locked && 'opacity-70')}>
+            {section.label}
+          </span>
+          <span className={cn('block text-xs opacity-80 mt-0.5', locked && 'opacity-50')}>
+            {section.description}
+          </span>
         </span>
       </span>
     </button>
+  )
+
+  if (!locked || !lockedTooltip) {
+    return button
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipContent side="right" className="max-w-xs">
+        {lockedTooltip}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -192,13 +228,21 @@ function SettingsPageContent() {
   const [subscriptionStatus, setSubscriptionStatus] =
     useState<PlatformSubscriptionStatus>('trialing')
   const [hasPlatformCustomer, setHasPlatformCustomer] = useState(false)
+  const [entitlements, setEntitlements] = useState<PlanEntitlements | null>(null)
 
   const isAdmin = role === 'company_admin'
 
   const visibleSections = useMemo(
-    () => SETTINGS_SECTIONS.filter((section) => !section.adminOnly || isAdmin),
+    () =>
+      SETTINGS_SECTIONS.filter((section) => {
+        if (section.adminOnly && !isAdmin) return false
+        return true
+      }),
     [isAdmin]
   )
+
+  const integrationsLocked = Boolean(entitlements && !entitlements.integrations)
+  const integrationsUpgradeMessage = getPlatformFeatureUpgradeMessage('integrations')
 
   const requestedSection = searchParams.get('section') as SettingsSectionId | null
   const activeSection =
@@ -259,6 +303,7 @@ function SettingsPageContent() {
                 address_city,
                 address_state,
                 address_zip,
+                is_solo_business,
                 subscription_plan,
                 subscription_status,
                 stripe_platform_customer_id
@@ -276,6 +321,11 @@ function SettingsPageContent() {
         }
       }
 
+      const accessResult = await getCompanySubscriptionAccessAction()
+      if (accessResult.success) {
+        setEntitlements(accessResult.entitlements)
+      }
+
       setIsLoading(false)
     }
 
@@ -283,13 +333,28 @@ function SettingsPageContent() {
   }, [supabase])
 
   useEffect(() => {
+    if (requestedSection === 'integrations' && integrationsLocked) {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('section', 'subscription')
+      params.set('upgrade', 'integrations')
+      router.replace(`/dashboard/settings?${params.toString()}`, { scroll: false })
+      return
+    }
+
     if (
       requestedSection &&
       !visibleSections.some((section) => section.id === requestedSection)
     ) {
       setActiveSection(visibleSections[0]?.id || 'profile')
     }
-  }, [requestedSection, setActiveSection, visibleSections])
+  }, [
+    integrationsLocked,
+    requestedSection,
+    router,
+    searchParams,
+    setActiveSection,
+    visibleSections,
+  ])
 
   if (isLoading) {
     return (
@@ -318,16 +383,24 @@ function SettingsPageContent() {
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
         <aside className="shrink-0 border-b lg:border-b-0 lg:border-r lg:w-72 xl:w-80">
           <ScrollArea className="w-full lg:h-full" viewportClassName="scroll-fade-x lg:scroll-fade">
-            <nav className="flex lg:flex-col gap-1 p-3 min-w-max lg:min-w-0">
-              {visibleSections.map((section) => (
-                <SettingsSectionButton
-                  key={section.id}
-                  section={section}
-                  isActive={activeSection === section.id}
-                  onClick={() => setActiveSection(section.id)}
-                />
-              ))}
-            </nav>
+            <TooltipProvider>
+              <nav className="flex lg:flex-col gap-1 p-3 min-w-max lg:min-w-0">
+                {visibleSections.map((section) => (
+                  <SettingsSectionButton
+                    key={section.id}
+                    section={section}
+                    isActive={activeSection === section.id}
+                    onClick={() => setActiveSection(section.id)}
+                    locked={section.id === 'integrations' && integrationsLocked}
+                    lockedTooltip={
+                      section.id === 'integrations' && integrationsLocked
+                        ? integrationsUpgradeMessage
+                        : undefined
+                    }
+                  />
+                ))}
+              </nav>
+            </TooltipProvider>
           </ScrollArea>
         </aside>
 
