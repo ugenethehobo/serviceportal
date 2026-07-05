@@ -288,11 +288,7 @@ export default function AdminDashboard() {
 
         if (uploadError) throw uploadError
 
-        const { data: publicUrl } = supabase.storage
-          .from('company-logos')
-          .getPublicUrl(uploadData.path)
-
-        logoUrl = publicUrl.publicUrl
+        logoUrl = uploadData.path
       }
 
       const result = await adminUpsertCompanyAction({

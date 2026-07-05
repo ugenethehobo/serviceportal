@@ -40,9 +40,11 @@ import {
 } from 'lucide-react'
 
 type ViewMode = 'list' | 'map'
+type TeamPageVariant = 'team_member' | 'solo_owner'
 
 interface TeamPageClientProps {
   initialData: TeamMemberDashboardData
+  variant?: TeamPageVariant
 }
 
 function MapBounds({ coordinates }: { coordinates: [number, number][] }) {
@@ -205,7 +207,11 @@ function TeamJobCard({
   )
 }
 
-export function TeamPageClient({ initialData }: TeamPageClientProps) {
+export function TeamPageClient({
+  initialData,
+  variant = 'team_member',
+}: TeamPageClientProps) {
+  const isSoloOwner = variant === 'solo_owner'
   const [data, setData] = useState(initialData)
   const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -260,8 +266,9 @@ export function TeamPageClient({ initialData }: TeamPageClientProps) {
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Day</h1>
             <p className="text-sm text-muted-foreground">
-              {data.crewName ? `${data.crewName} · ` : ''}
-              {data.dateLabel}
+              {isSoloOwner
+                ? data.dateLabel
+                : `${data.crewName ? `${data.crewName} · ` : ''}${data.dateLabel}`}
             </p>
           </div>
           {isRefreshing && (
@@ -305,9 +312,13 @@ export function TeamPageClient({ initialData }: TeamPageClientProps) {
       ) : !data.hasCrew ? (
         <Card className="mx-4 sm:mx-6 p-8 text-center">
           <CalendarDays className="size-10 mx-auto text-muted-foreground mb-3" />
-          <h2 className="text-lg font-semibold tracking-tight">No crew assigned</h2>
+          <h2 className="text-lg font-semibold tracking-tight">
+            {isSoloOwner ? 'Schedule not ready' : 'No crew assigned'}
+          </h2>
           <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-            Ask your company admin to assign you to a crew in the Crews page before jobs appear here.
+            {isSoloOwner
+              ? 'Turn solo business mode off and on again in Settings → Company if your schedule does not load.'
+              : 'Ask your company admin to assign you to a crew in the Crews page before jobs appear here.'}
           </p>
         </Card>
       ) : data.jobs.length === 0 ? (
@@ -315,7 +326,9 @@ export function TeamPageClient({ initialData }: TeamPageClientProps) {
           <CalendarDays className="size-10 mx-auto text-muted-foreground mb-3" />
           <h2 className="text-lg font-semibold tracking-tight">No jobs today</h2>
           <p className="text-sm text-muted-foreground mt-2">
-            You&apos;re all clear for {data.dateLabel.toLowerCase()}.
+            {isSoloOwner
+              ? `You're all clear for ${data.dateLabel.toLowerCase()}. Schedule jobs from Clients when you're ready.`
+              : `You're all clear for ${data.dateLabel.toLowerCase()}.`}
           </p>
         </Card>
       ) : viewMode === 'map' ? (

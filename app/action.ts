@@ -1817,6 +1817,126 @@ export async function updateDocumentCategoriesAction(
   }
 }
 
+export async function getDocumentTemplatesAction(): Promise<
+  | { success: true; templates: import('@/lib/document-template').CompanyDocumentTemplates }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    const { loadCompanyDocumentTemplates } = await import('@/lib/document-template-storage')
+    const supabaseAdmin = createSupabaseAdmin()
+    const templates = await loadCompanyDocumentTemplates(supabaseAdmin, check.companyId)
+    return { success: true, templates }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to load document templates' }
+  }
+}
+
+export async function updateDocumentTemplateAction(
+  kind: import('@/lib/document-template').DocumentKind,
+  template: import('@/lib/document-template').DocumentTemplate
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    if (check.session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can edit document templates' }
+    }
+
+    const {
+      buildDocumentTemplatesPayload,
+      buildLegacyInvoiceTemplatePayload,
+      loadCompanyDocumentTemplates,
+    } = await import('@/lib/document-template-storage')
+    const { normalizeDocumentTemplate } = await import('@/lib/document-template')
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const current = await loadCompanyDocumentTemplates(supabaseAdmin, check.companyId)
+    const normalized = normalizeDocumentTemplate(template, kind)
+    const nextTemplates = buildDocumentTemplatesPayload(current, kind, normalized)
+
+    const updatePayload: Record<string, unknown> = {
+      document_templates: nextTemplates,
+    }
+
+    if (kind === 'invoice') {
+      updatePayload.invoice_template = buildLegacyInvoiceTemplatePayload(normalized)
+    }
+
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .update(updatePayload)
+      .eq('id', check.companyId)
+
+    if (error?.code === '42703') {
+      return {
+        success: false,
+        error:
+          'Document templates are not enabled yet. Add document_templates JSONB column to companies.',
+      }
+    }
+    if (error) return { success: false, error: error.message }
+
+    revalidatePath('/dashboard/settings')
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to save document template' }
+  }
+}
+
+export async function resetDocumentTemplateAction(
+  kind: import('@/lib/document-template').DocumentKind
+): Promise<
+  | { success: true; template: import('@/lib/document-template').DocumentTemplate }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    if (check.session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can edit document templates' }
+    }
+
+    const { resetToDefaultTemplate } = await import('@/lib/document-template-presets')
+    const template = resetToDefaultTemplate(kind)
+    const result = await updateDocumentTemplateAction(kind, template)
+    if (!result.success) return result
+
+    return { success: true, template }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to reset document template' }
+  }
+}
+
+export async function copyInvoiceLayoutToEstimateAction(): Promise<
+  | { success: true; template: import('@/lib/document-template').DocumentTemplate }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    if (check.session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can edit document templates' }
+    }
+
+    const { applyInvoiceLayoutToEstimate } = await import('@/lib/document-template-presets')
+    const { loadCompanyDocumentTemplates } = await import('@/lib/document-template-storage')
+    const supabaseAdmin = createSupabaseAdmin()
+    const current = await loadCompanyDocumentTemplates(supabaseAdmin, check.companyId)
+    const template = applyInvoiceLayoutToEstimate(current.invoice, current.estimate)
+    const result = await updateDocumentTemplateAction('estimate', template)
+    if (!result.success) return result
+
+    return { success: true, template }
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || 'Failed to copy invoice layout to estimate',
+    }
+  }
+}
+
 export async function getInvoiceTemplateAction(): Promise<
   | { success: true; template: import('@/lib/invoice-template').InvoiceTemplate }
   | { success: false; error: string }
@@ -1824,18 +1944,14 @@ export async function getInvoiceTemplateAction(): Promise<
   try {
     const check = await verifyCompanyStaff()
     if (!check.ok) return { success: false, error: check.error }
-    const { normalizeInvoiceTemplate } = await import('@/lib/invoice-template')
+    const { documentTemplateToInvoiceTemplate } = await import('@/lib/document-template')
+    const { loadCompanyDocumentTemplates } = await import('@/lib/document-template-storage')
     const supabaseAdmin = createSupabaseAdmin()
-    const { data: company, error } = await supabaseAdmin
-      .from('companies')
-      .select('invoice_template')
-      .eq('id', check.companyId)
-      .single()
-    if (error?.code === '42703') {
-      return { success: true, template: normalizeInvoiceTemplate(null) }
+    const templates = await loadCompanyDocumentTemplates(supabaseAdmin, check.companyId)
+    return {
+      success: true,
+      template: documentTemplateToInvoiceTemplate(templates.invoice),
     }
-    if (error) throw error
-    return { success: true, template: normalizeInvoiceTemplate(company?.invoice_template) }
   } catch (error: any) {
     return { success: false, error: error.message || 'Failed to load invoice template' }
   }
@@ -1851,20 +1967,11 @@ export async function updateInvoiceTemplateAction(
       return { success: false, error: 'Only company admins can edit invoice templates' }
     }
     const { normalizeInvoiceTemplate } = await import('@/lib/invoice-template')
+    const { migrateInvoiceTemplateToDocumentTemplate } = await import('@/lib/document-template')
     const normalized = normalizeInvoiceTemplate(template)
-    const supabaseAdmin = createSupabaseAdmin()
-    const { error } = await supabaseAdmin
-      .from('companies')
-      .update({ invoice_template: normalized })
-      .eq('id', check.companyId)
-    if (error?.code === '42703') {
-      return {
-        success: false,
-        error: 'Invoice templates are not enabled yet. Add invoice_template JSONB column to companies.',
-      }
-    }
-    if (error) return { success: false, error: error.message }
-    revalidatePath('/dashboard/settings')
+    const documentTemplate = migrateInvoiceTemplateToDocumentTemplate(normalized)
+    const result = await updateDocumentTemplateAction('invoice', documentTemplate)
+    if (!result.success) return result
     return { success: true }
   } catch (error: any) {
     return { success: false, error: error.message || 'Failed to save invoice template' }
@@ -3970,7 +4077,10 @@ export async function getTeamMemberDashboardAction(): Promise<
       return { success: false, error: 'Not authenticated' }
     }
 
-    if (session.profile.role !== 'team_member') {
+    const isTeamMember = session.profile.role === 'team_member'
+    const isCompanyAdmin = session.profile.role === 'company_admin'
+
+    if (!isTeamMember && !isCompanyAdmin) {
       return { success: false, error: 'This view is for team members only' }
     }
 
@@ -3990,6 +4100,7 @@ export async function getTeamMemberDashboardAction(): Promise<
       .select(`
         name,
         timezone,
+        is_solo_business,
         address,
         address_street,
         address_unit,
@@ -4002,6 +4113,11 @@ export async function getTeamMemberDashboardAction(): Promise<
 
     if (companyDetailsError || !companyDetails) {
       return { success: false, error: 'Company not found' }
+    }
+
+    const isSoloOwner = isCompanyAdmin && Boolean(companyDetails.is_solo_business)
+    if (isCompanyAdmin && !isSoloOwner) {
+      return { success: false, error: 'This view is for team members only' }
     }
 
     const timezone = companyDetails.timezone || 'America/Chicago'
@@ -4020,7 +4136,18 @@ export async function getTeamMemberDashboardAction(): Promise<
       invalidAddresses: [] as TeamMemberDashboardData['invalidAddresses'],
     }
 
-    if (!profile.crew_id) {
+    let crewId = profile.crew_id
+
+    if (isSoloOwner && !crewId) {
+      const { ensureSoloCrewForCompany, getCompanySoloContext } = await import(
+        '@/lib/solo-business-server'
+      )
+      await ensureSoloCrewForCompany(session.profile.company_id)
+      const soloContext = await getCompanySoloContext(session.profile.company_id)
+      crewId = soloContext.soloCrewId
+    }
+
+    if (!crewId) {
       return {
         success: true,
         data: emptyRouteData,
@@ -4030,7 +4157,7 @@ export async function getTeamMemberDashboardAction(): Promise<
     const { data: crew, error: crewError } = await supabaseAdmin
       .from('crews')
       .select('id, name')
-      .eq('id', profile.crew_id)
+      .eq('id', crewId)
       .eq('company_id', session.profile.company_id)
       .single()
 
@@ -4062,7 +4189,7 @@ export async function getTeamMemberDashboardAction(): Promise<
           address_zip
         )
       `)
-      .eq('crew_id', profile.crew_id)
+      .eq('crew_id', crewId)
       .neq('status', 'cancelled')
       .lt('start_time', endIso)
       .gt('end_time', startIso)
@@ -4098,7 +4225,7 @@ export async function getTeamMemberDashboardAction(): Promise<
             address_zip
           )
         `)
-        .eq('crew_id', profile.crew_id)
+        .eq('crew_id', crewId)
         .neq('status', 'cancelled')
         .lt('start_time', endIso)
         .gt('end_time', startIso)

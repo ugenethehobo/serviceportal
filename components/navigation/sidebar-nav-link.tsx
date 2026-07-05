@@ -56,12 +56,19 @@ function LockedNavItem({
           <span
             aria-disabled="true"
             className={cn(
-              'relative flex cursor-not-allowed items-center rounded-lg font-medium text-muted-foreground/45',
-              expanded ? 'px-3 py-2.5 text-sm' : 'px-3 py-2 text-sm justify-center'
+              'relative flex cursor-not-allowed items-center rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground/45',
+              !expanded && 'justify-center'
             )}
           >
             <Icon className="size-5 shrink-0 opacity-50" />
-            {expanded && <span className="ml-3 truncate opacity-70">{label}</span>}
+            <span
+              className={cn(
+                'ml-3 truncate opacity-70 overflow-hidden whitespace-nowrap transition-all duration-150',
+                expanded ? 'max-w-[180px]' : 'max-w-0'
+              )}
+            >
+              {label}
+            </span>
           </span>
         }
       />
@@ -101,8 +108,8 @@ function ActiveSidebarNavLink({
       aria-busy={isThisPending || undefined}
       aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'relative flex items-center rounded-lg font-medium transition-colors',
-        expanded ? 'px-3 py-2.5 text-sm' : 'px-3 py-2 text-sm justify-center',
+        'relative flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+        !expanded && 'justify-center',
         isActive
           ? 'bg-accent text-accent-foreground'
           : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
@@ -111,9 +118,15 @@ function ActiveSidebarNavLink({
       )}
     >
       <Icon className={cn('size-5 shrink-0', isThisPending && 'opacity-50')} />
-      {expanded && (
-        <span className={cn('ml-3 truncate', isThisPending && 'opacity-80')}>{label}</span>
-      )}
+      <span
+        className={cn(
+          'ml-3 truncate overflow-hidden whitespace-nowrap transition-all duration-150',
+          expanded ? 'max-w-[180px] opacity-100' : 'max-w-0 opacity-0',
+          isThisPending && expanded && 'opacity-80'
+        )}
+      >
+        {label}
+      </span>
       <NavLinkPendingSpinner expanded={expanded} />
       {isThisPending && <span className="sr-only">Loading {label}</span>}
     </Link>

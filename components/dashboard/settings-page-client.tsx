@@ -15,7 +15,7 @@ import { NotificationSettings } from '@/components/dashboard/notification-settin
 import { IntegrationsSettings } from '@/components/dashboard/integrations-settings'
 import { PlatformSubscriptionSettings } from '@/components/dashboard/platform-subscription-settings'
 import { StripeConnectSettings } from '@/components/dashboard/stripe-connect-settings'
-import { InvoiceTemplateSettings } from '@/components/dashboard/invoice-template-settings'
+import { DocumentTemplateEditor } from '@/components/dashboard/document-template-editor'
 import { UserProfileSettings } from '@/components/dashboard/user-profile-settings'
 import { UserSignInSettings } from '@/components/dashboard/user-sign-in-settings'
 import { SaveStatusBadge, type SaveStatus } from '@/components/dashboard/save-status-badge'
@@ -110,8 +110,8 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   },
   {
     id: 'invoice-template',
-    label: 'Invoice template',
-    description: 'PDF layout and line items placement.',
+    label: 'Document templates',
+    description: 'Invoice and estimate PDF layouts.',
     icon: FileText,
     adminOnly: true,
   },
@@ -370,7 +370,7 @@ function SettingsPageContent() {
   const activeMeta = visibleSections.find((section) => section.id === activeSection)
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="shrink-0 border-b px-4 py-4 sm:px-6">
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
@@ -380,9 +380,9 @@ function SettingsPageContent() {
         </p>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-        <aside className="shrink-0 border-b lg:border-b-0 lg:border-r lg:w-72 xl:w-80">
-          <ScrollArea className="w-full lg:h-full" viewportClassName="scroll-fade-x lg:scroll-fade">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+        <aside className="shrink-0 border-b lg:flex lg:w-72 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r xl:w-80">
+          <ScrollArea className="w-full lg:min-h-0 lg:flex-1" viewportClassName="scroll-fade-x lg:scroll-fade">
             <TooltipProvider>
               <nav className="flex lg:flex-col gap-1 p-3 min-w-max lg:min-w-0">
                 {visibleSections.map((section) => (
@@ -404,8 +404,15 @@ function SettingsPageContent() {
           </ScrollArea>
         </aside>
 
-        <main className="flex-1 min-h-0 overflow-y-auto">
-          <div className="p-4 sm:p-6 lg:p-8 max-w-4xl">
+        {activeSection === 'invoice-template' && isAdmin ? (
+          <ScrollArea className="min-h-0 flex-1" viewportClassName="scroll-fade">
+            <main className="max-w-none p-4 sm:p-6 lg:p-8">
+              <DocumentTemplateEditor />
+            </main>
+          </ScrollArea>
+        ) : (
+          <ScrollArea className="min-h-0 flex-1">
+            <main className={cn('p-4 sm:p-6 lg:p-8', 'max-w-4xl')}>
             {activeSection === 'profile' && (
               <UserProfileSettings
                 fullName={fullName}
@@ -492,12 +499,6 @@ function SettingsPageContent() {
               </div>
             )}
 
-            {activeSection === 'invoice-template' && isAdmin && (
-              <div className="space-y-6 max-w-3xl">
-                <InvoiceTemplateSettings />
-              </div>
-            )}
-
             {activeSection === 'job-photos' && isAdmin && (
               <div className="space-y-6 max-w-3xl">
                 <div>
@@ -531,8 +532,9 @@ function SettingsPageContent() {
             {activeMeta && (
               <p className="sr-only">Viewing {activeMeta.label} settings</p>
             )}
-          </div>
-        </main>
+            </main>
+          </ScrollArea>
+        )}
       </div>
     </div>
   )

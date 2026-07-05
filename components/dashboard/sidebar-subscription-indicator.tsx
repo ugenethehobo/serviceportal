@@ -88,8 +88,10 @@ export function SidebarSubscriptionIndicator({
   }
 
   return (
-    <Badge variant={variant} className="mt-1 max-w-full truncate">
-      {label}
-    </Badge>
+    <div className="mt-0.5 flex h-5 items-center">
+      <Badge variant={variant} className="h-5 max-w-full truncate px-1.5 text-[10px] leading-none">
+        {label}
+      </Badge>
+    </div>
   )
 }

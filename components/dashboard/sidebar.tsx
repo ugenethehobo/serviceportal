@@ -358,8 +358,8 @@ function DesktopSidebar({
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
-      <div className="flex h-16 items-center px-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex h-16 shrink-0 items-center px-4">
+        <div className="flex min-w-0 items-center gap-3">
           <CompanyLogoImage
             logoRef={companyLogoRef}
             companyName={companyName}
@@ -367,22 +367,30 @@ function DesktopSidebar({
             fallbackClassName="h-8 w-8 rounded-lg text-sm ring-1 ring-border shrink-0"
           />
 
-          {isExpanded && (
-            <span className="text-lg font-semibold tracking-tight text-muted-foreground truncate">
-              {companyName}
-            </span>
-          )}
+          <span
+            className={cn(
+              'overflow-hidden whitespace-nowrap text-lg font-semibold tracking-tight text-muted-foreground transition-all duration-150',
+              isExpanded ? 'max-w-[180px] opacity-100' : 'max-w-0 opacity-0'
+            )}
+          >
+            {companyName}
+          </span>
         </div>
       </div>
 
-      <div className="mx-2 mb-2">
+      <div className="mx-2 mb-2 shrink-0">
         <div
           className={cn(
-            'rounded-lg bg-muted/50 p-2 transition-all',
-            isExpanded ? '' : 'flex justify-center'
+            'flex h-[4.75rem] items-center overflow-hidden rounded-lg bg-muted/50 p-2',
+            !isExpanded && 'justify-center'
           )}
         >
-          <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              'flex min-w-0 items-center',
+              isExpanded ? 'w-full gap-3' : 'gap-0'
+            )}
+          >
             <UserAvatar
               displayName={displayName}
               avatarUrl={userProfile?.avatar_url}
@@ -391,13 +399,16 @@ function DesktopSidebar({
               showSubscriptionDot={!isExpanded}
             />
 
-            {isExpanded && (
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <div className="truncate text-sm font-medium">{displayName}</div>
-                <div className="truncate text-xs text-muted-foreground">{displayRole}</div>
-                <SidebarSubscriptionIndicator access={subscriptionAccess} expanded />
-              </div>
-            )}
+            <div
+              className={cn(
+                'min-w-0 overflow-hidden transition-all duration-150',
+                isExpanded ? 'flex-1 opacity-100' : 'w-0 flex-none opacity-0'
+              )}
+            >
+              <div className="truncate text-sm font-medium leading-5">{displayName}</div>
+              <div className="truncate text-xs leading-4 text-muted-foreground">{displayRole}</div>
+              <SidebarSubscriptionIndicator access={subscriptionAccess} expanded />
+            </div>
           </div>
         </div>
       </div>
@@ -415,7 +426,10 @@ function DesktopSidebar({
           type="button"
           onClick={handleLogout}
           disabled={isLoggingOut}
-          className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          className={cn(
+            'flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
+            !isExpanded && 'justify-center'
+          )}
         >
           <LogOut className="h-5 w-5 shrink-0" />
           <span

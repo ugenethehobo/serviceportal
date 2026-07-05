@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { SYSTEM_DOCUMENT_CATEGORY_ESTIMATES } from '@/lib/document-categories'
+import { loadCompanyDocumentTemplate } from '@/lib/document-template-storage'
 import { generateEstimatePdf } from '@/lib/estimate-pdf'
 import { calcEstimateTotal, formatEstimateNumber, resolveAutoEstimateStatus, type EstimateStatus } from '@/lib/estimates'
 import { calcLineAmount } from '@/lib/billing'
@@ -130,7 +131,7 @@ export async function syncEstimateDocument(estimateId: string) {
     .select(`
       *,
       client:clients!client_id (name, contact_name, email, phone, address),
-      company:companies!company_id (name)
+      company:companies!company_id (name, address, phone)
     `)
     .eq('id', estimateId)
     .single()
@@ -150,6 +151,15 @@ export async function syncEstimateDocument(estimateId: string) {
     ? (estimate as any).company[0]
     : (estimate as any).company
 
+  const template = await loadCompanyDocumentTemplate(
+    supabaseAdmin,
+    estimate.company_id,
+    'estimate'
+  )
+
+  const { loadCompanyLogoBytesForPdf } = await import('@/lib/document-template-logo-server')
+  const logoBytes = await loadCompanyLogoBytesForPdf(estimate.company_id)
+
   const pdfBytes = await generateEstimatePdf({
     estimate: {
       id: estimate.id,
@@ -160,8 +170,14 @@ export async function syncEstimateDocument(estimateId: string) {
       created_at: estimate.created_at,
     },
     lineItems: lineItems || [],
-    company: { name: company?.name || 'Company' },
+    company: {
+      name: company?.name || 'Company',
+      address: company?.address || null,
+      phone: company?.phone || null,
+      logoBytes,
+    },
     client: client || { name: 'Client' },
+    template,
   })
 
   const estimateNumber = formatEstimateNumber(estimate.id, estimate.created_at)

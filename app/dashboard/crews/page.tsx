@@ -14,7 +14,9 @@ import {
 import { createCrew, updateCrew, deleteCrew, getCompanySubscriptionAccessAction } from '@/app/action'
 import { CREW_ASSIGNABLE_ROLES } from '@/lib/company-operations'
 import { getCrewLimitMessage, type PlanEntitlements } from '@/lib/platform-entitlements'
+import { SoloTeamView } from '@/components/dashboard/solo-team-view'
 import { TeamMembersPanel } from '@/components/dashboard/team-members-panel'
+import { TeamPageSkeleton } from '@/components/dashboard/team-page-client'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
@@ -69,6 +71,7 @@ export default function CrewsPage() {
   const [crewToDelete, setCrewToDelete] = useState<CrewWithMembers | null>(null)
   const [entitlements, setEntitlements] = useState<PlanEntitlements | null>(null)
   const [isSoloBusiness, setIsSoloBusiness] = useState(false)
+  const [modeLoaded, setModeLoaded] = useState(false)
   const [activeTab, setActiveTab] = useState('crews')
 
   const crewLimit = entitlements?.crewLimit ?? null
@@ -129,11 +132,11 @@ export default function CrewsPage() {
       if (accessResult.success) {
         setEntitlements(accessResult.entitlements)
         setIsSoloBusiness(accessResult.isSoloBusiness)
-        if (accessResult.isSoloBusiness) {
-          setActiveTab('team')
+        if (!accessResult.isSoloBusiness) {
+          await fetchData()
         }
       }
-      await fetchData()
+      setModeLoaded(true)
     })()
   }, [])
 
@@ -242,16 +245,28 @@ export default function CrewsPage() {
     </Button>
   )
 
+  if (!modeLoaded) {
+    return (
+      <div className="h-[100vh] flex flex-col min-h-0">
+        <TeamPageSkeleton />
+      </div>
+    )
+  }
+
+  if (isSoloBusiness) {
+    return (
+      <div className="h-[100vh] flex flex-col min-h-0">
+        <SoloTeamView />
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 flex flex-col h-[100vh]">
       <div className="mb-4 flex-shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight">
-          {isSoloBusiness ? 'Team' : 'Crews & Team'}
-        </h1>
+        <h1 className="text-3xl font-bold tracking-tight">Crews & Team</h1>
         <p className="text-muted-foreground">
-          {isSoloBusiness
-            ? 'Manage team member accounts for your solo business'
-            : 'Manage field crews and team member accounts'}
+          Manage field crews and team member accounts
         </p>
       </div>
 
@@ -260,14 +275,11 @@ export default function CrewsPage() {
         onValueChange={setActiveTab}
         className="flex flex-1 flex-col min-h-0 gap-4"
       >
-        {!isSoloBusiness && (
-          <TabsList>
-            <TabsTrigger value="crews">Crews</TabsTrigger>
-            <TabsTrigger value="team">Team Members</TabsTrigger>
-          </TabsList>
-        )}
+        <TabsList>
+          <TabsTrigger value="crews">Crews</TabsTrigger>
+          <TabsTrigger value="team">Team Members</TabsTrigger>
+        </TabsList>
 
-        {!isSoloBusiness && (
         <TabsContent value="crews" className="flex flex-1 flex-col min-h-0 mt-0 gap-4">
           <div className="flex items-center justify-between flex-shrink-0">
             <p className="text-sm text-muted-foreground">
@@ -343,7 +355,6 @@ export default function CrewsPage() {
         </ScrollArea>
       </Card>
         </TabsContent>
-        )}
 
         <TabsContent value="team" className="flex flex-1 flex-col min-h-0 mt-0">
           <TeamMembersPanel />

@@ -2,9 +2,10 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getDisplayAddressFromClient } from '@/lib/address'
 import { SYSTEM_DOCUMENT_CATEGORY_INVOICES } from '@/lib/document-categories'
 import { calcBillingSummary } from '@/lib/billing'
+import type { DocumentTemplate } from '@/lib/document-template'
+import { loadCompanyDocumentTemplate } from '@/lib/document-template-storage'
 import { generateInvoicePdf } from '@/lib/invoice-pdf'
 import { formatInvoiceNumber } from '@/lib/invoices'
-import { normalizeInvoiceTemplate, type InvoiceTemplate } from '@/lib/invoice-template'
 
 const BUCKET = 'client-documents'
 
@@ -16,21 +17,11 @@ function createSupabaseAdmin() {
   )
 }
 
-async function loadInvoiceTemplate(
+async function loadInvoiceDocumentTemplate(
   supabaseAdmin: SupabaseClient,
   companyId: string
-): Promise<InvoiceTemplate> {
-  const { data: company, error } = await supabaseAdmin
-    .from('companies')
-    .select('invoice_template')
-    .eq('id', companyId)
-    .single()
-
-  if (error?.code === '42703') {
-    return normalizeInvoiceTemplate(null)
-  }
-
-  return normalizeInvoiceTemplate(company?.invoice_template)
+): Promise<DocumentTemplate> {
+  return loadCompanyDocumentTemplate(supabaseAdmin, companyId, 'invoice')
 }
 
 async function findExistingInvoiceDocument(
@@ -236,7 +227,7 @@ export async function syncJobInvoiceDocument(scheduleId: string) {
 
   const summary = calcBillingSummary(lineItems, payments || [])
 
-  const template = await loadInvoiceTemplate(supabaseAdmin, companyId)
+  const template = await loadInvoiceDocumentTemplate(supabaseAdmin, companyId)
 
   const { issuedAt, invoiceNumber } = resolveStableInvoiceMeta(schedule.id, existingDoc)
   const visitDate = schedule.start_time
@@ -246,6 +237,9 @@ export async function syncJobInvoiceDocument(scheduleId: string) {
         day: 'numeric',
       })
     : null
+
+  const { loadCompanyLogoBytesForPdf } = await import('@/lib/document-template-logo-server')
+  const logoBytes = await loadCompanyLogoBytesForPdf(companyId)
 
   const pdfBytes = await generateInvoicePdf({
     invoice: {
@@ -262,6 +256,7 @@ export async function syncJobInvoiceDocument(scheduleId: string) {
       name: (company as { name?: string })?.name || 'Company',
       address: (company as { address?: string })?.address || null,
       phone: (company as { phone?: string })?.phone || null,
+      logoBytes,
     },
     client: {
       name: (client as { name?: string })?.name || 'Client',

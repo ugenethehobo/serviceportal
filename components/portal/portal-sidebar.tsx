@@ -192,33 +192,39 @@ function DesktopPortalSidebar({
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
-      <div className="flex h-16 items-center px-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex h-16 shrink-0 items-center px-4">
+        <div className="flex min-w-0 items-center gap-3">
           <CompanyMark companyName={companyName} companyLogo={companyLogo} className="h-8 w-8" />
-          {isExpanded && (
-            <span className="text-lg font-semibold tracking-tight text-muted-foreground truncate">
-              {companyName}
-            </span>
-          )}
+          <span
+            className={`overflow-hidden whitespace-nowrap text-lg font-semibold tracking-tight text-muted-foreground transition-all duration-150 ${
+              isExpanded ? 'max-w-[180px] opacity-100' : 'max-w-0 opacity-0'
+            }`}
+          >
+            {companyName}
+          </span>
         </div>
       </div>
 
-      <div className="mx-2 mb-2">
+      <div className="mx-2 mb-2 shrink-0">
         <div
-          className={`rounded-lg bg-muted/50 p-2 transition-all ${
-            isExpanded ? '' : 'flex justify-center'
+          className={`flex h-[3.25rem] items-center overflow-hidden rounded-lg bg-muted/50 p-2 ${
+            !isExpanded ? 'justify-center' : ''
           }`}
         >
-          <div className="flex items-center gap-3">
+          <div
+            className={`flex min-w-0 items-center ${isExpanded ? 'w-full gap-3' : 'gap-0'}`}
+          >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted ring-1 ring-border">
               <span className="text-xs font-medium">{clientName.slice(0, 2).toUpperCase()}</span>
             </div>
-            {isExpanded && (
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <div className="truncate text-sm font-medium">{clientName}</div>
-                <div className="truncate text-xs text-muted-foreground">Client portal</div>
-              </div>
-            )}
+            <div
+              className={`min-w-0 overflow-hidden transition-all duration-150 ${
+                isExpanded ? 'flex-1 opacity-100' : 'w-0 flex-none opacity-0'
+              }`}
+            >
+              <div className="truncate text-sm font-medium leading-5">{clientName}</div>
+              <div className="truncate text-xs leading-4 text-muted-foreground">Client portal</div>
+            </div>
           </div>
         </div>
       </div>
@@ -232,7 +238,9 @@ function DesktopPortalSidebar({
           type="button"
           onClick={onLogout}
           disabled={isLoggingOut}
-          className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          className={`flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground ${
+            !isExpanded ? 'justify-center' : ''
+          }`}
         >
           <LogOut className="h-5 w-5 shrink-0" />
           <span
