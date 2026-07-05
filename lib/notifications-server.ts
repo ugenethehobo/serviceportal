@@ -288,6 +288,7 @@ export async function notifyClientEstimateSent(
   input: {
     companyId: string
     companyName?: string
+    clientId?: string | null
     clientEmail?: string | null
     clientPhone?: string | null
     clientName?: string | null
@@ -301,6 +302,20 @@ export async function notifyClientEstimateSent(
   const companyName = input.companyName?.trim() || 'Your service company'
   const clientLabel = input.clientName?.trim() || 'there'
   const amount = `$${Number(input.estimateTotal).toFixed(2)}`
+
+  const { queueCompanyZapierEvent } = await import('@/lib/integration-events')
+  queueCompanyZapierEvent(supabaseAdmin, {
+    companyId: input.companyId,
+    event: 'estimate_sent',
+    data: {
+      estimate_id: input.estimateId,
+      client_id: input.clientId ?? null,
+      estimate_title: input.estimateTitle,
+      estimate_total: input.estimateTotal,
+      client_name: input.clientName ?? null,
+      client_email: input.clientEmail ?? null,
+    },
+  })
 
   await dispatchNotification(supabaseAdmin, {
     companyId: input.companyId,
@@ -333,6 +348,7 @@ export async function notifyClientInvoiceSent(
   input: {
     companyId: string
     companyName?: string
+    clientId?: string | null
     clientEmail?: string | null
     clientPhone?: string | null
     clientName?: string | null
@@ -347,18 +363,19 @@ export async function notifyClientInvoiceSent(
   const clientLabel = input.clientName?.trim() || 'there'
   const amount = `$${Number(input.balanceDue).toFixed(2)}`
 
-  void import('@/lib/integration-events').then(({ dispatchCompanyZapierEvent }) =>
-    dispatchCompanyZapierEvent(supabaseAdmin, {
-      companyId: input.companyId,
-      event: 'invoice_sent',
-      data: {
-        schedule_id: input.scheduleId,
-        job_title: input.jobTitle,
-        balance_due: input.balanceDue,
-        client_name: input.clientName,
-      },
-    })
-  )
+  const { queueCompanyZapierEvent } = await import('@/lib/integration-events')
+  queueCompanyZapierEvent(supabaseAdmin, {
+    companyId: input.companyId,
+    event: 'invoice_sent',
+    data: {
+      schedule_id: input.scheduleId,
+      client_id: input.clientId ?? null,
+      job_title: input.jobTitle,
+      balance_due: input.balanceDue,
+      client_name: input.clientName ?? null,
+      client_email: input.clientEmail ?? null,
+    },
+  })
 
   await dispatchNotification(supabaseAdmin, {
     companyId: input.companyId,
@@ -438,6 +455,7 @@ export async function notifyPaymentReceived(
     amount: number
     scheduleId: string
     clientId: string
+    paymentMethod?: string | null
   }
 ) {
   const staffEmails = await getStaffEmailsForCompany(supabaseAdmin, input.companyId)
@@ -446,6 +464,20 @@ export async function notifyPaymentReceived(
   const clientLabel = input.clientName?.trim() || 'there'
   const amountLabel = `$${Number(input.amount).toFixed(2)}`
   const jobUrl = `${baseUrl}/dashboard/clients/${input.clientId}/jobs/${input.scheduleId}?tab=billing`
+
+  const { queueCompanyZapierEvent } = await import('@/lib/integration-events')
+  queueCompanyZapierEvent(supabaseAdmin, {
+    companyId: input.companyId,
+    event: 'payment_received',
+    data: {
+      schedule_id: input.scheduleId,
+      client_id: input.clientId,
+      job_title: input.jobTitle,
+      amount: input.amount,
+      client_name: input.clientName ?? null,
+      payment_method: input.paymentMethod ?? null,
+    },
+  })
 
   if (input.clientEmail) {
     await dispatchNotification(supabaseAdmin, {

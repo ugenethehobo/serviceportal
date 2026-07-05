@@ -8,6 +8,7 @@ const FULL_SCREEN_ROUTE_PREFIXES = [
   '/dashboard/clients',
   '/dashboard/leads',
   '/dashboard/routes',
+  '/dashboard/schedule',
   '/dashboard/settings',
   '/dashboard/team',
 ]

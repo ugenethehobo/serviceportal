@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "npx --yes tsx --test lib/integration-events.test.ts lib/quickbooks-oauth.test.ts lib/recurring-schedule-projection.test.ts lib/schedule-calendar.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

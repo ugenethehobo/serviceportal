@@ -4,12 +4,28 @@ import {
   type ZapierEventType,
 } from '@/lib/integrations'
 
-type ZapierPayload = {
+export type ZapierPayload = {
   event: ZapierEventType
   company_id: string
   occurred_at: string
   data: Record<string, unknown>
 }
+
+export function buildZapierPayload(input: {
+  companyId: string
+  event: ZapierEventType
+  data: Record<string, unknown>
+  occurredAt?: string
+}): ZapierPayload {
+  return {
+    event: input.event,
+    company_id: input.companyId,
+    occurred_at: input.occurredAt ?? new Date().toISOString(),
+    data: input.data,
+  }
+}
+
+type SupabaseAdminLike = { from: (table: string) => any }
 
 export async function dispatchZapierEvent(input: {
   webhookUrl: string
@@ -20,12 +36,11 @@ export async function dispatchZapierEvent(input: {
   const url = input.webhookUrl.trim()
   if (!isValidZapierWebhookUrl(url)) return { delivered: false, reason: 'invalid_url' as const }
 
-  const payload: ZapierPayload = {
+  const payload = buildZapierPayload({
+    companyId: input.companyId,
     event: input.event,
-    company_id: input.companyId,
-    occurred_at: new Date().toISOString(),
     data: input.data,
-  }
+  })
 
   try {
     const response = await fetch(url, {
@@ -43,7 +58,7 @@ export async function dispatchZapierEvent(input: {
 }
 
 export async function dispatchCompanyZapierEvent(
-  supabaseAdmin: { from: (table: string) => any },
+  supabaseAdmin: SupabaseAdminLike,
   input: {
     companyId: string
     event: ZapierEventType
@@ -67,5 +82,25 @@ export async function dispatchCompanyZapierEvent(
     companyId: input.companyId,
     event: input.event,
     data: input.data,
+  })
+}
+
+/** Fire-and-forget Zapier dispatch; never blocks the caller. */
+export function queueCompanyZapierEvent(
+  supabaseAdmin: SupabaseAdminLike,
+  input: {
+    companyId: string
+    event: ZapierEventType
+    data: Record<string, unknown>
+  }
+) {
+  void dispatchCompanyZapierEvent(supabaseAdmin, input).then((result) => {
+    if (!result.delivered && result.reason !== 'not_connected') {
+      console.error(
+        `Zapier dispatch failed (${input.event}):`,
+        result.reason,
+        input.companyId
+      )
+    }
   })
 }

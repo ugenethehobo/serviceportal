@@ -91,7 +91,7 @@ export function LiveCrewLocationsMap({
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center rounded-lg border bg-muted/20">
-        <p className="text-sm text-muted-foreground">Loading map locations…</p>
+        <p className="text-sm text-muted-foreground">Loading job sites…</p>
       </div>
     )
   }
@@ -192,10 +192,11 @@ export function LiveCrewLocationsMap({
           <div className="h-full flex flex-col items-center justify-center bg-muted/20 px-4 text-center">
             <MapPin className="size-8 text-muted-foreground/60 mb-2" />
             <p className="text-sm text-muted-foreground">
-              No valid locations to display yet.
+              No job sites to show for today yet.
             </p>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-              Add your company address in Settings and assign client addresses to active jobs.
+              Job site pins appear when crews have active jobs with client addresses on file.
+              Add your company address in Settings to show your office location too.
             </p>
             <Link
               href="/dashboard/settings"

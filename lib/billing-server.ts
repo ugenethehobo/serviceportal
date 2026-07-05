@@ -205,6 +205,7 @@ export async function recordStripePayment(data: {
       amount: data.amount,
       scheduleId: data.scheduleId,
       clientId: data.clientId,
+      paymentMethod: 'card',
     })
   })
 

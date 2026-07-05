@@ -45,6 +45,7 @@ export function getCrewsNavItem(isSoloBusiness = false): DashboardNavItem {
 
 export const adminNavItems: DashboardNavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/dashboard/clients', label: 'Clients', icon: Users },
   { href: '/dashboard/leads', label: 'Leads', icon: UserPlus },
   getCrewsNavItem(false),

@@ -68,6 +68,7 @@ async function maybeNotifyEstimateSent(
       title,
       total,
       company_id,
+      client_id,
       client:clients!client_id (name, email, phone, portal_enabled),
       company:companies!company_id (name)
     `)
@@ -88,6 +89,7 @@ async function maybeNotifyEstimateSent(
   await notifyClientEstimateSent(supabaseAdmin, {
     companyId: estimate.company_id,
     companyName: company?.name,
+    clientId: estimate.client_id,
     clientEmail: client?.email,
     clientPhone: client?.phone,
     clientName: client?.name,

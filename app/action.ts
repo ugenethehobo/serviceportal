@@ -956,8 +956,33 @@ export async function createJobAction(data: {
           }
         }
 
+        const { queueCompanyZapierEvent } = await import('@/lib/integration-events')
+        const [{ data: jobClient }, { data: jobCrew }] = await Promise.all([
+          supabaseAdmin.from('clients').select('name').eq('id', data.clientId).single(),
+          data.crewId
+            ? supabaseAdmin.from('crews').select('name').eq('id', data.crewId).single()
+            : Promise.resolve({ data: null }),
+        ])
+
+        queueCompanyZapierEvent(supabaseAdmin, {
+          companyId: data.companyId,
+          event: 'job_scheduled',
+          data: {
+            schedule_id: newSchedule.id,
+            client_id: data.clientId,
+            job_title: newSchedule.title,
+            start_time: newSchedule.start_time,
+            end_time: newSchedule.end_time,
+            crew_id: newSchedule.crew_id,
+            crew_name: jobCrew?.name ?? null,
+            client_name: jobClient?.name ?? null,
+            rescheduled: false,
+          },
+        })
+
         revalidatePath(`/dashboard/clients/${data.clientId}`)
         revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${newSchedule.id}`)
+        revalidatePath('/dashboard/schedule')
 
         return { success: true, schedule: newSchedule }
   } catch (error: any) {
@@ -1296,8 +1321,40 @@ export async function updateJobAction(data: {
       }
     }
 
+    const scheduleChanged =
+      (data.startTime !== undefined && data.startTime !== existing.start_time) ||
+      (data.endTime !== undefined && data.endTime !== existing.end_time) ||
+      (data.crewId !== undefined && data.crewId !== existing.crew_id)
+
+    if (scheduleChanged) {
+      const { queueCompanyZapierEvent } = await import('@/lib/integration-events')
+      const crew = Array.isArray(updated.crew) ? updated.crew[0] : updated.crew
+      const { data: jobClient } = await supabaseAdmin
+        .from('clients')
+        .select('name')
+        .eq('id', data.clientId)
+        .single()
+
+      queueCompanyZapierEvent(supabaseAdmin, {
+        companyId: data.companyId,
+        event: 'job_scheduled',
+        data: {
+          schedule_id: updated.id,
+          client_id: data.clientId,
+          job_title: updated.title,
+          start_time: updated.start_time,
+          end_time: updated.end_time,
+          crew_id: updated.crew_id,
+          crew_name: crew?.name ?? null,
+          client_name: jobClient?.name ?? null,
+          rescheduled: true,
+        },
+      })
+    }
+
     revalidatePath(`/dashboard/clients/${data.clientId}`)
     revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.jobId}`)
+    revalidatePath('/dashboard/schedule')
 
     return { success: true, job: updated }
   } catch (error: any) {
@@ -1996,6 +2053,7 @@ export async function getCompanyIntegrationsAction(): Promise<
     if (!featureGate.ok) return { success: false, error: featureGate.error }
 
     const { INTEGRATION_PROVIDERS, normalizeIntegrationRecord } = await import('@/lib/integrations')
+    const { sanitizeIntegrationConfigForClient } = await import('@/lib/quickbooks-oauth')
     const providers = Object.keys(INTEGRATION_PROVIDERS) as import('@/lib/integrations').IntegrationProvider[]
     const supabaseAdmin = createSupabaseAdmin()
     const { data, error } = await supabaseAdmin
@@ -2012,9 +2070,13 @@ export async function getCompanyIntegrationsAction(): Promise<
     if (error) return { success: false, error: error.message }
 
     const byProvider = new Map((data || []).map((row) => [row.provider, row]))
-    const integrations = providers.map((provider) =>
-      normalizeIntegrationRecord(byProvider.get(provider), provider)
-    )
+    const integrations = providers.map((provider) => {
+      const record = normalizeIntegrationRecord(byProvider.get(provider), provider)
+      return {
+        ...record,
+        config: sanitizeIntegrationConfigForClient(provider, record.config),
+      }
+    })
 
     return { success: true, integrations }
   } catch (error: any) {
@@ -2076,9 +2138,9 @@ export async function saveZapierIntegrationAction(webhookUrl: string): Promise<
   }
 }
 
-export async function testZapierIntegrationAction(): Promise<
-  { success: true } | { success: false; error: string }
-> {
+export async function testZapierIntegrationAction(
+  event: import('@/lib/integrations').ZapierEventType = 'invoice_sent'
+): Promise<{ success: true } | { success: false; error: string }> {
   try {
     const check = await verifyCompanyStaff()
     if (!check.ok) return { success: false, error: check.error }
@@ -2092,12 +2154,17 @@ export async function testZapierIntegrationAction(): Promise<
     const featureGate = await assertCompanyPlatformFeature(check.companyId, 'integrations')
     if (!featureGate.ok) return { success: false, error: featureGate.error }
 
+    const { getZapierTestPayload, ZAPIER_EVENT_TYPES } = await import('@/lib/integrations')
+    if (!ZAPIER_EVENT_TYPES.includes(event)) {
+      return { success: false, error: 'Invalid Zapier event type' }
+    }
+
     const { dispatchCompanyZapierEvent } = await import('@/lib/integration-events')
     const supabaseAdmin = createSupabaseAdmin()
     const result = await dispatchCompanyZapierEvent(supabaseAdmin, {
       companyId: check.companyId,
-      event: 'invoice_sent',
-      data: { test: true, message: 'Zapier integration test from Service Portal' },
+      event,
+      data: getZapierTestPayload(event),
     })
 
     if (!result.delivered) {
@@ -2661,6 +2728,7 @@ export async function addBillingPaymentAction(data: {
         amount: roundedAmount,
         scheduleId: data.scheduleId,
         clientId: data.clientId,
+        paymentMethod: data.method,
       })
     })
 
@@ -2812,6 +2880,7 @@ export async function sendJobInvoiceAction(scheduleId: string, clientId: string)
       await notifyClientInvoiceSent(admin, {
         companyId,
         companyName: company?.name,
+        clientId,
         clientEmail: client?.email,
         clientPhone: client?.phone,
         clientName: client?.name,
@@ -4514,6 +4583,288 @@ export async function getDashboardMapDataAction(): Promise<
   }
 }
 
+export async function getScheduleCalendarAction(weekOffset = 0): Promise<
+  | { success: true; data: import('@/lib/schedule-calendar').ScheduleCalendarData }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const companyId = check.companyId
+    await syncCompanyScheduleStatuses(companyId)
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select('timezone, business_hours_start, business_hours_end')
+      .eq('id', companyId)
+      .single()
+
+    if (companyError || !company) {
+      return { success: false, error: 'Company not found' }
+    }
+
+    const timezone = company.timezone || 'America/Chicago'
+    const businessHours = normalizeBusinessHours(
+      company.business_hours_start,
+      company.business_hours_end
+    )
+
+    const { getCompanyWeekDayBounds, buildScheduleCalendarData } = await import(
+      '@/lib/schedule-calendar'
+    )
+    const week = getCompanyWeekDayBounds(timezone, new Date(), weekOffset)
+
+    const { data: clients } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('company_id', companyId)
+
+    const clientIds = clients?.map((client) => client.id) || []
+    let schedules: any[] = []
+
+    if (clientIds.length > 0) {
+      const scheduleSelect = `
+          id,
+          title,
+          start_time,
+          end_time,
+          status,
+          client_id,
+          crew_id,
+          recurring_rule_id,
+          occurrence_origin_start,
+          client:clients!client_id (name, address),
+          crew:crews!crew_id (id, name)
+        `
+
+      const { data: scheduleData, error: scheduleError } = await supabaseAdmin
+        .from('schedules')
+        .select(scheduleSelect)
+        .in('client_id', clientIds)
+        .neq('status', 'cancelled')
+        .lt('start_time', week.weekEndIso)
+        .gt('end_time', week.weekStartIso)
+        .order('start_time', { ascending: true })
+
+      if (scheduleError) {
+        return { success: false, error: scheduleError.message }
+      }
+
+      schedules = scheduleData || []
+    }
+
+    const { data: crewsData, error: crewsError } = await supabaseAdmin
+      .from('crews')
+      .select('id, name')
+      .eq('company_id', companyId)
+      .order('name', { ascending: true })
+
+    if (crewsError) {
+      return { success: false, error: crewsError.message }
+    }
+
+    let recurringSeries: import('@/lib/schedule-calendar').RecurringSeriesAnchor[] = []
+
+    if (clientIds.length > 0) {
+      const { data: recurringAnchors, error: anchorError } = await supabaseAdmin
+        .from('schedules')
+        .select(`
+          id,
+          title,
+          start_time,
+          end_time,
+          status,
+          client_id,
+          crew_id,
+          recurring_rule_id,
+          occurrence_origin_start,
+          client:clients!client_id (name, address),
+          crew:crews!crew_id (id, name)
+        `)
+        .in('client_id', clientIds)
+        .not('recurring_rule_id', 'is', null)
+        .in('status', ['scheduled', 'in_progress'])
+        .order('start_time', { ascending: true })
+
+      if (anchorError) {
+        return { success: false, error: anchorError.message }
+      }
+
+      const recurringRuleIds = [
+        ...new Set(
+          (recurringAnchors || [])
+            .map((schedule) => schedule.recurring_rule_id)
+            .filter((ruleId): ruleId is string => !!ruleId)
+        ),
+      ]
+
+      if (recurringRuleIds.length > 0) {
+        const { data: rulesData, error: rulesError } = await supabaseAdmin
+          .from('recurring_rules')
+          .select('id, frequency, interval')
+          .in('id', recurringRuleIds)
+
+        if (rulesError) {
+          return { success: false, error: rulesError.message }
+        }
+
+        const { selectRecurringSeriesAnchors } = await import('@/lib/schedule-calendar')
+        const rulesById = new Map(
+          (rulesData || []).map((rule) => [
+            rule.id,
+            {
+              id: rule.id,
+              frequency: rule.frequency as 'daily' | 'weekly' | 'monthly',
+              interval: rule.interval,
+            },
+          ])
+        )
+
+        recurringSeries = selectRecurringSeriesAnchors(recurringAnchors || [], rulesById)
+      }
+    }
+
+    return {
+      success: true,
+      data: buildScheduleCalendarData({
+        companyId,
+        timezone,
+        businessHours,
+        weekOffset,
+        crews: crewsData || [],
+        schedules,
+        recurringSeries,
+      }),
+    }
+  } catch (error: any) {
+    console.error('getScheduleCalendarAction error:', error)
+    return { success: false, error: error.message || 'Failed to load schedule calendar' }
+  }
+}
+
+export async function rescheduleScheduleCalendarJobAction(data: {
+  companyId: string
+  clientId: string
+  scope: 'instance' | 'series'
+  newStartTime: string
+  newEndTime: string
+  jobId: string
+  isProjected?: boolean
+  recurringRuleId?: string | null
+  anchorJobId?: string | null
+  occurrenceStart?: string
+}) {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return { success: false, error: check.error }
+  if (check.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    if (!data.recurringRuleId) {
+      return updateJobAction({
+        jobId: data.jobId,
+        clientId: data.clientId,
+        companyId: data.companyId,
+        startTime: data.newStartTime,
+        endTime: data.newEndTime,
+      })
+    }
+
+    const anchorJobId = data.anchorJobId || data.jobId
+    const occurrenceStart = data.occurrenceStart || data.newStartTime
+
+    const { data: anchor, error: anchorError } = await supabaseAdmin
+      .from('schedules')
+      .select('*')
+      .eq('id', anchorJobId)
+      .eq('client_id', data.clientId)
+      .single()
+
+    if (anchorError || !anchor) {
+      return { success: false, error: 'Recurring series anchor not found' }
+    }
+
+    if (data.scope === 'instance') {
+      if (data.isProjected) {
+        const { data: created, error: createError } = await supabaseAdmin
+          .from('schedules')
+          .insert({
+            client_id: anchor.client_id,
+            crew_id: anchor.crew_id,
+            recurring_rule_id: data.recurringRuleId,
+            title: anchor.title,
+            description: anchor.description,
+            start_time: data.newStartTime,
+            end_time: data.newEndTime,
+            occurrence_origin_start: occurrenceStart,
+            status: 'scheduled',
+            price: anchor.price || 0,
+          })
+          .select('id')
+          .single()
+
+        if (createError || !created) {
+          return { success: false, error: createError?.message || 'Could not create visit' }
+        }
+
+        const { data: client } = await supabaseAdmin
+          .from('clients')
+          .select('company_id')
+          .eq('id', data.clientId)
+          .single()
+
+        if (client?.company_id) {
+          await duplicateBillingToSchedule(
+            supabaseAdmin,
+            anchor.id,
+            created.id,
+            data.clientId,
+            client.company_id,
+            {
+              title: anchor.title,
+              price: anchor.price || 0,
+            }
+          )
+        }
+
+        revalidatePath(`/dashboard/clients/${data.clientId}`)
+        revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${created.id}`)
+        revalidatePath('/dashboard/schedule')
+        return { success: true, jobId: created.id }
+      }
+
+      return updateJobAction({
+        jobId: data.jobId,
+        clientId: data.clientId,
+        companyId: data.companyId,
+        startTime: data.newStartTime,
+        endTime: data.newEndTime,
+      })
+    }
+
+    const deltaMs =
+      new Date(data.newStartTime).getTime() - new Date(occurrenceStart).getTime()
+    const shiftedStart = new Date(new Date(anchor.start_time).getTime() + deltaMs).toISOString()
+    const shiftedEnd = new Date(new Date(anchor.end_time).getTime() + deltaMs).toISOString()
+
+    return updateJobAction({
+      jobId: anchor.id,
+      clientId: data.clientId,
+      companyId: data.companyId,
+      startTime: shiftedStart,
+      endTime: shiftedEnd,
+    })
+  } catch (error: any) {
+    console.error('rescheduleScheduleCalendarJobAction error:', error)
+    return { success: false, error: error.message || 'Could not reschedule job' }
+  }
+}
+
 export async function getRoutePlannerDataAction(): Promise<
   { success: true; data: RoutePlannerData } | { success: false; error: string }
 > {
@@ -5553,6 +5904,22 @@ export async function createLeadAction(data: {
       type: 'note',
       body: 'Lead created',
       createdBy: check.userId,
+    })
+
+    const { queueCompanyZapierEvent } = await import('@/lib/integration-events')
+    queueCompanyZapierEvent(supabaseAdmin, {
+      companyId: check.companyId,
+      event: 'lead_created',
+      data: {
+        lead_id: lead.id,
+        name: lead.name,
+        contact_name: lead.contact_name,
+        email: lead.email,
+        phone: lead.phone,
+        source: lead.source,
+        status: lead.status,
+        estimated_value: lead.estimated_value,
+      },
     })
 
     revalidatePath('/dashboard/leads')

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+
 import { getDashboardMapDataAction, getDashboardOverviewAction } from '@/app/action'
 import { ActiveCrewsToday } from '@/components/dashboard/active-crews-today'
 import { JobsTimeline } from '@/components/dashboard/jobs-timeline'
@@ -108,8 +108,7 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
 
       <Card className="flex-[7] p-4 flex flex-col min-h-0 shadow-sm">
         <div className="flex items-center justify-between mb-2 flex-shrink-0">
-          <h2 className="text-lg font-semibold tracking-tight">Live Crew Locations</h2>
-          <Badge variant="outline" className="text-xs">Live</Badge>
+          <h2 className="text-lg font-semibold tracking-tight">Today&apos;s Job Sites</h2>
         </div>
 
         <LiveCrewLocationsMap
