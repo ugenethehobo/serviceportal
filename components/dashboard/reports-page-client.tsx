@@ -25,6 +25,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { AR_AGING_BUCKET_LABELS } from '@/lib/ar-aging'
 import { formatReportsCurrency, REPORTS_PERIOD_LABELS, type ReportsData, type ReportsPeriod } from '@/lib/reports'
 
@@ -85,7 +93,7 @@ export function ReportsPageClient() {
   }, [period, fetchReports])
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0">
+    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
       <PageHeader
         title="Reports"
         description="Revenue, collections, job activity, and outstanding balances"
@@ -281,36 +289,36 @@ export function ReportsPageClient() {
                   ))}
                 </div>
 
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/40">
-                      <tr className="text-left">
-                        <th className="p-3 font-medium">Client</th>
-                        <th className="p-3 font-medium">Job</th>
-                        <th className="p-3 font-medium">Age</th>
-                        <th className="p-3 font-medium text-right">Amount due</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                <div className="rounded-lg border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/40 hover:bg-muted/40">
+                        <TableHead className="px-3">Client</TableHead>
+                        <TableHead className="px-3">Job</TableHead>
+                        <TableHead className="px-3">Age</TableHead>
+                        <TableHead className="px-3 text-right">Amount due</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {data.arAging.invoices.slice(0, 25).map((row) => (
-                        <tr key={row.scheduleId} className="border-t">
-                          <td className="p-3">
+                        <TableRow key={row.scheduleId}>
+                          <TableCell className="px-3">
                             <Link
                               href={`/dashboard/clients/${row.clientId}`}
                               className="font-medium hover:underline"
                             >
                               {row.clientName}
                             </Link>
-                          </td>
-                          <td className="p-3">
+                          </TableCell>
+                          <TableCell className="px-3">
                             <Link
                               href={`/dashboard/clients/${row.clientId}/jobs/${row.scheduleId}?tab=billing`}
                               className="hover:underline text-muted-foreground"
                             >
                               {row.jobTitle}
                             </Link>
-                          </td>
-                          <td className="p-3">
+                          </TableCell>
+                          <TableCell className="px-3">
                             <Badge
                               variant="outline"
                               className={
@@ -323,14 +331,14 @@ export function ReportsPageClient() {
                             >
                               {row.daysOutstanding}d · {AR_AGING_BUCKET_LABELS[row.bucket].split(' ')[0]}
                             </Badge>
-                          </td>
-                          <td className="p-3 text-right font-medium text-orange-600">
+                          </TableCell>
+                          <TableCell className="px-3 text-right font-medium text-orange-600">
                             {formatReportsCurrency(row.balanceDue)}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
                 {data.arAging.invoices.length > 25 && (
                   <p className="text-xs text-muted-foreground mt-3">
@@ -361,32 +369,32 @@ export function ReportsPageClient() {
             </div>
 
             {data.outstandingClients.length > 0 ? (
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40">
-                    <tr className="text-left">
-                      <th className="p-3 font-medium">Client</th>
-                      <th className="p-3 font-medium text-right">Amount due</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div className="rounded-lg border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableHead className="px-3">Client</TableHead>
+                      <TableHead className="px-3 text-right">Amount due</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {data.outstandingClients.map((row) => (
-                      <tr key={row.clientId} className="border-t">
-                        <td className="p-3">
+                      <TableRow key={row.clientId}>
+                        <TableCell className="px-3">
                           <Link
                             href={`/dashboard/clients/${row.clientId}`}
                             className="font-medium hover:underline"
                           >
                             {row.clientName}
                           </Link>
-                        </td>
-                        <td className="p-3 text-right font-medium text-orange-600">
+                        </TableCell>
+                        <TableCell className="px-3 text-right font-medium text-orange-600">
                           {formatReportsCurrency(row.balanceDue)}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             ) : (
               <div className="py-12 text-center border border-dashed rounded-lg text-sm text-muted-foreground">

@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -486,11 +487,11 @@ export function ClientEstimatesPanel({
 
             <div>
               <Label>Description</Label>
-              <textarea
+              <Textarea
                 value={editForm.description}
                 onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                 disabled={isConverted}
-                className="w-full min-h-[72px] rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                className="mt-1 min-h-[72px]"
                 placeholder="Scope of work, notes for the client..."
               />
             </div>

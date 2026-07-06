@@ -7,6 +7,14 @@ import { updateCompanySoloModeAction } from '@/app/action'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { TimePicker } from '@/components/ui/time-picker'
 import { Separator } from '@/components/ui/separator'
 import { CompanyAddressForm } from '@/components/dashboard/company-address-form'
 import { CompanyLogoUpload } from '@/components/dashboard/company-logo-upload'
@@ -360,18 +368,18 @@ export function CompanyProfileSettings({
         <div className="space-y-4">
           <div>
             <Label htmlFor="company-timezone">Timezone</Label>
-            <select
-              id="company-timezone"
-              value={timezone}
-              onChange={(event) => setTimezone(event.target.value)}
-              className="w-full border rounded-md px-3 py-2 bg-background mt-1 text-sm"
-            >
-              {timezones.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
-                </option>
-              ))}
-            </select>
+            <Select value={timezone} onValueChange={(value) => setTimezone(value ?? timezone)}>
+              <SelectTrigger id="company-timezone" className="mt-1 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {timezones.map((tz) => (
+                  <SelectItem key={tz} value={tz}>
+                    {tz}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <Separator />
@@ -386,12 +394,11 @@ export function CompanyProfileSettings({
                 <Label htmlFor="hours-start" className="text-xs text-muted-foreground">
                   Opens
                 </Label>
-                <Input
+                <TimePicker
                   id="hours-start"
-                  type="time"
                   value={businessHours.start}
-                  onChange={(event) =>
-                    setBusinessHours((current) => ({ ...current, start: event.target.value }))
+                  onChange={(value) =>
+                    setBusinessHours((current) => ({ ...current, start: value }))
                   }
                   className="mt-1"
                 />
@@ -400,12 +407,11 @@ export function CompanyProfileSettings({
                 <Label htmlFor="hours-end" className="text-xs text-muted-foreground">
                   Closes
                 </Label>
-                <Input
+                <TimePicker
                   id="hours-end"
-                  type="time"
                   value={businessHours.end}
-                  onChange={(event) =>
-                    setBusinessHours((current) => ({ ...current, end: event.target.value }))
+                  onChange={(value) =>
+                    setBusinessHours((current) => ({ ...current, end: value }))
                   }
                   className="mt-1"
                 />

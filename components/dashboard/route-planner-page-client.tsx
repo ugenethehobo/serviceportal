@@ -188,10 +188,10 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
   const hasWarnings = data.invalidAddresses.length > 0
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0">
-      <div className="flex items-center justify-between mb-6 shrink-0">
+    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
+      <div className="flex items-center justify-between mb-6 shrink-0 max-md:mb-4 max-md:flex-col max-md:items-start max-md:gap-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Route Planner</h1>
+          <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">Route Planner</h1>
           <p className="text-muted-foreground">
             {data.dateLabel} · {data.companyName} · driving routes from depot
           </p>
@@ -264,7 +264,7 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
 
               <div className="pointer-events-none absolute inset-0 z-20">
                 <ScrollArea
-                  className="pointer-events-auto absolute top-3 left-3 w-64 max-h-[calc(100%-1.5rem)] rounded-lg border bg-background/95 backdrop-blur shadow-lg"
+                  className="pointer-events-auto absolute top-3 left-3 w-64 max-h-[calc(100%-1.5rem)] rounded-lg border bg-background/95 backdrop-blur shadow-lg max-md:bottom-3 max-md:left-3 max-md:right-3 max-md:top-auto max-md:w-auto max-md:max-h-[40vh]"
                   viewportClassName="scroll-fade"
                 >
                   <div className="px-3 py-2 border-b">
@@ -285,7 +285,7 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
                           <button
                             type="button"
                             onClick={() => toggleCrew(route.crewId)}
-                            className={`w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+                            className={`w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors max-md:min-h-11 max-md:py-2.5 ${
                               isVisible
                                 ? 'bg-accent text-accent-foreground'
                                 : 'text-muted-foreground hover:bg-muted/60'

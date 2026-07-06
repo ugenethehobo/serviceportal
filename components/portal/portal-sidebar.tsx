@@ -124,13 +124,14 @@ function MobilePortalHeader({
           type="button"
           variant="ghost"
           size="icon"
+          className="max-md:min-h-11 max-md:min-w-11"
           aria-label="Open menu"
           onClick={() => setMenuOpen(true)}
         >
           <Menu className="size-5" />
         </Button>
 
-        <SheetContent side="left" className="w-[min(85vw,18rem)] gap-0 p-0">
+        <SheetContent side="left" className="flex h-full max-h-[100dvh] w-[min(85vw,18rem)] flex-col gap-0 p-0">
           <SheetHeader className="border-b p-4 text-left">
             <div className="flex items-center gap-3 pr-8">
               <CompanyMark companyName={companyName} companyLogo={companyLogo} className="h-9 w-9" />

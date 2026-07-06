@@ -5,6 +5,14 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -265,7 +273,7 @@ export default function CrewsPage() {
   }
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0">
+    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
       <PageHeader
         title="Crews & Team"
         description="Manage field crews and team member accounts"
@@ -387,10 +395,9 @@ export default function CrewsPage() {
                   availableMembers.map((member) => (
                     <div key={member.id} className="flex items-center justify-between p-2 hover:bg-muted rounded">
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={selectedMembers.includes(member.id)}
-                          onChange={() =>
+                          onCheckedChange={() =>
                             setSelectedMembers((prev) =>
                               prev.includes(member.id)
                                 ? prev.filter((id) => id !== member.id)
@@ -512,10 +519,9 @@ export default function CrewsPage() {
                 <div className="p-2 space-y-1">
                   {editAvailableMembers.map((member) => (
                     <label key={member.id} className="flex items-center gap-2 p-1 hover:bg-muted rounded cursor-pointer">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={editMembersToAdd.includes(member.id)}
-                        onChange={() =>
+                        onCheckedChange={() =>
                           setEditMembersToAdd((prev) =>
                             prev.includes(member.id)
                               ? prev.filter((id) => id !== member.id)
@@ -533,18 +539,24 @@ export default function CrewsPage() {
             {/* Change Crew Lead */}
             <div>
               <Label>Crew Lead</Label>
-              <select
-                value={editSelectedLeadId}
-                onChange={(e) => setEditSelectedLeadId(e.target.value)}
-                className="w-full border rounded p-2 mt-1"
+              <Select
+                value={editSelectedLeadId || '__none__'}
+                onValueChange={(value) =>
+                  setEditSelectedLeadId(value === '__none__' ? '' : (value ?? ''))
+                }
               >
-                <option value="">No Lead</option>
-                {editingCrew?.members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.full_name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="mt-1 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No Lead</SelectItem>
+                  {editingCrew?.members.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

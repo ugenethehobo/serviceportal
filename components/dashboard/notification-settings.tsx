@@ -8,6 +8,15 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Switch } from '@/components/ui/switch'
 import {
   NOTIFICATION_EVENT_LABELS,
@@ -149,14 +158,12 @@ export function NotificationSettings({ embedded = false }: NotificationSettingsP
             {INVOICE_OVERDUE_OFFSET_OPTIONS.map((offset) => {
               const selected = preferences.reminders.invoice_overdue_day_offsets.includes(offset)
               return (
-                <label key={offset} className="inline-flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4 rounded border"
+                <label key={offset} className="inline-flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
                     checked={selected}
-                    onChange={(event) => {
+                    onCheckedChange={(checked) => {
                       updatePreference((current) => {
-                        const next = event.target.checked
+                        const next = checked
                           ? [...current.reminders.invoice_overdue_day_offsets, offset]
                           : current.reminders.invoice_overdue_day_offsets.filter(
                               (value) => value !== offset
@@ -231,21 +238,21 @@ export function NotificationSettings({ embedded = false }: NotificationSettingsP
       <div className="space-y-3">
         <Label>Per-event delivery</Label>
         <div className="rounded-lg border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr>
-                <th className="text-left p-3 font-medium">Event</th>
-                <th className="text-center p-3 font-medium w-20">Email</th>
-                <th className="text-center p-3 font-medium w-20">SMS</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead className="px-3">Event</TableHead>
+                <TableHead className="px-3 text-center w-20">Email</TableHead>
+                <TableHead className="px-3 text-center w-20">SMS</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {EVENT_ORDER.map((event) => {
                 const eventPrefs = preferences.events[event] || {}
                 return (
-                  <tr key={event} className="border-t">
-                    <td className="p-3">{NOTIFICATION_EVENT_LABELS[event]}</td>
-                    <td className="p-3 text-center">
+                  <TableRow key={event}>
+                    <TableCell className="px-3">{NOTIFICATION_EVENT_LABELS[event]}</TableCell>
+                    <TableCell className="px-3 text-center">
                       <Switch
                         checked={!!eventPrefs.email}
                         disabled={!preferences.email_enabled}
@@ -259,8 +266,8 @@ export function NotificationSettings({ embedded = false }: NotificationSettingsP
                           }))
                         }
                       />
-                    </td>
-                    <td className="p-3 text-center">
+                    </TableCell>
+                    <TableCell className="px-3 text-center">
                       <Switch
                         checked={!!eventPrefs.sms}
                         disabled={!preferences.sms_enabled}
@@ -274,12 +281,12 @@ export function NotificationSettings({ embedded = false }: NotificationSettingsP
                           }))
                         }
                       />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 

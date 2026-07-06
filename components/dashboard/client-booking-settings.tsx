@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import {
   DEFAULT_BOOKABLE_WEEKDAYS,
@@ -157,22 +159,28 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
 
       <div className="space-y-3">
         <Label>Booking mode</Label>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <ModeCard
-            selected={bookingMode === 'request_form'}
+        <RadioGroup
+          value={bookingMode}
+          onValueChange={(value) =>
+            setBookingMode((value ?? 'request_form') as BookingMode)
+          }
+          className="grid gap-3 sm:grid-cols-2"
+        >
+          <BookingModeOption
+            value="request_form"
             title="Request form"
             description="Clients submit a lead. You follow up to schedule."
             icon={ClipboardList}
-            onSelect={() => setBookingMode('request_form')}
+            selected={bookingMode === 'request_form'}
           />
-          <ModeCard
-            selected={bookingMode === 'online_booking'}
+          <BookingModeOption
+            value="online_booking"
             title="Online booking"
             description="Clients pick a service and time. Crew is auto-assigned."
             icon={CalendarClock}
-            onSelect={() => setBookingMode('online_booking')}
+            selected={bookingMode === 'online_booking'}
           />
-        </div>
+        </RadioGroup>
       </div>
 
       <div className="space-y-4 rounded-lg border p-4">
@@ -334,13 +342,11 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
                       selected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
                     )}
                   >
-                    <input
-                      type="checkbox"
-                      className="size-4 rounded border"
+                    <Checkbox
                       checked={selected}
-                      onChange={(event) => {
+                      onCheckedChange={(checked) => {
                         setBookingSettings((current) => {
-                          const next = event.target.checked
+                          const next = checked
                             ? [...current.bookable_weekdays, day.value]
                             : current.bookable_weekdays.filter((value) => value !== day.value)
                           return {
@@ -476,35 +482,37 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
   return <section className="rounded-lg border bg-card/50 p-4">{content}</section>
 }
 
-function ModeCard({
+function BookingModeOption({
+  value,
   selected,
   title,
   description,
   icon: Icon,
-  onSelect,
 }: {
+  value: BookingMode
   selected: boolean
   title: string
   description: string
   icon: typeof ClipboardList
-  onSelect: () => void
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
+    <label
       className={cn(
-        'rounded-lg border p-4 text-left transition-colors',
-        selected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+        'flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/50',
+        selected && 'border-primary bg-primary/5'
       )}
     >
-      <div className="flex items-start gap-3">
-        <Icon className={cn('size-5 mt-0.5', selected ? 'text-primary' : 'text-muted-foreground')} />
-        <div>
-          <p className="font-medium">{title}</p>
-          <p className="text-sm text-muted-foreground mt-1">{description}</p>
-        </div>
+      <RadioGroupItem value={value} className="mt-0.5" />
+      <Icon
+        className={cn(
+          'size-5 shrink-0',
+          selected ? 'text-primary' : 'text-muted-foreground'
+        )}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="font-medium">{title}</p>
+        <p className="text-sm text-muted-foreground mt-1">{description}</p>
       </div>
-    </button>
+    </label>
   )
 }

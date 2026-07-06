@@ -46,10 +46,11 @@ export function ScheduleCalendarPageClient({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-md:w-full">
           <Button
             variant="outline"
             size="icon"
+            className="max-md:min-h-11 max-md:min-w-11"
             onClick={() => void loadWeek(weekOffset - 1)}
             disabled={isLoadingWeek}
             aria-label="Previous week"
@@ -62,7 +63,7 @@ export function ScheduleCalendarPageClient({
           </Button>
           <Button
             variant="outline"
-            className="min-w-[200px] gap-2"
+            className="min-w-[200px] gap-2 max-md:min-w-0 max-md:flex-1"
             onClick={() => void loadWeek(0)}
             disabled={isLoadingWeek || weekOffset === 0}
           >
@@ -74,6 +75,7 @@ export function ScheduleCalendarPageClient({
           <Button
             variant="outline"
             size="icon"
+            className="max-md:min-h-11 max-md:min-w-11"
             onClick={() => void loadWeek(weekOffset + 1)}
             disabled={isLoadingWeek}
             aria-label="Next week"

@@ -409,10 +409,11 @@ export function ScheduleWeekGrid({
   const timelineHeightPx = timelineHours * pixelsPerHour
 
   return (
-    <div className="relative flex flex-col min-h-0 h-full">
+    <div className="relative flex flex-col min-h-0 h-full max-md:min-h-[420px]">
+      <div className="max-md:overflow-x-auto max-md:overscroll-x-contain">
       <div
         className={cn(
-          'grid grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b bg-muted/30 shrink-0 transition-opacity',
+          'grid grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b bg-muted/30 shrink-0 transition-opacity max-md:min-w-[640px]',
           isInteractionLocked && 'opacity-60'
         )}
       >
@@ -434,7 +435,7 @@ export function ScheduleWeekGrid({
       <div
         ref={gridRef}
         className={cn(
-          'relative flex-1 min-h-0 overflow-hidden transition-opacity',
+          'relative flex-1 min-h-0 overflow-hidden transition-opacity max-md:overflow-x-auto max-md:overflow-y-auto',
           isInteractionLocked && 'opacity-60 pointer-events-none'
         )}
       >
@@ -451,7 +452,7 @@ export function ScheduleWeekGrid({
         )}
 
         <div
-          className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] relative h-full"
+          className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] relative h-full max-md:min-w-[640px]"
           style={{ minHeight: timelineHeightPx }}
         >
           <div className="relative border-r bg-muted/20 h-full">
@@ -503,10 +504,11 @@ export function ScheduleWeekGrid({
           <ScheduleLoadingOverlay message="Loading week…" />
         ) : null}
       </div>
+      </div>
 
       <div
         className={cn(
-          'flex flex-wrap items-center gap-3 px-3 py-2 border-t text-xs text-muted-foreground shrink-0',
+          'flex flex-wrap items-center gap-3 px-3 py-2 border-t text-xs text-muted-foreground shrink-0 max-md:gap-2 max-md:px-2 max-md:text-[11px]',
           isInteractionLocked && 'opacity-70'
         )}
       >

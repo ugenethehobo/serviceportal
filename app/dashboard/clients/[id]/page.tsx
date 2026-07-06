@@ -26,6 +26,7 @@ import {
 import { Card, CardTitle, CardDescription, CardHeader, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   archiveClientAction,
@@ -60,6 +61,7 @@ import { ClientMessagingPanel } from '@/components/dashboard/client-messaging-pa
 import { ClientPortalAccess } from '@/components/dashboard/client-portal-access'
 import { StripeConnectGate } from '@/components/dashboard/stripe-connect-gate'
 import { SearchBar } from '@/components/search-bar'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { matchesSearch } from '@/lib/search'
 import type { Estimate } from '@/lib/estimates'
 
@@ -564,9 +566,15 @@ export default function ClientDetailPage() {
   const displayAddress = client ? getDisplayAddressFromClient(client) : ''
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0">
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) =>
+        setActiveTab(value as 'jobs' | 'estimates' | 'billing' | 'documents' | 'messaging')
+      }
+      className="flex flex-col h-full min-h-0 p-6 max-md:p-4"
+    >
     {/* Header */}
-    <div className="flex items-center justify-between mb-6">
+    <div className="flex items-center justify-between mb-6 shrink-0 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-4">
       {/* Left side: Breadcrumbs + Client Name */}
       <div>
         <Breadcrumb>
@@ -581,7 +589,7 @@ export default function ClientDetailPage() {
           </BreadcrumbList>
         </Breadcrumb>
         <div className="flex items-center gap-3 mt-2">
-          <h1 className="text-3xl font-bold tracking-tight">{client.name}</h1>
+          <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">{client.name}</h1>
           {client.status === 'archived' && (
             <Badge variant="secondary">Archived</Badge>
           )}
@@ -589,52 +597,26 @@ export default function ClientDetailPage() {
       </div>
 
       {/* Center: Tab Navigation */}
-      <div className="flex items-center gap-1 bg-card/50 rounded-lg p-1">
-        <button
-          onClick={() => setActiveTab('jobs')}
-          className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
-            activeTab === 'jobs' ? 'bg-card shadow-sm font-medium' : 'hover:bg-background'
-          }`}
-        >
+      <TabsList className="h-auto max-md:w-full max-md:justify-start max-md:overflow-x-auto">
+        <TabsTrigger value="jobs" className="px-4 py-1.5 text-sm">
           Jobs
-        </button>
-        <button
-          onClick={() => setActiveTab('estimates')}
-          className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
-            activeTab === 'estimates' ? 'bg-card shadow-sm font-medium' : 'hover:bg-background'
-          }`}
-        >
+        </TabsTrigger>
+        <TabsTrigger value="estimates" className="px-4 py-1.5 text-sm">
           Estimates
-        </button>
-        <button
-          onClick={() => setActiveTab('billing')}
-          className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
-            activeTab === 'billing' ? 'bg-card shadow-sm font-medium' : 'hover:bg-background'
-          }`}
-        >
+        </TabsTrigger>
+        <TabsTrigger value="billing" className="px-4 py-1.5 text-sm">
           Billing
-        </button>
-
-        <button
-          onClick={() => setActiveTab('documents')}
-          className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
-            activeTab === 'documents' ? 'bg-card shadow-sm font-medium' : 'hover:bg-background'
-          }`}
-        >
+        </TabsTrigger>
+        <TabsTrigger value="documents" className="px-4 py-1.5 text-sm">
           Documents
-        </button>
-        <button
-          onClick={() => setActiveTab('messaging')}
-          className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
-            activeTab === 'messaging' ? 'bg-card shadow-sm font-medium' : 'hover:bg-background'
-          }`}
-        >
+        </TabsTrigger>
+        <TabsTrigger value="messaging" className="px-4 py-1.5 text-sm">
           Messaging
-        </button>
-      </div>
+        </TabsTrigger>
+      </TabsList>
 
       {/* Right side: status actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 max-md:w-full max-md:flex-col max-md:[&_button]:w-full max-md:[&_button]:min-h-11">
         {client.status === 'active' ? (
           <Button variant="outline" onClick={() => setClientStatusConfirm('archive')}>
             Archive Client
@@ -653,10 +635,10 @@ export default function ClientDetailPage() {
       {/* Main Content */}
       <div className="flex flex-col flex-1 min-h-0 gap-6">
         {/* Schedules */}
-        <Card className="flex-[7] flex flex-col p-6 min-h-0">
+        <Card className="flex-[7] flex flex-col p-6 min-h-0 max-md:flex-none max-md:p-4">
           {/* Tab Content Area - Full card is now used for the active page */}
 
-          {activeTab === 'jobs' && (
+          <TabsContent value="jobs" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
             <>
               {/* Header row for Jobs tab */}
               <div className="flex flex-col gap-3 mb-4 shrink-0">
@@ -697,7 +679,7 @@ export default function ClientDetailPage() {
                   {visibleSchedules.map((schedule, index) => (
                     <Fragment key={schedule.id}>
                       {/* Job Card Row */}
-                      <div className="h-32 flex items-center mx-1 my-3 group">
+                      <div className="h-32 flex items-center mx-1 my-3 group max-md:h-auto max-md:my-2">
                         {/* Your existing left accent bar */}
                         <div className="h-full flex">
                           {schedule.recurring_rule_id && (
@@ -706,13 +688,13 @@ export default function ClientDetailPage() {
                         </div>
 
                         <Card
-                          className="flex flex-row flex-1 w-full h-full overflow-hidden hover:shadow-md transition-all bg-background hover:bg-card text-muted-foreground hover:text-foreground cursor-pointer"
+                          className="flex flex-row flex-1 w-full h-full overflow-hidden hover:shadow-md transition-all bg-background hover:bg-card text-muted-foreground hover:text-foreground cursor-pointer max-md:h-auto max-md:flex-col"
                           onClick={() => router.push(`/dashboard/clients/${clientId}/jobs/${schedule.id}`)}
                         >
 
                           {/* SECTION 1: Title */}
-                          <div className="flex-1 flex flex-col min-w-0">
-                            <CardHeader className="px-6">
+                          <div className="flex-1 flex flex-col min-w-0 max-md:w-full">
+                            <CardHeader className="px-6 max-md:px-4 max-md:py-3">
                               <CardTitle className="flex items-center">
                                 <div>{schedule.title}</div>
                                 <div className="ml-4">
@@ -749,11 +731,11 @@ export default function ClientDetailPage() {
                           </div>
 
                           {/* Vertical Separator */}
-                          <Separator orientation="vertical" className="h-auto" />
+                          <Separator orientation="vertical" className="h-auto max-md:hidden" />
 
                           {/* SECTION 2: Status & Crew */}
-                          <div className="flex-1 flex flex-col min-w-0">
-                            <CardHeader className="px-6">
+                          <div className="flex-1 flex flex-col min-w-0 max-md:w-full max-md:border-t max-md:pt-2">
+                            <CardHeader className="px-6 max-md:px-4 max-md:py-3">
                               <CardTitle>Status & Crew</CardTitle>
                             </CardHeader>
 
@@ -775,11 +757,11 @@ export default function ClientDetailPage() {
                           </div>
 
                           {/* Vertical Separator */}
-                          <Separator orientation="vertical" className="h-auto" />
+                          <Separator orientation="vertical" className="h-auto max-md:hidden" />
 
                           {/* SECTION 3: Price */}
-                          <div className="flex-1 flex flex-col min-w-0">
-                            <CardHeader className="px-6">
+                          <div className="flex-1 flex flex-col min-w-0 max-md:w-full max-md:border-t max-md:pt-2">
+                            <CardHeader className="px-6 max-md:px-4 max-md:py-3">
                               <CardTitle>Job Price</CardTitle>
                             </CardHeader>
 
@@ -817,36 +799,35 @@ export default function ClientDetailPage() {
                 </div>
               )}
             </>
-          )}
+          </TabsContent>
 
-          {/* Other Tab Pages (full card content) */}
-          {activeTab === 'estimates' && (
+          <TabsContent value="estimates" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
             <ClientEstimatesPanel
               clientId={clientId}
               onConvertToJob={handleConvertToJob}
               onDocumentsChange={() => setDocumentsRefreshKey((k) => k + 1)}
             />
-          )}
+          </TabsContent>
 
-          {activeTab === 'billing' && (
+          <TabsContent value="billing" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
             <StripeConnectGate>
               <ClientBillingPanel clientId={clientId} />
             </StripeConnectGate>
-          )}
+          </TabsContent>
 
-          {activeTab === 'documents' && (
+          <TabsContent value="documents" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
             <ClientDocumentsPanel clientId={clientId} refreshKey={documentsRefreshKey} />
-          )}
+          </TabsContent>
 
-          {activeTab === 'messaging' && (
+          <TabsContent value="messaging" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
             <ClientMessagingPanel clientId={clientId} clientName={client.name} />
-          )}
+          </TabsContent>
         </Card>
 
         {/* Contact + Notes — only on Jobs tab */}
         {activeTab === 'jobs' && (
         <>
-        <div className="flex-[3] grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
+        <div className="flex-[3] grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0 max-md:flex-none">
           <Card className="p-6 flex flex-col min-h-0">
             <CardHeader className="pb-3 shrink-0">
               <CardTitle className="font-semibold text-lg">
@@ -929,7 +910,7 @@ export default function ClientDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-            <textarea
+            <Textarea
               value={client.notes || ''}
               onChange={async (e) => {
                 const newNotes = e.target.value
@@ -939,7 +920,7 @@ export default function ClientDetailPage() {
                   await updateClientAction({ id: client.id, name: client.name, notes: newNotes })
                 }, 800)
               }}
-              className="flex-1 w-full h-auto resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
+              className="flex-1 min-h-[120px] resize-y"
             />
             </CardContent>
           </Card>
@@ -1071,6 +1052,6 @@ export default function ClientDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </Tabs>
   )
 }

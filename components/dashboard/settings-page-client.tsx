@@ -188,7 +188,7 @@ function SettingsSectionButton({
       disabled={locked}
       aria-disabled={locked || undefined}
       className={cn(
-        'w-full rounded-lg px-3 py-2.5 text-left transition-colors',
+        'w-full rounded-lg px-3 py-2.5 text-left transition-colors max-md:min-h-11 max-md:py-3',
         locked
           ? 'cursor-not-allowed text-muted-foreground/45'
           : isActive
@@ -383,7 +383,7 @@ function SettingsPageContent() {
   const activeMeta = visibleSections.find((section) => section.id === activeSection)
 
   return (
-    <div className="flex h-full min-h-0 flex-col p-6">
+    <div className="flex h-full min-h-0 flex-col p-6 max-md:p-4">
       <PageHeader
         title="Settings"
         description={
@@ -402,7 +402,7 @@ function SettingsPageContent() {
               viewportClassName="scroll-fade-x lg:scroll-fade"
             >
               <TooltipProvider>
-                <nav className="flex min-w-max gap-1 p-3 lg:min-w-0 lg:flex-col">
+                <nav className="flex min-w-max gap-1 p-3 max-md:gap-2 max-md:px-2 lg:min-w-0 lg:flex-col">
                   {visibleSections.map((section) => (
                     <SettingsSectionButton
                       key={section.id}

@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Select,
   SelectContent,
@@ -631,10 +632,9 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                 </div>
                 <div>
                   <Label className="text-xs">Payment date</Label>
-                  <Input
-                    type="date"
+                  <DatePicker
                     value={paymentForm.paymentDate}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, paymentDate: e.target.value })}
+                    onChange={(value) => setPaymentForm({ ...paymentForm, paymentDate: value })}
                     className="mt-1"
                   />
                 </div>

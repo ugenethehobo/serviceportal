@@ -22,6 +22,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { deleteUserCompletely } from '@/app/action'
 import { createCompanyUser } from '@/app/action'
 import { getCompanyData } from '@/app/action'
@@ -457,14 +464,20 @@ export default function CompanyUsersPage() {
             {/* Role */}
             <div>
               <Label>Role</Label>
-              <select
+              <Select
                 value={newUser.role}
-                onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                className="w-full border rounded-md px-3 py-2 bg-background"
+                onValueChange={(value) =>
+                  setNewUser({ ...newUser, role: value ?? 'team_member' })
+                }
               >
-                <option value="team_member">Team Member</option>
-                <option value="company_admin">Company Admin</option>
-              </select>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="team_member">Team Member</SelectItem>
+                  <SelectItem value="company_admin">Company Admin</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <ImageAttachmentField

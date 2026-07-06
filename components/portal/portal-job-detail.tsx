@@ -5,6 +5,14 @@ import { useSearchParams } from 'next/navigation'
 import { PortalJobPayPanel } from '@/components/portal/portal-job-pay-panel'
 import { PortalScheduleHero } from '@/components/portal/portal-schedule-hero'
 import { Card } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { formatCurrency, type BillingLineItem, type BillingPayment } from '@/lib/billing'
 import type { PortalJobCrew } from '@/lib/portal-jobs'
 import { ChevronLeft } from 'lucide-react'
@@ -43,7 +51,11 @@ export function PortalJobDetail({ jobId, clientId, billing, timezone }: PortalJo
   const showPaymentFirst = autoPay || billing.canPay
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-6 h-full min-h-0">
+    <div
+      className={`flex flex-col gap-5 sm:gap-6 h-full min-h-0 ${
+        showPaymentFirst ? 'max-md:pb-[calc(5rem+env(safe-area-inset-bottom))]' : ''
+      }`}
+    >
       <Link
         href="/portal/jobs"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground w-fit"
@@ -69,14 +81,27 @@ export function PortalJobDetail({ jobId, clientId, billing, timezone }: PortalJo
       />
 
       {showPaymentFirst && (
-        <PortalJobPayPanel
-          scheduleId={jobId}
-          clientId={clientId}
-          balanceDue={billing.summary.balanceDue}
-          totalCharged={billing.summary.totalCharged}
-          lineItemCount={billing.lineItems.length}
-          autoStart={autoPay}
-        />
+        <>
+          <div className="hidden md:block">
+            <PortalJobPayPanel
+              scheduleId={jobId}
+              clientId={clientId}
+              balanceDue={billing.summary.balanceDue}
+              totalCharged={billing.summary.totalCharged}
+              lineItemCount={billing.lineItems.length}
+              autoStart={autoPay}
+            />
+          </div>
+          <PortalJobPayPanel
+            scheduleId={jobId}
+            clientId={clientId}
+            balanceDue={billing.summary.balanceDue}
+            totalCharged={billing.summary.totalCharged}
+            lineItemCount={billing.lineItems.length}
+            autoStart={autoPay}
+            compact
+          />
+        </>
       )}
 
       {billing.description?.trim() && (
@@ -96,26 +121,35 @@ export function PortalJobDetail({ jobId, clientId, billing, timezone }: PortalJo
               What you&apos;re being billed for on this job
             </p>
           </div>
-          <div className="divide-y">
-            {billing.lineItems.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between gap-4 px-5 py-3 text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium">{item.description}</p>
-                  <p className="text-muted-foreground text-xs mt-0.5">
-                    {item.quantity} × {formatCurrency(item.unit_price)}
-                  </p>
-                </div>
-                <p className="font-medium shrink-0">{formatCurrency(item.amount)}</p>
-              </div>
-            ))}
-            <div className="flex items-center justify-between gap-4 px-5 py-3 text-sm bg-muted/10">
-              <span className="font-medium">Total</span>
-              <span className="font-semibold">{formatCurrency(billing.summary.totalCharged)}</span>
-            </div>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="px-5">Description</TableHead>
+                <TableHead className="px-5 text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {billing.lineItems.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="px-5">
+                    <p className="font-medium">{item.description}</p>
+                    <p className="text-muted-foreground text-xs mt-0.5">
+                      {item.quantity} × {formatCurrency(item.unit_price)}
+                    </p>
+                  </TableCell>
+                  <TableCell className="px-5 text-right font-medium">
+                    {formatCurrency(item.amount)}
+                  </TableCell>
+                </TableRow>
+              ))}
+              <TableRow className="bg-muted/10 hover:bg-muted/10">
+                <TableCell className="px-5 font-medium">Total</TableCell>
+                <TableCell className="px-5 text-right font-semibold">
+                  {formatCurrency(billing.summary.totalCharged)}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </Card>
       )}
 
@@ -147,24 +181,28 @@ export function PortalJobDetail({ jobId, clientId, billing, timezone }: PortalJo
           <div className="px-5 py-4 border-b">
             <h2 className="font-semibold">Payment history</h2>
           </div>
-          <div className="divide-y">
-            {billing.payments.map((payment) => (
-              <div
-                key={payment.id}
-                className="flex items-center justify-between gap-4 px-5 py-3 text-sm"
-              >
-                <div>
-                  <p className="font-medium capitalize">{payment.method}</p>
-                  <p className="text-muted-foreground text-xs mt-0.5">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="px-5">Method</TableHead>
+                <TableHead className="px-5">Date</TableHead>
+                <TableHead className="px-5 text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {billing.payments.map((payment) => (
+                <TableRow key={payment.id}>
+                  <TableCell className="px-5 font-medium capitalize">{payment.method}</TableCell>
+                  <TableCell className="px-5 text-muted-foreground">
                     {new Date(payment.payment_date + 'T00:00:00').toLocaleDateString()}
-                  </p>
-                </div>
-                <p className="font-medium text-green-700 shrink-0">
-                  {formatCurrency(payment.amount)}
-                </p>
-              </div>
-            ))}
-          </div>
+                  </TableCell>
+                  <TableCell className="px-5 text-right font-medium text-green-700">
+                    {formatCurrency(payment.amount)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </Card>
       )}
 

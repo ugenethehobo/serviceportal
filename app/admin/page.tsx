@@ -26,6 +26,14 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
+import { DatePicker } from '@/components/ui/date-picker'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   adminUpsertCompanyAction,
   getCompanyLogoDisplayUrlAction,
@@ -379,17 +387,21 @@ export default function AdminDashboard() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="max-w-xs"
           />
-          <select
+          <Select
             value={subscriptionFilter}
-            onChange={(e) => setSubscriptionFilter(e.target.value)}
-            className="border rounded-md px-3 text-sm bg-background"
+            onValueChange={(value) => setSubscriptionFilter(value ?? 'All')}
           >
-            {FILTER_LABELS.map((label) => (
-              <option key={label} value={label}>
-                {label === 'All' ? 'All Plans' : label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FILTER_LABELS.map((label) => (
+                <SelectItem key={label} value={label}>
+                  {label === 'All' ? 'All Plans' : label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'table' | 'cards')}>
@@ -552,48 +564,56 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t">
               <div>
                 <Label>Subscription tier</Label>
-                <select
+                <Select
                   value={companyForm.subscriptionPlan}
-                  onChange={(e) => handlePlanChange(e.target.value as PlatformPlanId)}
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-background mt-1"
+                  onValueChange={(value) => handlePlanChange((value ?? 'trial') as PlatformPlanId)}
                 >
-                  {SUBSCRIPTION_PLAN_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="mt-1 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUBSCRIPTION_PLAN_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Subscription status</Label>
-                <select
+                <Select
                   value={companyForm.subscriptionStatus}
-                  onChange={(e) =>
+                  onValueChange={(value) =>
                     setCompanyForm({
                       ...companyForm,
-                      subscriptionStatus: e.target.value as PlatformSubscriptionStatus,
+                      subscriptionStatus: (value ?? 'active') as PlatformSubscriptionStatus,
                     })
                   }
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-background mt-1"
                 >
-                  {SUBSCRIPTION_STATUS_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="mt-1 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUBSCRIPTION_STATUS_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             {companyForm.subscriptionPlan === 'trial' && (
               <div>
                 <Label>Trial end date</Label>
-                <Input
-                  type="date"
+                <DatePicker
                   value={companyForm.trialEndsAt}
-                  onChange={(e) =>
-                    setCompanyForm({ ...companyForm, trialEndsAt: e.target.value })
+                  onChange={(value) =>
+                    setCompanyForm({ ...companyForm, trialEndsAt: value })
                   }
+                  placeholder="Pick trial end date"
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-1">

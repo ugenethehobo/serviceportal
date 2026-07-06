@@ -19,7 +19,7 @@ export function PageHeader({
     <div
       className={cn(
         'flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between shrink-0',
-        size === 'page' ? 'mb-6' : 'mb-4',
+        size === 'page' ? 'mb-6 max-md:mb-4' : 'mb-4',
         className
       )}
     >
@@ -27,7 +27,7 @@ export function PageHeader({
         <h1
           className={cn(
             'font-bold tracking-tight',
-            size === 'page' ? 'text-3xl' : 'text-2xl'
+            size === 'page' ? 'text-3xl max-md:text-2xl' : 'text-2xl'
           )}
         >
           {title}
@@ -36,7 +36,11 @@ export function PageHeader({
           <p className="text-muted-foreground mt-1">{description}</p>
         ) : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 max-md:w-full max-md:[&_button]:min-h-11">
+          {actions}
+        </div>
+      ) : null}
     </div>
   )
 }

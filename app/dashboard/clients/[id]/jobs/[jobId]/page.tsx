@@ -41,6 +41,7 @@ import { JobFormFields, type JobFormValues } from '@/components/dashboard/job-fo
 import { JobBillingPanel } from '@/components/dashboard/job-billing-panel'
 import { StripeConnectGate } from '@/components/dashboard/stripe-connect-gate'
 import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 
 const statusLabels: Record<string, string> = {
@@ -425,23 +426,21 @@ export default function JobDetailPage() {
     : 'No address on file'
 
   const jobTabSwitcher = (
-    <div className="flex items-center justify-center gap-1 bg-card/50 rounded-lg p-1 overflow-x-auto w-max max-w-full">
+    <TabsList className="h-auto w-max max-w-full overflow-x-auto max-md:w-full">
       {jobTabs.map((tab) => (
-        <button
+        <TabsTrigger
           key={tab.id}
-          onClick={() => handleTabChange(tab.id)}
-          className={`px-3 sm:px-4 py-2 text-sm rounded-md transition-colors whitespace-nowrap ${
-            activeTab === tab.id ? 'bg-card shadow-sm font-medium' : 'hover:bg-background'
-          }`}
+          value={tab.id}
+          className="px-3 sm:px-4 py-2 text-sm whitespace-nowrap"
         >
           {tab.label}
-        </button>
+        </TabsTrigger>
       ))}
-    </div>
+    </TabsList>
   )
 
   const jobActionButtons = (
-    <div className="flex items-center gap-2 flex-wrap justify-end">
+    <div className="flex items-center gap-2 flex-wrap justify-end max-md:justify-stretch max-md:[&_button]:min-h-11 max-md:[&_button]:flex-1">
       {activeTab === 'details' && canEdit && !isEditing && (
         <Button variant="outline" onClick={handleStartEditing}>Edit</Button>
       )}
@@ -503,7 +502,13 @@ export default function JobDetailPage() {
   )
 
   return (
-    <div className="flex flex-col h-full min-h-0 p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-6">
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) =>
+        handleTabChange(value as 'details' | 'billing' | 'photos' | 'documents' | 'messaging')
+      }
+      className="flex flex-col h-full min-h-0 p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-6"
+    >
       {isTeamMember ? (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
           {jobTitleBlock}
@@ -513,15 +518,17 @@ export default function JobDetailPage() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 mb-4 sm:mb-6 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center">
+        <div className="grid grid-cols-1 gap-4 mb-4 sm:mb-6 max-md:gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center">
           <div className="min-w-0 lg:justify-self-start">{jobTitleBlock}</div>
           <div className="flex justify-center lg:justify-self-center">{jobTabSwitcher}</div>
-          <div className="lg:justify-self-end">{jobActionButtons}</div>
+          <div className="lg:justify-self-end max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:border-t max-md:bg-background/95 max-md:backdrop-blur max-md:p-4 max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]">
+            {jobActionButtons}
+          </div>
         </div>
       )}
 
       <MainPageCard className="p-4 sm:p-6">
-        {activeTab === 'details' && (
+        <TabsContent value="details" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
           <MainPageCardScroll>
             {isEditing ? (
               <div className="max-w-2xl">
@@ -550,30 +557,30 @@ export default function JobDetailPage() {
               />
             )}
           </MainPageCardScroll>
-        )}
+        </TabsContent>
 
-        {activeTab === 'billing' && (
+        <TabsContent value="billing" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
           <StripeConnectGate>
             <JobBillingPanel scheduleId={jobId} clientId={clientId} />
           </StripeConnectGate>
-        )}
+        </TabsContent>
 
-        {activeTab === 'photos' && (
+        <TabsContent value="photos" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
           <JobPhotosPanel scheduleId={jobId} clientId={clientId} />
-        )}
+        </TabsContent>
 
-        {activeTab === 'documents' && (
+        <TabsContent value="documents" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
           <JobDocumentsPanel scheduleId={jobId} clientId={clientId} />
-        )}
+        </TabsContent>
 
-        {activeTab === 'messaging' && (
+        <TabsContent value="messaging" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
           <JobMessagingPanel
             clientId={clientId}
             scheduleId={jobId}
             jobTitle={job.title}
             clientName={clientName}
           />
-        )}
+        </TabsContent>
       </MainPageCard>
 
       {isTeamMember && (
@@ -616,6 +623,6 @@ export default function JobDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </Tabs>
   )
 }

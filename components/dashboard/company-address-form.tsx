@@ -3,6 +3,13 @@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   US_STATES,
   type StructuredAddress,
   type StructuredAddressErrors,
@@ -78,20 +85,22 @@ export function StructuredAddressForm({
 
         <div>
           <Label htmlFor={`${idPrefix}-state`}>State{requiredMark}</Label>
-          <select
-            id={`${idPrefix}-state`}
-            value={value.state}
-            onChange={(e) => update('state', e.target.value)}
-            className="w-full border rounded-md px-3 py-2 bg-background mt-1 h-7 text-sm"
+          <Select
+            value={value.state || undefined}
+            onValueChange={(next) => update('state', next ?? '')}
             disabled={disabled}
           >
-            <option value="">Select state</option>
-            {US_STATES.map((state) => (
-              <option key={state.code} value={state.code}>
-                {state.code} — {state.name}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id={`${idPrefix}-state`} className="mt-1 w-full">
+              <SelectValue placeholder="Select state" />
+            </SelectTrigger>
+            <SelectContent>
+              {US_STATES.map((state) => (
+                <SelectItem key={state.code} value={state.code}>
+                  {state.code} — {state.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {errors.state && (
             <p className="text-xs text-red-600 mt-1">{errors.state}</p>
           )}

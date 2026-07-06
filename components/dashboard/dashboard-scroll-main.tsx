@@ -17,7 +17,7 @@ export function DashboardScrollMain({ children }: { children: React.ReactNode })
 
   if (isFullScreenRoute(pathname)) {
     return (
-      <main className="relative flex-1 min-h-0 overflow-hidden">
+      <main className="relative flex-1 min-h-0 overflow-hidden max-md:overflow-y-auto max-md:overscroll-y-contain">
         <NavigationProgress />
         {children}
       </main>

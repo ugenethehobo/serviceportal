@@ -29,6 +29,8 @@ import { Card } from '@/components/ui/card'
 import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { DateTimePicker } from '@/components/ui/datetime-picker'
+import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
@@ -37,6 +39,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Sheet,
   SheetContent,
@@ -397,21 +407,21 @@ export function LeadsPageClient() {
   }
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0">
-      <div className="flex items-center justify-between mb-6 shrink-0">
+    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
+      <div className="flex items-center justify-between mb-6 shrink-0 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Leads</h1>
+          <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">Leads</h1>
           <p className="text-muted-foreground">
             Track prospects, follow up on time, and convert them to clients
           </p>
         </div>
-        <Button onClick={openCreateSheet}>
+        <Button onClick={openCreateSheet} className="max-md:w-full max-md:min-h-11">
           <Plus className="size-4" />
           Add Lead
         </Button>
       </div>
 
-      <MainPageCard className="overflow-hidden p-6">
+      <MainPageCard className="overflow-hidden p-6 max-md:p-4">
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-6 shrink-0">
           <div className="flex flex-wrap gap-3 items-center w-full lg:w-auto">
             <Input
@@ -484,54 +494,54 @@ export function LeadsPageClient() {
           </div>
         ) : viewMode === 'list' ? (
           <MainPageCardScroll>
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3 font-medium">Lead</th>
-                    <th className="p-3 font-medium">Follow-up</th>
-                    <th className="p-3 font-medium">Stage</th>
-                    <th className="p-3 font-medium">Source</th>
-                    <th className="p-3 font-medium text-right">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="rounded-lg border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="px-3">Lead</TableHead>
+                    <TableHead className="px-3">Follow-up</TableHead>
+                    <TableHead className="px-3">Stage</TableHead>
+                    <TableHead className="px-3">Source</TableHead>
+                    <TableHead className="px-3 text-right">Value</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {filteredLeads.map((lead) => (
-                    <tr
+                    <TableRow
                       key={lead.id}
                       onClick={() => openEditSheet(lead)}
-                      className="border-t cursor-pointer hover:bg-muted/30 transition-colors"
+                      className="cursor-pointer"
                     >
-                      <td className="p-3">
+                      <TableCell className="px-3">
                         <div className="font-medium">{lead.name}</div>
                         <div className="text-xs text-muted-foreground">
                           {[lead.contact_name, lead.email, lead.phone].filter(Boolean).join(' · ') ||
                             'No contact details'}
                         </div>
-                      </td>
-                      <td className="p-3">
+                      </TableCell>
+                      <TableCell className="px-3">
                         <FollowUpBadge followUpAt={lead.follow_up_at} />
-                      </td>
-                      <td className="p-3">
+                      </TableCell>
+                      <TableCell className="px-3">
                         <Badge variant="outline">{LEAD_STATUS_LABELS[lead.status]}</Badge>
-                      </td>
-                      <td className="p-3 text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="px-3 text-muted-foreground">
                         {LEAD_SOURCE_LABELS[lead.source]}
-                      </td>
-                      <td className="p-3 text-right font-medium">
+                      </TableCell>
+                      <TableCell className="px-3 text-right font-medium">
                         {lead.estimated_value != null && lead.estimated_value > 0
                           ? `$${lead.estimated_value.toLocaleString()}`
                           : '—'}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </MainPageCardScroll>
         ) : (
           <MainPageCardScroll contentClassName="min-w-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 min-w-[960px] pb-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 md:min-w-[960px] pb-2">
               {LEAD_PIPELINE_STATUSES.map((status) => (
                 <div
                   key={status}
@@ -701,10 +711,10 @@ export function LeadsPageClient() {
 
               <div>
                 <Label>Next follow-up</Label>
-                <Input
-                  type="datetime-local"
+                <DateTimePicker
                   value={form.follow_up_at}
-                  onChange={(e) => setForm({ ...form, follow_up_at: e.target.value })}
+                  onChange={(value) => setForm({ ...form, follow_up_at: value })}
+                  placeholder="Schedule follow-up"
                   className="mt-1"
                 />
               </div>
@@ -722,10 +732,10 @@ export function LeadsPageClient() {
 
               <div>
                 <Label>Notes</Label>
-                <textarea
+                <Textarea
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  className="mt-1 w-full min-h-[88px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="mt-1 min-h-[88px]"
                   placeholder="Scope, referral details, conversation notes..."
                 />
               </div>

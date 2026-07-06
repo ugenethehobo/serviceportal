@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { PortalJobsList } from '@/components/portal/portal-jobs-list'
+import { PortalPageHeader } from '@/components/portal/portal-page-header'
 import { SearchBar } from '@/components/search-bar'
 import { Card } from '@/components/ui/card'
 import { matchesSearch } from '@/lib/search'
@@ -67,13 +68,11 @@ export function PortalJobsPageClient({
   const noResults = jobs.length > 0 && filtered.length === 0
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-6 pb-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Jobs</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Arrival times, assigned crews, and one-tap payments for every visit.
-        </p>
-      </div>
+    <div className="flex h-full min-h-0 flex-col gap-6 pb-6">
+      <PortalPageHeader
+        title="Jobs"
+        description="Arrival times, assigned crews, and one-tap payments for every visit."
+      />
 
       <SearchBar
         value={query}

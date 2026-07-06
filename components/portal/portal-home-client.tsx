@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { PortalActivityCard } from '@/components/portal/portal-activity-card'
 import { PortalPayDialog } from '@/components/portal/portal-pay-dialog'
 import { PortalScheduleHero } from '@/components/portal/portal-schedule-hero'
+import { PortalPageHeader } from '@/components/portal/portal-page-header'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import type { PortalActivityItem } from '@/lib/portal-activity'
@@ -73,13 +74,11 @@ export function PortalHomeClient({
       : `${payableJobs.length} visits ready to pay`
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-6 pb-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Your visits</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          See who&apos;s coming, when they&apos;ll arrive, and pay balances in seconds.
-        </p>
-      </div>
+    <div className="flex h-full min-h-0 flex-col gap-6 pb-6">
+      <PortalPageHeader
+        title="Your visits"
+        description="See who's coming, when they'll arrive, and pay balances in seconds."
+      />
 
       {hasBalance && (
         <Card className="border-border bg-card shadow-sm">

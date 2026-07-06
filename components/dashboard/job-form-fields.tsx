@@ -1,7 +1,9 @@
 'use client'
 
+import { DateTimePicker } from '@/components/ui/datetime-picker'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -83,30 +85,28 @@ export function JobFormFields({
 
       <div>
         <Label>Description</Label>
-        <textarea
+        <Textarea
           value={values.description}
           onChange={(e) => onChange({ ...values, description: e.target.value })}
           disabled={isDisabled('description')}
-          className="w-full min-h-[70px] rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+          className="min-h-[70px]"
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
         <div>
           <Label>Start *</Label>
-          <Input
-            type="datetime-local"
+          <DateTimePicker
             value={values.startTime}
-            onChange={(e) => onStartTimeChange(e.target.value)}
+            onChange={onStartTimeChange}
             disabled={isDisabled('startTime')}
           />
         </div>
         <div>
           <Label>End *</Label>
-          <Input
-            type="datetime-local"
+          <DateTimePicker
             value={values.endTime}
-            onChange={(e) => onEndTimeChange(e.target.value)}
+            onChange={onEndTimeChange}
             disabled={isDisabled('endTime')}
           />
         </div>

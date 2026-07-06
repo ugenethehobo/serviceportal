@@ -107,7 +107,7 @@ export function PaymentsPageClient() {
   }, [fetchPayments])
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0">
+    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
       <PageHeader
         title="Payments"
         description="Every transaction across your company — portal card payments and in-person cash/check"

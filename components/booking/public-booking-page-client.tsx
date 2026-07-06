@@ -12,7 +12,16 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   emptyStructuredAddress,
   isStructuredAddressEmpty,
@@ -332,32 +341,40 @@ export function PublicBookingPageClient({
               <form onSubmit={handleOnlineSubmit} className="space-y-5">
                 <div className="space-y-2">
                   <Label>Service</Label>
-                  <div className="grid gap-2">
+                  <RadioGroup
+                    value={selectedServiceId}
+                    onValueChange={(value) => {
+                      if (value) void handleServiceChange(value)
+                    }}
+                    className="grid gap-2"
+                  >
                     {data.services.map((service) => (
-                      <ServiceOption
+                      <ServiceRadioOption
                         key={service.id}
                         service={service}
                         selected={selectedServiceId === service.id}
-                        onSelect={() => handleServiceChange(service.id)}
                       />
                     ))}
-                  </div>
+                  </RadioGroup>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="booking-date">Date</Label>
-                  <select
-                    id="booking-date"
-                    value={selectedDate}
-                    onChange={(event) => handleDateChange(event.target.value)}
-                    className="w-full border rounded-md px-3 py-2 bg-background h-9 text-sm"
+                  <Select
+                    value={selectedDate || undefined}
+                    onValueChange={(value) => handleDateChange(value ?? '')}
                   >
-                    {dateOptions.map((option) => (
-                      <option key={option.dateStr} value={option.dateStr}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="booking-date" className="w-full">
+                      <SelectValue placeholder="Select a date" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {dateOptions.map((option) => (
+                        <SelectItem key={option.dateStr} value={option.dateStr}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -373,23 +390,23 @@ export function PublicBookingPageClient({
                       {selectedService ? ` for ${selectedService.name}` : ''}.
                     </p>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <ToggleGroup
+                      value={selectedSlotIso ? [selectedSlotIso] : []}
+                      onValueChange={(values) => setSelectedSlotIso(values[0] ?? null)}
+                      variant="outline"
+                      spacing={2}
+                      className="flex flex-wrap gap-2"
+                    >
                       {slots.map((slot) => (
-                        <button
+                        <ToggleGroupItem
                           key={slot.startIso}
-                          type="button"
-                          onClick={() => setSelectedSlotIso(slot.startIso)}
-                          className={cn(
-                            'rounded-md border px-3 py-2 text-sm transition-colors',
-                            selectedSlotIso === slot.startIso
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : 'hover:bg-muted'
-                          )}
+                          value={slot.startIso}
+                          className="px-3 py-2 text-sm data-pressed:border-primary data-pressed:bg-primary data-pressed:text-primary-foreground"
                         >
                           {slot.label}
-                        </button>
+                        </ToggleGroupItem>
                       ))}
-                    </div>
+                    </ToggleGroup>
                   )}
                 </div>
 
@@ -435,38 +452,33 @@ export function PublicBookingPageClient({
   )
 }
 
-function ServiceOption({
+function ServiceRadioOption({
   service,
   selected,
-  onSelect,
 }: {
   service: BookableService
   selected: boolean
-  onSelect: () => void
 }) {
   const priceLabel = formatBookingPrice(service.price_estimate)
   return (
-    <button
-      type="button"
-      onClick={onSelect}
+    <label
       className={cn(
-        'w-full rounded-lg border px-4 py-3 text-left transition-colors',
-        selected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+        'flex w-full cursor-pointer items-start justify-between gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-muted/50',
+        selected && 'border-primary bg-primary/5'
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-medium">{service.name}</p>
-          {service.description ? (
-            <p className="text-sm text-muted-foreground mt-0.5">{service.description}</p>
-          ) : null}
-        </div>
-        <div className="text-right text-sm text-muted-foreground shrink-0">
-          <p>{formatBookingDuration(service.duration_minutes)}</p>
-          {priceLabel ? <p>{priceLabel}</p> : null}
-        </div>
+      <RadioGroupItem value={service.id} className="sr-only" />
+      <div className="min-w-0">
+        <p className="font-medium">{service.name}</p>
+        {service.description ? (
+          <p className="text-sm text-muted-foreground mt-0.5">{service.description}</p>
+        ) : null}
       </div>
-    </button>
+      <div className="text-right text-sm text-muted-foreground shrink-0">
+        <p>{formatBookingDuration(service.duration_minutes)}</p>
+        {priceLabel ? <p>{priceLabel}</p> : null}
+      </div>
+    </label>
   )
 }
 

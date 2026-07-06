@@ -26,7 +26,9 @@ export function PortalShell({
           companyLogo={companyLogo}
         />
         <PortalScrollMain className="flex-1 min-h-0 min-w-0">
-          <div className="p-4 sm:p-6 max-w-5xl mx-auto w-full">{children}</div>
+          <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]">
+            {children}
+          </div>
         </PortalScrollMain>
       </div>
     </NavigationProvider>

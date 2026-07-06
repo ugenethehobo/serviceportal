@@ -24,6 +24,13 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 import {
   Tooltip,
@@ -425,20 +432,24 @@ export function TeamMembersPanel() {
 
               <div>
                 <Label>Role</Label>
-                <select
+                <Select
                   value={form.role}
-                  onChange={(e) =>
+                  onValueChange={(value) =>
                     setForm({
                       ...form,
-                      role: e.target.value as TeamMemberForm['role'],
+                      role: (value ?? 'team_member') as TeamMemberForm['role'],
                     })
                   }
                   disabled={editingMember?.id === currentUserId}
-                  className="w-full border rounded-md px-3 py-2 bg-background mt-1"
                 >
-                  <option value="team_member">Team Member</option>
-                  <option value="company_admin">Company Admin</option>
-                </select>
+                  <SelectTrigger className="mt-1 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="team_member">Team Member</SelectItem>
+                    <SelectItem value="company_admin">Company Admin</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <ImageAttachmentField

@@ -18,6 +18,11 @@ import {
   AttachmentTitle,
 } from '@/components/ui/attachment'
 import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -33,7 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { JobPhotoCategoriesSettings } from '@/components/dashboard/job-photo-categories-settings'
 import type { JobPhotoWithUrl } from '@/lib/job-photos'
 import { toast } from 'sonner'
-import { Camera, ChevronDown, ChevronUp, ImagePlus, Loader2, Tags, Trash2, X } from 'lucide-react'
+import { Camera, ChevronDown, ImagePlus, Loader2, Tags, Trash2, X } from 'lucide-react'
 
 interface JobPhotosPanelProps {
   scheduleId: string
@@ -135,7 +140,6 @@ export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
   const [activeTab, setActiveTab] = useState('all')
-  const [showCategoryManager, setShowCategoryManager] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchPhotos = useCallback(async () => {
@@ -297,36 +301,26 @@ export function JobPhotosPanel({ scheduleId, clientId }: JobPhotosPanelProps) {
           </div>
         )}
 
-        <div className="rounded-lg border bg-background">
-          <button
-            type="button"
-            onClick={() => setShowCategoryManager((current) => !current)}
-            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/50 transition-colors"
-          >
+        <Collapsible className="rounded-lg border bg-background">
+          <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted/50">
             <span className="flex items-center gap-2">
               <Tags className="size-4 text-muted-foreground" />
               Manage photo categories
             </span>
-            {showCategoryManager ? (
-              <ChevronUp className="size-4 text-muted-foreground shrink-0" />
-            ) : (
-              <ChevronDown className="size-4 text-muted-foreground shrink-0" />
-            )}
-          </button>
-          {showCategoryManager && (
-            <div className="border-t px-3 py-3">
-              <JobPhotoCategoriesSettings
-                embedded
-                onSaved={(savedCategories) => {
-                  setCategories(savedCategories)
-                  setSelectedCategory((current) =>
-                    savedCategories.includes(current) ? current : savedCategories[0] || ''
-                  )
-                }}
-              />
-            </div>
-          )}
-        </div>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-data-panel-open:rotate-180" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="border-t px-3 py-3">
+            <JobPhotoCategoriesSettings
+              embedded
+              onSaved={(savedCategories) => {
+                setCategories(savedCategories)
+                setSelectedCategory((current) =>
+                  savedCategories.includes(current) ? current : savedCategories[0] || ''
+                )
+              }}
+            />
+          </CollapsibleContent>
+        </Collapsible>
 
         <div className={`grid grid-cols-1 gap-3 ${hasCategories ? 'sm:grid-cols-2' : ''}`}>
           {hasCategories && (

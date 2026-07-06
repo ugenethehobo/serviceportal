@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 import {
@@ -311,13 +320,15 @@ const openEditClient = (client: Client) => {
   }, [])
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0">
-      <div className="flex items-center justify-between mb-6 shrink-0">
+    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
+      <div className="flex items-center justify-between mb-6 shrink-0 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
+          <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">Clients</h1>
           <p className="text-muted-foreground">Manage your client relationships</p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)}>+ Add Client</Button>
+        <Button onClick={() => setIsAddModalOpen(true)} className="max-md:w-full max-md:min-h-11">
+          + Add Client
+        </Button>
       </div>
 
       {/* Main Content Card */}
@@ -380,79 +391,79 @@ const openEditClient = (client: Client) => {
             // Actual Content (List or Cards)
             viewMode === 'list' ? (
               // List View
-              <div className="border rounded-lg">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left p-4 font-medium">Client</th>
-                      <th className="text-left p-4 font-medium">Phone</th>
-                      <th className="text-left p-4 font-medium">Jobs</th>
-                      <th className="text-left p-4 font-medium">Next Job</th>
-                      <th className="text-left p-4 font-medium">Due</th>
-                      <th className="text-left p-4 font-medium">Status</th>
-                      <th className="text-right p-4 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="px-4">Client</TableHead>
+                      <TableHead className="px-4">Phone</TableHead>
+                      <TableHead className="px-4">Jobs</TableHead>
+                      <TableHead className="px-4">Next Job</TableHead>
+                      <TableHead className="px-4">Due</TableHead>
+                      <TableHead className="px-4">Status</TableHead>
+                      <TableHead className="px-4 text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {filteredClients.length > 0 ? (
                       filteredClients.map((client) => (
-                        <tr
-                        key={client.id}
-                        onClick={() => router.push(`/dashboard/clients/${client.id}`)}
-                        className="border-b hover:bg-muted/30 cursor-pointer"
-                      >
-                        <td className="p-4 font-medium">{client.name}</td>
-                        <td className="p-4 text-muted-foreground">{client.phone || '-'}</td>
-                        <td className="p-4">
-                          <Badge variant="outline">
-                            {client.jobsInProgress ?? 0} in progress
-                          </Badge>
-                        </td>
-                        <td className="p-4 text-sm text-muted-foreground">
-                          {client.nextJobDate
-                            ? new Date(client.nextJobDate).toLocaleDateString()
-                            : '—'}
-                        </td>
-                        <td className="p-4 font-medium">
-                          {client.amountDue
-                            ? `$${client.amountDue.toFixed(2)}`
-                            : '—'}
-                        </td>
-                        <td className="p-4">
-                          <Badge variant={client.status === 'active' ? 'default' : 'secondary'}>
-                            {client.status}
-                          </Badge>
-                        </td>
-                        <td className="p-4 text-right">
-                          {client.status === 'active' ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(event) => openStatusConfirm(client, 'archive', event)}
-                            >
-                              Archive
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(event) => openStatusConfirm(client, 'restore', event)}
-                            >
-                              Restore
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
+                        <TableRow
+                          key={client.id}
+                          onClick={() => router.push(`/dashboard/clients/${client.id}`)}
+                          className="cursor-pointer"
+                        >
+                          <TableCell className="px-4 font-medium">{client.name}</TableCell>
+                          <TableCell className="px-4 text-muted-foreground">{client.phone || '-'}</TableCell>
+                          <TableCell className="px-4">
+                            <Badge variant="outline">
+                              {client.jobsInProgress ?? 0} in progress
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="px-4 text-sm text-muted-foreground">
+                            {client.nextJobDate
+                              ? new Date(client.nextJobDate).toLocaleDateString()
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="px-4 font-medium">
+                            {client.amountDue
+                              ? `$${client.amountDue.toFixed(2)}`
+                              : '—'}
+                          </TableCell>
+                          <TableCell className="px-4">
+                            <Badge variant={client.status === 'active' ? 'default' : 'secondary'}>
+                              {client.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="px-4 text-right">
+                            {client.status === 'active' ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(event) => openStatusConfirm(client, 'archive', event)}
+                              >
+                                Archive
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(event) => openStatusConfirm(client, 'restore', event)}
+                              >
+                                Restore
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
                       ))
                     ) : (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                      <TableRow>
+                        <TableCell colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                           No clients found.
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     )}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             ) : (
               // Card View
@@ -608,11 +619,11 @@ const openEditClient = (client: Client) => {
 
             <div>
               <Label>Notes</Label>
-              <textarea
+              <Textarea
                 value={newClient.notes}
                 onChange={(e) => setNewClient({ ...newClient, notes: e.target.value })}
                 placeholder="Any additional notes about this client..."
-                className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="min-h-[80px]"
               />
             </div>
           </div>

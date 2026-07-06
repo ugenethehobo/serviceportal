@@ -25,6 +25,11 @@ import {
 } from '@/components/ui/attachment'
 import { Button } from '@/components/ui/button'
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -88,10 +93,9 @@ function FolderStack({
   defaultOpen?: boolean
   children: React.ReactNode
 }) {
-  const [open, setOpen] = useState(defaultOpen ?? false)
-
   return (
-    <div
+    <Collapsible
+      defaultOpen={defaultOpen ?? false}
       className="relative"
       style={{ marginLeft: depth * 12 }}
     >
@@ -101,31 +105,25 @@ function FolderStack({
           aria-hidden
         />
       )}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
+      <CollapsibleTrigger
         className={cn(
           'group w-full flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50',
-          open && 'border-primary/30 shadow-sm'
+          'data-panel-open:border-primary/30 data-panel-open:shadow-sm'
         )}
       >
         <span className="text-muted-foreground">
-          {open ? <FolderOpen className="size-4" /> : <Folder className="size-4" />}
+          <Folder className="size-4 group-data-panel-open:hidden" />
+          <FolderOpen className="size-4 hidden group-data-panel-open:block" />
         </span>
         <span className="flex-1 min-w-0 font-medium text-sm truncate">{label}</span>
         <span className="text-xs text-muted-foreground shrink-0">{count}</span>
-        {open ? (
-          <ChevronDown className="size-4 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight className="size-4 text-muted-foreground shrink-0" />
-        )}
-      </button>
-      {open && (
-        <div className="mt-2 ml-1 space-y-2 pb-1 pl-3 border-l border-dashed border-border/80">
-          {children}
-        </div>
-      )}
-    </div>
+        <ChevronRight className="size-4 text-muted-foreground shrink-0 group-data-panel-open:hidden" />
+        <ChevronDown className="size-4 text-muted-foreground shrink-0 hidden group-data-panel-open:block" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 ml-1 space-y-2 pb-1 pl-3 border-l border-dashed border-border/80">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
