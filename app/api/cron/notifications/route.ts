@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import {
+  runInvoiceOverdueReminderCron,
+  runVisitReminderCron,
+} from '@/lib/notification-reminders-cron'
 import { notifyStaffLeadFollowUpDue, queueNotification } from '@/lib/notifications-server'
 
 function createSupabaseAdmin() {
@@ -41,18 +45,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  let sent = 0
-  let skipped = 0
+  let leadSent = 0
+  let leadSkipped = 0
 
   for (const lead of leads || []) {
     const followUpAt = lead.follow_up_at
     if (!followUpAt) continue
 
     const followUpDate = new Date(followUpAt)
-    if (followUpDate < startOfDay) {
-      // Overdue leads are included; same-day dedup still applies below.
-    }
-
     const dayKey = followUpDate.toISOString().slice(0, 10)
     const { data: existing } = await supabaseAdmin
       .from('notification_log')
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
       .maybeSingle()
 
     if (existing) {
-      skipped += 1
+      leadSkipped += 1
       continue
     }
 
@@ -88,13 +88,22 @@ export async function GET(request: Request) {
       })
     })
 
-    sent += 1
+    leadSent += 1
   }
+
+  const [visitReminders, invoiceReminders] = await Promise.all([
+    runVisitReminderCron(supabaseAdmin, now),
+    runInvoiceOverdueReminderCron(supabaseAdmin, now),
+  ])
 
   return NextResponse.json({
     ok: true,
-    checked: leads?.length || 0,
-    sent,
-    skipped,
+    lead_follow_up: {
+      checked: leads?.length || 0,
+      sent: leadSent,
+      skipped: leadSkipped,
+    },
+    visit_reminders: visitReminders,
+    invoice_overdue_reminders: invoiceReminders,
   })
 }

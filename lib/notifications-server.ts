@@ -517,6 +517,114 @@ export async function notifyPaymentReceived(
   }
 }
 
+export async function notifyClientVisitReminder(
+  supabaseAdmin: SupabaseClient,
+  input: {
+    companyId: string
+    companyName?: string
+    clientId: string
+    clientEmail?: string | null
+    clientPhone?: string | null
+    clientName?: string | null
+    jobTitle: string
+    startTime: string
+    endTime: string
+    scheduleId: string
+    visitDay: string
+  }
+) {
+  const baseUrl = getAppBaseUrl()
+  const portalUrl = `${baseUrl}/portal/jobs`
+  const companyName = input.companyName?.trim() || 'Your service company'
+  const clientLabel = input.clientName?.trim() || 'there'
+  const when = new Date(input.startTime).toLocaleString([], {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+
+  await dispatchNotification(supabaseAdmin, {
+    companyId: input.companyId,
+    event: 'visit_reminder',
+    email: input.clientEmail
+      ? {
+          to: input.clientEmail,
+          subject: `Reminder: upcoming visit from ${companyName}`,
+          html: buildEmailShell(
+            companyName,
+            'Upcoming visit reminder',
+            `<p>Hi ${escapeHtml(clientLabel)},</p><p>This is a reminder that <strong>${escapeHtml(input.jobTitle)}</strong> is scheduled for <strong>${escapeHtml(when)}</strong>.</p>`,
+            { label: 'View your visits', href: portalUrl }
+          ),
+          text: `Reminder: ${input.jobTitle} is scheduled for ${when}. View: ${portalUrl}`,
+        }
+      : undefined,
+    sms: input.clientPhone
+      ? {
+          phone: input.clientPhone,
+          message: `${companyName}: Reminder — "${input.jobTitle}" on ${when}. ${portalUrl}`,
+        }
+      : undefined,
+    metadata: {
+      schedule_id: input.scheduleId,
+      client_id: input.clientId,
+      visit_day: input.visitDay,
+    },
+  })
+}
+
+export async function notifyClientInvoiceOverdueReminder(
+  supabaseAdmin: SupabaseClient,
+  input: {
+    companyId: string
+    companyName?: string
+    clientId: string
+    clientEmail?: string | null
+    clientPhone?: string | null
+    clientName?: string | null
+    jobTitle: string
+    balanceDue: number
+    daysOutstanding: number
+    overdueOffset: number
+    scheduleId: string
+  }
+) {
+  const baseUrl = getAppBaseUrl()
+  const portalUrl = `${baseUrl}/portal/documents`
+  const companyName = input.companyName?.trim() || 'Your service company'
+  const clientLabel = input.clientName?.trim() || 'there'
+  const amount = `$${Number(input.balanceDue).toFixed(2)}`
+
+  await dispatchNotification(supabaseAdmin, {
+    companyId: input.companyId,
+    event: 'invoice_overdue_reminder',
+    email: input.clientEmail
+      ? {
+          to: input.clientEmail,
+          subject: `Payment reminder: ${input.jobTitle}`,
+          html: buildEmailShell(
+            companyName,
+            'Invoice payment reminder',
+            `<p>Hi ${escapeHtml(clientLabel)},</p><p>Your invoice for <strong>${escapeHtml(input.jobTitle)}</strong> has an outstanding balance of <strong>${escapeHtml(amount)}</strong> (${input.overdueOffset} days past due).</p>`,
+            { label: 'View invoice', href: portalUrl }
+          ),
+          text: `Payment reminder for ${input.jobTitle}: ${amount} is ${input.overdueOffset} days past due. View: ${portalUrl}`,
+        }
+      : undefined,
+    sms: input.clientPhone
+      ? {
+          phone: input.clientPhone,
+          message: `${companyName}: Invoice "${input.jobTitle}" — ${amount} due (${input.overdueOffset} days overdue). ${portalUrl}`,
+        }
+      : undefined,
+    metadata: {
+      schedule_id: input.scheduleId,
+      client_id: input.clientId,
+      overdue_offset: input.overdueOffset,
+      days_outstanding: input.daysOutstanding,
+    },
+  })
+}
+
 export async function notifyStaffLeadFollowUpDue(
   supabaseAdmin: SupabaseClient,
   input: {

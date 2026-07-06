@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
   NOTIFICATION_EVENT_LABELS,
+  normalizeInvoiceOverdueOffsets,
   type NotificationEvent,
   type NotificationPreferences,
 } from '@/lib/notifications'
@@ -25,7 +26,11 @@ const EVENT_ORDER: NotificationEvent[] = [
   'invoice_sent',
   'payment_received',
   'lead_follow_up_due',
+  'visit_reminder',
+  'invoice_overdue_reminder',
 ]
+
+const INVOICE_OVERDUE_OFFSET_OPTIONS = [7, 14, 30] as const
 
 interface NotificationSettingsProps {
   embedded?: boolean
@@ -97,9 +102,84 @@ export function NotificationSettings({ embedded = false }: NotificationSettingsP
           (defaults to the free <code>textbelt</code> key).
         </p>
         <p>
-          <strong className="text-foreground">Follow-up reminders:</strong> schedule a daily call to{' '}
-          <code>/api/cron/notifications</code> with your <code>CRON_SECRET</code>.
+          <strong className="text-foreground">Automated reminders:</strong> schedule a daily call to{' '}
+          <code>/api/cron/notifications</code> with your <code>CRON_SECRET</code> for lead follow-ups,
+          visit reminders, and invoice overdue notices.
         </p>
+      </div>
+
+      <div className="space-y-4 rounded-lg border p-4">
+        <div>
+          <Label className="text-sm font-medium">Reminder timing</Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            The daily cron uses your company timezone for visit reminders.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="visit-hours-before">Visit reminder lead time (hours)</Label>
+          <Input
+            id="visit-hours-before"
+            type="number"
+            min={1}
+            max={168}
+            value={preferences.reminders.visit_hours_before}
+            onChange={(event) => {
+              const parsed = Number(event.target.value)
+              updatePreference((current) => ({
+                ...current,
+                reminders: {
+                  ...current.reminders,
+                  visit_hours_before:
+                    Number.isFinite(parsed) && parsed >= 1
+                      ? Math.min(168, Math.round(parsed))
+                      : current.reminders.visit_hours_before,
+                },
+              }))
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            Clients are reminded on the day that is this many hours before the visit (24 = day before).
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Invoice overdue reminders (days past due)</Label>
+          <div className="flex flex-wrap gap-3">
+            {INVOICE_OVERDUE_OFFSET_OPTIONS.map((offset) => {
+              const selected = preferences.reminders.invoice_overdue_day_offsets.includes(offset)
+              return (
+                <label key={offset} className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded border"
+                    checked={selected}
+                    onChange={(event) => {
+                      updatePreference((current) => {
+                        const next = event.target.checked
+                          ? [...current.reminders.invoice_overdue_day_offsets, offset]
+                          : current.reminders.invoice_overdue_day_offsets.filter(
+                              (value) => value !== offset
+                            )
+                        return {
+                          ...current,
+                          reminders: {
+                            ...current.reminders,
+                            invoice_overdue_day_offsets: normalizeInvoiceOverdueOffsets(next),
+                          },
+                        }
+                      })
+                    }}
+                  />
+                  {offset} days
+                </label>
+              )
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Clients with a sent invoice and outstanding balance are notified once per selected milestone.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-4">
