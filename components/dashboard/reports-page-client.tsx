@@ -1,8 +1,8 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { getReportsDataAction } from '@/app/action'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -10,14 +10,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
 import { PageHeader } from '@/components/ui/page-header'
 import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from '@/components/ui/chart'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
   SelectContent,
@@ -36,16 +29,16 @@ import {
 import { AR_AGING_BUCKET_LABELS } from '@/lib/ar-aging'
 import { formatReportsCurrency, REPORTS_PERIOD_LABELS, type ReportsData, type ReportsPeriod } from '@/lib/reports'
 
-const revenueChartConfig = {
-  billed: {
-    label: 'Billed',
-    color: 'var(--chart-1)',
-  },
-  collected: {
-    label: 'Collected',
-    color: 'var(--chart-2)',
-  },
-} satisfies ChartConfig
+const ReportsRevenueChart = dynamic(
+  () =>
+    import('@/components/dashboard/reports-revenue-chart').then((m) => ({
+      default: m.ReportsRevenueChart,
+    })),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-72 w-full rounded-lg" />,
+  }
+)
 
 function SummaryCard({
   label,
@@ -69,11 +62,17 @@ function SummaryCard({
   )
 }
 
-export function ReportsPageClient() {
-  const [period, setPeriod] = useState<ReportsPeriod>('30d')
-  const [data, setData] = useState<ReportsData | null>(null)
+export function ReportsPageClient({
+  initialData,
+  initialPeriod = '30d',
+}: {
+  initialData: ReportsData
+  initialPeriod?: ReportsPeriod
+}) {
+  const [period, setPeriod] = useState<ReportsPeriod>(initialPeriod)
+  const [data, setData] = useState<ReportsData | null>(initialData)
   const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
 
   const fetchReports = useCallback(async (selectedPeriod: ReportsPeriod) => {
     setIsLoading(true)
@@ -89,8 +88,9 @@ export function ReportsPageClient() {
   }, [])
 
   useEffect(() => {
-    fetchReports(period)
-  }, [period, fetchReports])
+    if (period === initialPeriod) return
+    void fetchReports(period)
+  }, [period, fetchReports, initialPeriod])
 
   return (
     <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
@@ -179,48 +179,7 @@ export function ReportsPageClient() {
               <p className="text-sm text-muted-foreground mb-4">
                 Completed job revenue vs collections by month ({data.periodLabel.toLowerCase()})
               </p>
-              {data.revenueByMonth.length > 0 ? (
-                <ChartContainer
-                  config={revenueChartConfig}
-                  className="aspect-auto h-72 w-full"
-                  initialDimension={{ width: 640, height: 288 }}
-                >
-                  <BarChart data={data.revenueByMonth} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="monthLabel"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      tickFormatter={(value) =>
-                        value >= 1000 ? `$${(value / 1000).toFixed(0)}k` : `$${value}`
-                      }
-                    />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          formatter={(value) =>
-                            formatReportsCurrency(typeof value === 'number' ? value : Number(value) || 0)
-                          }
-                        />
-                      }
-                    />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    <Bar dataKey="billed" fill="var(--color-billed)" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="collected" fill="var(--color-collected)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ChartContainer>
-              ) : (
-                <div className="h-72 flex items-center justify-center border border-dashed rounded-lg text-sm text-muted-foreground">
-                  No billing activity in this period yet.
-                </div>
-              )}
+              <ReportsRevenueChart data={data.revenueByMonth} />
             </Card>
 
             <Card className="p-5 shadow-sm">

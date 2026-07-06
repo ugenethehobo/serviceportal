@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePathname } from 'next/navigation'
 import { SidebarNavLink } from '@/components/navigation/sidebar-nav-link'
 import { LogOut, Menu } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { getCompanySubscriptionAccessAction, getDashboardUserDataAction } from '@/app/action'
+import { useDashboardShell } from '@/components/dashboard/dashboard-shell-context'
 import { SidebarSubscriptionIndicator } from '@/components/dashboard/sidebar-subscription-indicator'
 import type { CompanySubscriptionAccess } from '@/lib/platform-trial'
 
@@ -45,71 +45,42 @@ function useDashboardNav() {
   const router = useRouter()
   const supabase = createClient()
   const pathname = usePathname()
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
-  const [company, setCompany] = useState<Company | null>(null)
-  const [subscriptionAccess, setSubscriptionAccess] =
-    useState<CompanySubscriptionAccess | null>(null)
-  const [isSoloBusiness, setIsSoloBusiness] = useState(false)
+  const { data: shellData } = useDashboardShell()
+  const [companyOverride, setCompanyOverride] = useState<Partial<Company> | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  const fetchUserData = useCallback(async () => {
-    const [result, subscriptionResult] = await Promise.all([
-      getDashboardUserDataAction(),
-      getCompanySubscriptionAccessAction(),
-    ])
+  const userProfile: UserProfile | null = shellData
+    ? {
+        id: shellData.profile.id,
+        full_name: shellData.profile.full_name,
+        avatar_url: shellData.profile.avatar_url,
+        role: shellData.profile.role,
+        company_id: shellData.profile.company_id ?? undefined,
+      }
+    : null
 
-    if (!result.success) {
-      console.error('Error fetching profile:', result.error)
-      return
-    }
+  const company: Company | null = shellData?.company
+    ? {
+        ...shellData.company,
+        ...(companyOverride ?? {}),
+      }
+    : null
 
-    setUserProfile({
-      id: result.profile.id,
-      full_name: result.profile.full_name,
-      avatar_url: result.profile.avatar_url,
-      role: result.profile.role,
-      company_id: result.profile.company_id ?? undefined,
-    })
-
-    if (result.company) {
-      setCompany(result.company)
-    }
-
-    if (
-      subscriptionResult.success &&
-      (result.profile.role === 'company_admin' || result.profile.role === 'team_member')
-    ) {
-      setSubscriptionAccess(subscriptionResult.access)
-      setIsSoloBusiness(subscriptionResult.isSoloBusiness)
-    } else {
-      setSubscriptionAccess(null)
-      setIsSoloBusiness(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchUserData()
-  }, [fetchUserData])
-
-  useEffect(() => {
-    const handleProfileUpdated = () => {
-      fetchUserData()
-    }
-
-    window.addEventListener('dashboard-profile-updated', handleProfileUpdated)
-    return () => window.removeEventListener('dashboard-profile-updated', handleProfileUpdated)
-  }, [fetchUserData])
+  const subscriptionAccess =
+    shellData &&
+    (shellData.profile.role === 'company_admin' ||
+      shellData.profile.role === 'team_member')
+      ? shellData.subscriptionAccess
+      : null
+  const isSoloBusiness = shellData?.isSoloBusiness ?? false
 
   useEffect(() => {
     return subscribeCompanyBrandingUpdates((update) => {
-      setCompany((current) => {
-        if (!current) return current
-        return {
-          ...current,
-          ...(update.name !== undefined ? { name: update.name } : {}),
-          ...(update.logo_url !== undefined ? { logo_url: update.logo_url } : {}),
-        }
-      })
+      setCompanyOverride((current) => ({
+        ...(current ?? {}),
+        ...(update.name !== undefined ? { name: update.name } : {}),
+        ...(update.logo_url !== undefined ? { logo_url: update.logo_url } : {}),
+      }))
     })
   }, [])
 

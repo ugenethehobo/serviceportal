@@ -1,27 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { getCompanySubscriptionAccessAction } from '@/app/action'
+import { useDashboardShell } from '@/components/dashboard/dashboard-shell-context'
 import { TrialStatusBanner } from '@/components/dashboard/trial-status-banner'
-import type { CompanySubscriptionAccess } from '@/lib/platform-trial'
 
 export function DashboardTrialBanner() {
-  const [access, setAccess] = useState<CompanySubscriptionAccess | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [loaded, setLoaded] = useState(false)
+  const { data } = useDashboardShell()
 
-  useEffect(() => {
-    void (async () => {
-      const result = await getCompanySubscriptionAccessAction()
-      if (result.success) {
-        setAccess(result.access)
-        setIsAdmin(result.role === 'company_admin')
-      }
-      setLoaded(true)
-    })()
-  }, [])
+  if (!data?.subscriptionAccess) return null
 
-  if (!loaded || !access) return null
-
-  return <TrialStatusBanner access={access} isAdmin={isAdmin} />
+  return (
+    <TrialStatusBanner
+      access={data.subscriptionAccess}
+      isAdmin={data.role === 'company_admin'}
+    />
+  )
 }

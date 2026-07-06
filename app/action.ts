@@ -3988,6 +3988,23 @@ export async function revokeClientPortalAccessAction(clientId: string) {
 
 export async function getDashboardUserDataAction() {
   try {
+    const shell = await getDashboardShellDataAction()
+    if (!shell.success) {
+      return { success: false as const, error: shell.error }
+    }
+    return {
+      success: true as const,
+      profile: shell.data.profile,
+      company: shell.data.company,
+    }
+  } catch (error: any) {
+    console.error('getDashboardUserDataAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to load user data' }
+  }
+}
+
+export async function getDashboardShellDataAction() {
+  try {
     const session = await getSessionProfile()
     if (!session) {
       return { success: false as const, error: 'Not authenticated' }
@@ -4004,20 +4021,241 @@ export async function getDashboardUserDataAction() {
       return { success: false as const, error: 'Profile not found' }
     }
 
-    let company: { id: string; name: string; logo_url: string | null } | null = null
-    if (profile.company_id) {
-      const { data: companyData } = await supabaseAdmin
-        .from('companies')
-        .select('id, name, logo_url')
-        .eq('id', profile.company_id)
-        .single()
-      company = companyData
+    const companyId = profile.company_id
+    const isStaffWithCompany =
+      companyId &&
+      (profile.role === 'company_admin' || profile.role === 'team_member')
+
+    const [companyResult, access, soloContext] = await Promise.all([
+      companyId
+        ? supabaseAdmin
+            .from('companies')
+            .select('id, name, logo_url')
+            .eq('id', companyId)
+            .single()
+        : Promise.resolve({ data: null }),
+      isStaffWithCompany
+        ? getCompanySubscriptionAccessForCompany(companyId)
+        : Promise.resolve(null),
+      isStaffWithCompany
+        ? import('@/lib/solo-business-server').then((m) =>
+            m.getCompanySoloContext(companyId)
+          )
+        : Promise.resolve(null),
+    ])
+
+    const company = companyResult.data
+
+    return {
+      success: true as const,
+      data: {
+        profile,
+        company,
+        subscriptionAccess: access,
+        isSoloBusiness: soloContext?.isSoloBusiness ?? false,
+        soloCrewId: soloContext?.soloCrewId ?? null,
+        role: profile.role,
+      },
+    }
+  } catch (error: any) {
+    console.error('getDashboardShellDataAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to load shell data' }
+  }
+}
+
+export async function getClientsListAction() {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false as const, error: check.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data, error } = await supabaseAdmin
+      .from('clients')
+      .select('*')
+      .eq('company_id', check.companyId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('getClientsListAction error:', error)
+      return { success: false as const, error: error.message }
     }
 
-    return { success: true as const, profile, company }
+    const clientIds = (data || []).map((c) => c.id)
+    const statsMap: Record<
+      string,
+      { jobsInProgress: number; nextJobDate?: string; amountDue: number }
+    > = {}
+
+    if (clientIds.length > 0) {
+      const now = new Date().toISOString()
+      const [{ data: schedules }, { data: lineItems }, { data: payments }] =
+        await Promise.all([
+          supabaseAdmin
+            .from('schedules')
+            .select('id, client_id, status, start_time, price')
+            .in('client_id', clientIds)
+            .in('status', ['scheduled', 'in_progress']),
+          supabaseAdmin
+            .from('billing_line_items')
+            .select('schedule_id, client_id, amount')
+            .eq('company_id', check.companyId),
+          supabaseAdmin
+            .from('billing_payments')
+            .select('schedule_id, amount')
+            .eq('company_id', check.companyId),
+        ])
+
+      const { computeOpenJobBalancesByClient } = await import('@/lib/billing')
+      const { byClient: amountDueByClient } = computeOpenJobBalancesByClient(
+        schedules || [],
+        lineItems || [],
+        payments || []
+      )
+
+      if (schedules) {
+        for (const schedule of schedules) {
+          if (!statsMap[schedule.client_id]) {
+            statsMap[schedule.client_id] = { jobsInProgress: 0, amountDue: 0 }
+          }
+          const stats = statsMap[schedule.client_id]
+
+          if (schedule.status === 'in_progress') {
+            stats.jobsInProgress++
+          }
+
+          if (schedule.status === 'scheduled' && schedule.start_time > now) {
+            if (!stats.nextJobDate || schedule.start_time < stats.nextJobDate) {
+              stats.nextJobDate = schedule.start_time
+            }
+          }
+        }
+      }
+
+      for (const [clientId, amountDue] of amountDueByClient.entries()) {
+        if (!statsMap[clientId]) {
+          statsMap[clientId] = { jobsInProgress: 0, amountDue: 0 }
+        }
+        statsMap[clientId].amountDue = amountDue
+      }
+    }
+
+    const clients = (data || []).map((client) => ({
+      ...client,
+      jobsInProgress: statsMap[client.id]?.jobsInProgress ?? 0,
+      nextJobDate: statsMap[client.id]?.nextJobDate,
+      amountDue: statsMap[client.id]?.amountDue ?? 0,
+    }))
+
+    return { success: true as const, data: clients }
   } catch (error: any) {
-    console.error('getDashboardUserDataAction error:', error)
-    return { success: false as const, error: error.message || 'Failed to load user data' }
+    console.error('getClientsListAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to load clients' }
+  }
+}
+
+export async function getClientDetailAction(clientId: string) {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false as const, error: check.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: client, error: clientError } = await supabaseAdmin
+      .from('clients')
+      .select('*')
+      .eq('id', clientId)
+      .eq('company_id', check.companyId)
+      .single()
+
+    if (clientError || !client) {
+      return { success: false as const, error: 'Client not found' }
+    }
+
+    await syncScheduleStatusesForClient(supabaseAdmin, clientId)
+
+    const { data: schedules, error: schedulesError } = await supabaseAdmin
+      .from('schedules')
+      .select(`
+        *,
+        crew:crews!crew_id (id, name)
+      `)
+      .eq('client_id', clientId)
+      .order('start_time', { ascending: true })
+
+    if (schedulesError) {
+      console.error('getClientDetailAction schedules error:', schedulesError)
+      return { success: false as const, error: schedulesError.message }
+    }
+
+    const { attachCrewConflictFlags } = await import('@/lib/schedule-conflicts')
+    const schedulesWithConflicts = attachCrewConflictFlags(schedules || [])
+
+    const { getCompanySoloContext } = await import('@/lib/solo-business-server')
+    const soloContext = await getCompanySoloContext(check.companyId)
+
+    return {
+      success: true as const,
+      data: {
+        client,
+        schedules: schedulesWithConflicts,
+        isSoloBusiness: soloContext.isSoloBusiness,
+        soloCrewId: soloContext.soloCrewId,
+      },
+    }
+  } catch (error: any) {
+    console.error('getClientDetailAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to load client' }
+  }
+}
+
+export async function getJobDetailPageAction(jobId: string, clientId: string) {
+  try {
+    const shell = await getDashboardShellDataAction()
+    if (!shell.success) {
+      return { success: false as const, error: shell.error }
+    }
+
+    const companyId = shell.data.profile.company_id
+    if (!companyId) {
+      return { success: false as const, error: 'No company associated with this account' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: ownedClient } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('id', clientId)
+      .eq('company_id', companyId)
+      .maybeSingle()
+
+    if (!ownedClient) {
+      return { success: false as const, error: 'Client not found' }
+    }
+
+    await syncScheduleStatusesForClient(supabaseAdmin, clientId)
+
+    const [jobResult, companyResult] = await Promise.all([
+      getJobAction(jobId, clientId),
+      supabaseAdmin.from('companies').select('timezone').eq('id', companyId).single(),
+    ])
+
+    if (!jobResult.success || !jobResult.job) {
+      return { success: false as const, error: jobResult.error || 'Job not found' }
+    }
+
+    return {
+      success: true as const,
+      data: {
+        job: jobResult.job,
+        companyTimezone: companyResult.data?.timezone || 'America/Chicago',
+        userRole: shell.data.profile.role,
+        isSoloBusiness: shell.data.isSoloBusiness,
+        soloCrewId: shell.data.soloCrewId,
+        companyId,
+      },
+    }
+  } catch (error: any) {
+    console.error('getJobDetailPageAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to load job' }
   }
 }
 
@@ -5410,27 +5648,25 @@ export async function updateCompanySettingsAction(data: {
 }
 
 export async function getCompanySubscriptionAccessAction() {
-  const session = await getSessionProfile()
-  if (!session?.profile.company_id) {
+  const shell = await getDashboardShellDataAction()
+  if (!shell.success) {
+    return { success: false as const, error: shell.error }
+  }
+
+  const { subscriptionAccess: access, profile, isSoloBusiness, soloCrewId } = shell.data
+  if (!profile.company_id || !access) {
     return { success: false as const, error: 'No company associated with this account' }
   }
 
-  const access = await getCompanySubscriptionAccessForCompany(session.profile.company_id)
-  if (!access) {
-    return { success: false as const, error: 'Company not found' }
-  }
-
   const { getPlanEntitlements } = await import('@/lib/platform-entitlements')
-  const { getCompanySoloContext } = await import('@/lib/solo-business-server')
-  const soloContext = await getCompanySoloContext(session.profile.company_id)
 
   return {
     success: true as const,
     access,
     entitlements: getPlanEntitlements(access.plan),
-    role: session.profile.role,
-    isSoloBusiness: soloContext.isSoloBusiness,
-    soloCrewId: soloContext.soloCrewId,
+    role: profile.role,
+    isSoloBusiness,
+    soloCrewId,
   }
 }
 

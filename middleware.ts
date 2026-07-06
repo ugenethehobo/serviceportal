@@ -7,6 +7,30 @@ import {
   getCompanySubscriptionAccessForClient,
   getCompanySubscriptionAccessForCompany,
 } from '@/lib/platform-trial-server'
+import {
+  getCachedClientCompanySubscriptionAccess,
+  getCachedCompanySubscriptionAccess,
+  setCachedClientCompanySubscriptionAccess,
+  setCachedCompanySubscriptionAccess,
+} from '@/lib/subscription-access-cache'
+
+async function resolveCompanySubscriptionAccess(companyId: string) {
+  const cached = getCachedCompanySubscriptionAccess(companyId)
+  if (cached) return cached
+
+  const access = await getCompanySubscriptionAccessForCompany(companyId)
+  if (access) setCachedCompanySubscriptionAccess(companyId, access)
+  return access
+}
+
+async function resolveClientSubscriptionAccess(clientId: string) {
+  const cached = getCachedClientCompanySubscriptionAccess(clientId)
+  if (cached) return cached
+
+  const access = await getCompanySubscriptionAccessForClient(clientId)
+  if (access) setCachedClientCompanySubscriptionAccess(clientId, access)
+  return access
+}
 
 async function getProfileContext(userId: string) {
   const supabaseAdmin = createClient(
@@ -68,8 +92,6 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  await supabase.auth.getUser()
-
   const pathname = request.nextUrl.pathname
   const protectedStaffRoutes = ['/dashboard', '/admin']
   const isStaffRoute = protectedStaffRoutes.some((route) => pathname.startsWith(route))
@@ -79,11 +101,19 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  let cachedProfile: Awaited<ReturnType<typeof getProfileContext>> | undefined
+  const resolveProfile = async (userId: string) => {
+    if (cachedProfile === undefined) {
+      cachedProfile = await getProfileContext(userId)
+    }
+    return cachedProfile
+  }
+
   const isPublicMarketingRoute = pathname === '/' || pathname === '/signup'
 
   if (pathname === '/' && user) {
     const url = request.nextUrl.clone()
-    const profile = await getProfileContext(user.id)
+    const profile = await resolveProfile(user.id)
     url.pathname = getPostLoginPath(
       profile?.role || '',
       process.env.NEXT_PUBLIC_ADMIN_EMAIL,
@@ -99,7 +129,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && (isStaffRoute || isPortalRoute || pathname === '/login' || isPublicMarketingRoute)) {
-    const profile = await getProfileContext(user.id)
+    const profile = await resolveProfile(user.id)
     const role = profile?.role
 
     if (isPortalRoute && role !== 'client') {
@@ -135,7 +165,7 @@ export async function middleware(request: NextRequest) {
     }
 
     if (isStaffRoute && profile?.company_id && role !== undefined && user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
-      const access = await getCompanySubscriptionAccessForCompany(profile.company_id)
+      const access = await resolveCompanySubscriptionAccess(profile.company_id)
       if (access && !access.hasAccess && !isTrialGraceRoute(pathname, role)) {
         const url = request.nextUrl.clone()
         if (role === 'company_admin') {
@@ -168,7 +198,7 @@ export async function middleware(request: NextRequest) {
     }
 
     if (isPortalRoute && role === 'client' && profile?.client_id) {
-      const access = await getCompanySubscriptionAccessForClient(profile.client_id)
+      const access = await resolveClientSubscriptionAccess(profile.client_id)
       if (access && !access.hasAccess) {
         const url = request.nextUrl.clone()
         url.pathname = '/login'

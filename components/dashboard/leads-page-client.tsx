@@ -181,10 +181,10 @@ function LeadKanbanCard({
   )
 }
 
-export function LeadsPageClient() {
+export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
   const router = useRouter()
-  const [leads, setLeads] = useState<Lead[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [leads, setLeads] = useState<Lead[]>(initialLeads)
+  const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | LeadStatus>('all')
   const [showArchived, setShowArchived] = useState(false)
@@ -212,8 +212,10 @@ export function LeadsPageClient() {
   }, [showArchived])
 
   useEffect(() => {
-    fetchLeads()
-  }, [fetchLeads])
+    if (showArchived) {
+      void fetchLeads()
+    }
+  }, [showArchived, fetchLeads])
 
   const filteredLeads = useMemo(() => {
     let items = leads.filter((lead) =>

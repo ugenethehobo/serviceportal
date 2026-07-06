@@ -1,8 +1,8 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DocumentElement, DocumentKind, DocumentTableColumns, DocumentTemplate } from '@/lib/document-template'
-import { DocumentTemplatePdfCanvas } from '@/components/dashboard/document-template-pdf-canvas'
 import {
   clampElementPosition,
   clampElementSize,
@@ -19,6 +19,21 @@ import {
 } from '@/lib/document-template-editor-utils'
 import { cn } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
+
+const DocumentTemplatePdfCanvas = dynamic(
+  () =>
+    import('@/components/dashboard/document-template-pdf-canvas').then((m) => ({
+      default: m.DocumentTemplatePdfCanvas,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full min-h-[480px] items-center justify-center">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    ),
+  }
+)
 
 type DocumentTemplatePreviewProps = {
   kind: DocumentKind

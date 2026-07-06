@@ -1,15 +1,27 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useState } from 'react'
 import { getDashboardMapDataAction, getDashboardOverviewAction } from '@/app/action'
 import { ActiveCrewsToday } from '@/components/dashboard/active-crews-today'
 import { JobsTimeline } from '@/components/dashboard/jobs-timeline'
-import { LiveCrewLocationsMap } from '@/components/dashboard/live-crew-locations-map'
+import { Skeleton } from '@/components/ui/skeleton'
 import { MainPageCard } from '@/components/ui/main-page-card'
 import { PageHeader } from '@/components/ui/page-header'
 import { getActiveCrewsHeading } from '@/lib/company-operations'
 import type { DashboardOverviewData } from '@/lib/dashboard-overview'
 import type { DashboardMapData } from '@/lib/dashboard-map'
+
+const LiveCrewLocationsMap = dynamic(
+  () =>
+    import('@/components/dashboard/live-crew-locations-map').then((m) => ({
+      default: m.LiveCrewLocationsMap,
+    })),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-full min-h-[240px] w-full rounded-lg" />,
+  }
+)
 
 interface DashboardPageClientProps {
   initialData: DashboardOverviewData

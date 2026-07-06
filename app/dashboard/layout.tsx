@@ -1,9 +1,17 @@
+import { getDashboardShellDataAction } from '@/app/action'
 import { DashboardShell } from '@/components/dashboard/dashboard-shell'
 
-export default function DashboardLayout({
+export const dynamic = 'force-dynamic'
+
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return <DashboardShell>{children}</DashboardShell>
+  const shellResult = await getDashboardShellDataAction()
+  const initialShellData = shellResult.success ? shellResult.data : null
+
+  return (
+    <DashboardShell initialShellData={initialShellData}>{children}</DashboardShell>
+  )
 }

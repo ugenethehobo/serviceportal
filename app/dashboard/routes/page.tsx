@@ -1,5 +1,5 @@
 import { getRoutePlannerDataAction } from '@/app/action'
-import { RoutePlannerPageClient } from '@/components/dashboard/route-planner-page-client'
+import { RoutePlannerPageLoader } from '@/components/dashboard/route-planner-page-loader'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,5 +21,5 @@ export default async function RoutePlannerPage() {
     )
   }
 
-  return <RoutePlannerPageClient initialData={result.data} />
+  return <RoutePlannerPageLoader initialData={result.data} />
 }

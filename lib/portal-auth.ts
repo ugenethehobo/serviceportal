@@ -172,3 +172,57 @@ export function getPostLoginPath(role: string, adminEmail?: string | null, userE
   if (role === 'team_member') return '/dashboard/team'
   return '/dashboard'
 }
+
+export type PortalShellData = {
+  clientName: string
+  companyName: string
+  companyLogo: string | null
+}
+
+export async function getPortalShellDataAction(): Promise<
+  { success: true; data: PortalShellData } | { success: false; error: string }
+> {
+  const session = await getSessionProfile()
+  if (!session || session.profile.role !== 'client' || !session.profile.client_id) {
+    return { success: false, error: 'Not authenticated' }
+  }
+
+  const admin = createSupabaseAdmin()
+  const { data: client, error: clientError } = await admin
+    .from('clients')
+    .select('portal_enabled, name, auth_user_id, company_id, companies (name, logo_url)')
+    .eq('id', session.profile.client_id)
+    .single()
+
+  if (clientError || !client) {
+    return { success: false, error: 'Client not found' }
+  }
+
+  if (client.portal_enabled === false) {
+    return { success: false, error: 'Portal access disabled' }
+  }
+
+  if (client.auth_user_id && client.auth_user_id !== session.userId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  if (!client.auth_user_id) {
+    await admin
+      .from('clients')
+      .update({ auth_user_id: session.userId, portal_enabled: true })
+      .eq('id', session.profile.client_id)
+  }
+
+  const company = Array.isArray(client.companies)
+    ? client.companies[0]
+    : client.companies
+
+  return {
+    success: true,
+    data: {
+      clientName: client.name,
+      companyName: company?.name || 'Your service provider',
+      companyLogo: company?.logo_url ?? null,
+    },
+  }
+}
