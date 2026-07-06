@@ -6,6 +6,7 @@ import { SidebarNavLink } from '@/components/navigation/sidebar-nav-link'
 import {
   LayoutDashboard,
   CalendarDays,
+  Camera,
   FileText,
   FolderOpen,
   LogOut,
@@ -27,6 +28,7 @@ const navItems = [
   { href: '/portal/jobs', label: 'Jobs', icon: CalendarDays, exact: false },
   { href: '/portal/estimates', label: 'Estimates', icon: FileText, exact: false },
   { href: '/portal/documents', label: 'Documents', icon: FolderOpen, exact: false },
+  { href: '/portal/photos', label: 'Photos', icon: Camera, exact: false },
   { href: '/portal/messages', label: 'Messages', icon: MessageSquare, exact: false },
   { href: '/portal/settings', label: 'Settings', icon: Settings, exact: false },
 ]

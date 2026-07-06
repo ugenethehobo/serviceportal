@@ -408,12 +408,12 @@ export function JobDetailPageClient({
     : 'No address on file'
 
   const jobTabSwitcher = (
-    <TabsList className="h-auto w-max max-w-full overflow-x-auto max-md:w-full">
+    <TabsList className="h-auto w-auto max-w-full flex-wrap justify-center gap-1 overflow-visible max-lg:justify-start">
       {jobTabs.map((tab) => (
         <TabsTrigger
           key={tab.id}
           value={tab.id}
-          className="px-3 sm:px-4 py-2 text-sm whitespace-nowrap"
+          className="flex-none px-3 sm:px-4 py-2 text-sm whitespace-nowrap"
         >
           {tab.label}
         </TabsTrigger>
@@ -489,31 +489,36 @@ export function JobDetailPageClient({
       onValueChange={(value) =>
         handleTabChange(value as 'details' | 'billing' | 'photos' | 'documents' | 'messaging')
       }
-      className="flex flex-col h-full min-h-0 p-4 sm:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-6"
+      className={
+        isTeamMember
+          ? 'flex h-full min-h-0 flex-col p-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-6'
+          : 'flex h-full min-h-0 flex-col p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 lg:pb-6'
+      }
     >
-      {isTeamMember ? (
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
+      <header className="mb-4 shrink-0 sm:mb-6">
+        <div className="flex flex-col gap-4 max-lg:gap-3 lg:hidden">
           {jobTitleBlock}
-          <div className="flex flex-col sm:flex-row gap-3 lg:items-center">
-            {jobTabSwitcher}
-            {jobActionButtons}
-          </div>
+          {jobTabSwitcher}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 mb-4 sm:mb-6 max-md:gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center">
-          <div className="min-w-0 lg:justify-self-start">{jobTitleBlock}</div>
-          <div className="flex justify-center lg:justify-self-center">{jobTabSwitcher}</div>
-          <div className="lg:justify-self-end max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:border-t max-md:bg-background/95 max-md:backdrop-blur max-md:p-4 max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]">
-            {jobActionButtons}
-          </div>
+
+        <div className="hidden lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-6">
+          <div className="min-w-0 justify-self-start">{jobTitleBlock}</div>
+          <div className="justify-self-center">{jobTabSwitcher}</div>
+          <div className="justify-self-end">{jobActionButtons}</div>
+        </div>
+      </header>
+
+      {!isTeamMember && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-4 backdrop-blur pb-[calc(1rem+env(safe-area-inset-bottom))] lg:hidden">
+          {jobActionButtons}
         </div>
       )}
 
-      <MainPageCard className="p-4 sm:p-6">
-        <TabsContent value="details" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
-          <MainPageCardScroll>
+      <MainPageCard className="min-h-0 flex-1 overflow-hidden p-4 sm:p-6">
+        <TabsContent value="details" className="mt-0 flex min-h-0 flex-1 flex-col outline-none">
+          <MainPageCardScroll className="min-h-0 flex-1">
             {isEditing ? (
-              <div className="max-w-2xl">
+              <div className="w-full max-w-2xl lg:max-w-3xl">
                 <h2 className="text-lg font-semibold tracking-tight mb-4">Edit Job</h2>
                 <JobFormFields
                   values={formValues}
@@ -541,21 +546,21 @@ export function JobDetailPageClient({
           </MainPageCardScroll>
         </TabsContent>
 
-        <TabsContent value="billing" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+        <TabsContent value="billing" className="mt-0 flex min-h-0 flex-1 flex-col outline-none">
           <StripeConnectGate>
             <JobBillingPanel scheduleId={jobId} clientId={clientId} />
           </StripeConnectGate>
         </TabsContent>
 
-        <TabsContent value="photos" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+        <TabsContent value="photos" className="mt-0 flex min-h-0 flex-1 flex-col outline-none">
           <JobPhotosPanel scheduleId={jobId} clientId={clientId} />
         </TabsContent>
 
-        <TabsContent value="documents" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+        <TabsContent value="documents" className="mt-0 flex min-h-0 flex-1 flex-col outline-none">
           <JobDocumentsPanel scheduleId={jobId} clientId={clientId} />
         </TabsContent>
 
-        <TabsContent value="messaging" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+        <TabsContent value="messaging" className="mt-0 flex min-h-0 flex-1 flex-col outline-none">
           <JobMessagingPanel
             clientId={clientId}
             scheduleId={jobId}

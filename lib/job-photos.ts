@@ -10,6 +10,8 @@ export const JOB_PHOTO_ACCEPTED_TYPES = [
 
 export const JOB_PHOTO_MAX_BYTES = 10 * 1024 * 1024
 
+export const DEFAULT_JOB_PHOTO_CATEGORY = 'General'
+
 export type JobPhoto = {
   id: string
   schedule_id: string
@@ -27,4 +29,9 @@ export type JobPhoto = {
 
 export type JobPhotoWithUrl = JobPhoto & {
   url: string
+}
+
+export function getPhotoDisplayCategory(category: string | null | undefined): string {
+  const trimmed = category?.trim()
+  return trimmed || DEFAULT_JOB_PHOTO_CATEGORY
 }

@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
-import { getPortalJobBillingAction } from '@/app/portal/actions'
+import { getPortalJobBillingAction, getPortalPhotosPageDataAction } from '@/app/portal/actions'
 import { PortalJobDetail } from '@/components/portal/portal-job-detail'
 
 export default async function PortalJobDetailPage({
@@ -9,7 +9,10 @@ export default async function PortalJobDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const result = await getPortalJobBillingAction(id)
+  const [result, photosResult] = await Promise.all([
+    getPortalJobBillingAction(id),
+    getPortalPhotosPageDataAction({ scheduleId: id }),
+  ])
   if (!result.success) notFound()
 
   return (
@@ -19,6 +22,8 @@ export default async function PortalJobDetailPage({
         clientId={result.clientId}
         billing={result.billing}
         timezone={result.timezone}
+        initialPhotos={photosResult.success ? photosResult.photos : []}
+        initialPhotoCategories={photosResult.success ? photosResult.categories : []}
       />
     </Suspense>
   )

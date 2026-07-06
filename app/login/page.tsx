@@ -61,16 +61,18 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4 max-md:min-h-dvh max-md:items-start max-md:overflow-y-auto max-md:overscroll-y-contain max-md:px-4 max-md:py-6 max-md:pt-[max(1.5rem,env(safe-area-inset-top))] max-md:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+      <Card className="w-full max-w-md max-md:shadow-none">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Sign in to ServicePortal</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-2xl font-bold max-md:text-xl max-md:leading-tight">
+            Sign in to ServicePortal
+          </CardTitle>
+          <CardDescription className="max-md:text-sm">
             Enter your credentials to access your account
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4 max-md:space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -82,6 +84,7 @@ export default function LoginPage() {
                 required
                 disabled={isLoading}
                 autoComplete="email"
+                className="max-md:min-h-11 max-md:text-base max-md:px-3"
               />
             </div>
 
@@ -96,23 +99,31 @@ export default function LoginPage() {
                 required
                 disabled={isLoading}
                 autoComplete="current-password"
+                className="max-md:min-h-11 max-md:text-base max-md:px-3"
               />
             </div>
 
             {error && (
-              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button
+              type="submit"
+              className="w-full max-md:min-h-11 max-md:text-sm"
+              disabled={isLoading}
+            >
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
 
-          <p className="text-sm text-center text-muted-foreground mt-6">
+          <p className="mt-6 text-center text-sm text-muted-foreground max-md:mt-8">
             New here?{' '}
-            <Link href="/signup" className="font-medium text-primary hover:underline">
+            <Link
+              href="/signup"
+              className="font-medium text-primary hover:underline max-md:inline-block max-md:py-2"
+            >
               Start a free trial
             </Link>
           </p>

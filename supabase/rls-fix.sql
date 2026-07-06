@@ -187,6 +187,19 @@ create policy job_photos_staff_all on job_photos
     and job_photos.company_id = auth_profile_company_id()
   );
 
+drop policy if exists job_photos_client_select on job_photos;
+create policy job_photos_client_select on job_photos
+  for select using (
+    exists (
+      select 1 from profiles p
+      join clients c on c.id = p.client_id
+      where p.id = auth.uid()
+        and p.role = 'client'
+        and job_photos.client_id = p.client_id
+        and c.portal_enabled = true
+    )
+  );
+
 drop policy if exists billing_payments_staff_all on billing_payments;
 create policy billing_payments_staff_all on billing_payments
   for all using (

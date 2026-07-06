@@ -60,21 +60,33 @@ function PaymentSourceBadge({ payment }: { payment: CompanyPaymentRow }) {
   return <Badge variant="outline" className="capitalize">{payment.method}</Badge>
 }
 
-export function PaymentsPageClient() {
-  const [period, setPeriod] = useState<ReportsPeriod>('30d')
+type PaymentsPageInitialData = {
+  payments: CompanyPaymentRow[]
+  summary: {
+    totalCollected: number
+    stripeTotal: number
+    manualTotal: number
+    paymentCount: number
+  }
+  periodLabel: string
+}
+
+export function PaymentsPageClient({
+  initialData,
+  initialPeriod = '30d',
+}: {
+  initialData: PaymentsPageInitialData
+  initialPeriod?: ReportsPeriod
+}) {
+  const [period, setPeriod] = useState<ReportsPeriod>(initialPeriod)
   const [source, setSource] = useState<PaymentsFilterSource>('all')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [payments, setPayments] = useState<CompanyPaymentRow[]>([])
-  const [summary, setSummary] = useState({
-    totalCollected: 0,
-    stripeTotal: 0,
-    manualTotal: 0,
-    paymentCount: 0,
-  })
-  const [periodLabel, setPeriodLabel] = useState('')
+  const [payments, setPayments] = useState<CompanyPaymentRow[]>(initialData.payments)
+  const [summary, setSummary] = useState(initialData.summary)
+  const [periodLabel, setPeriodLabel] = useState(initialData.periodLabel)
   const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
@@ -103,8 +115,15 @@ export function PaymentsPageClient() {
   }, [period, source, debouncedSearch])
 
   useEffect(() => {
-    fetchPayments()
-  }, [fetchPayments])
+    if (
+      period === initialPeriod &&
+      source === 'all' &&
+      debouncedSearch === ''
+    ) {
+      return
+    }
+    void fetchPayments()
+  }, [fetchPayments, period, initialPeriod, source, debouncedSearch])
 
   return (
     <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">

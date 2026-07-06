@@ -36,6 +36,7 @@ import {
   queueNotification,
 } from '@/lib/notifications-server'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 import {
   assertPlatformAdminSession,
   getSessionProfile,
@@ -95,11 +96,19 @@ import {
   type JobPhotoCategory,
 } from '@/lib/job-photo-categories'
 import {
+  DEFAULT_JOB_PHOTO_CATEGORY,
   JOB_PHOTO_ACCEPTED_TYPES,
   JOB_PHOTO_BUCKET,
   JOB_PHOTO_MAX_BYTES,
+  type JobPhoto,
   type JobPhotoWithUrl,
 } from '@/lib/job-photos'
+import {
+  formatPhotoStorageBytes,
+  getPhotoStorageFullMessage,
+  getPhotoStorageLimitForPlan,
+  wouldExceedPhotoStorage,
+} from '@/lib/job-photo-storage'
 import {
   normalizeDocumentCategories,
   resolveUploadCategory,
@@ -1646,10 +1655,36 @@ export async function uploadJobPhotoAction(
     const availableCategories = normalizeJobPhotoCategories(
       companyRow?.job_photo_categories
     )
-    const category = normalizePhotoCategory(categoryRaw, availableCategories)
+    const category =
+      availableCategories.length > 0
+        ? normalizePhotoCategory(categoryRaw, availableCategories)
+        : categoryRaw || DEFAULT_JOB_PHOTO_CATEGORY
 
     if (availableCategories.length > 0 && !category) {
       return { success: false, error: 'Select a photo category before uploading' }
+    }
+
+    const { getCompanySubscriptionAccessForCompany } = await import(
+      '@/lib/platform-trial-server'
+    )
+    const subscription = await getCompanySubscriptionAccessForCompany(access.companyId)
+    const plan = subscription?.plan ?? 'trial'
+    const storageLimit = getPhotoStorageLimitForPlan(plan)
+    const { data: usageRow } = await supabaseAdmin
+      .from('job_photos')
+      .select('file_size')
+      .eq('company_id', access.companyId)
+
+    const usedBytes = (usageRow || []).reduce(
+      (sum, row) => sum + Number(row.file_size || 0),
+      0
+    )
+
+    if (wouldExceedPhotoStorage(usedBytes, storageLimit, file.size)) {
+      return {
+        success: false,
+        error: getPhotoStorageFullMessage(plan),
+      }
     }
 
     const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
@@ -1704,6 +1739,8 @@ export async function uploadJobPhotoAction(
     }
 
     revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+    revalidatePath('/portal/photos')
+    revalidatePath(`/portal/jobs/${scheduleId}`)
 
     return { success: true, photo: { ...photo, url: signed.signedUrl } }
   } catch (error: any) {
@@ -1819,10 +1856,205 @@ export async function deleteJobPhotoAction(
     await supabaseAdmin.storage.from(JOB_PHOTO_BUCKET).remove([photo.storage_path])
 
     revalidatePath(`/dashboard/clients/${clientId}/jobs/${scheduleId}`)
+    revalidatePath('/portal/photos')
     return { success: true }
   } catch (error: any) {
     console.error('deleteJobPhotoAction error:', error)
     return { success: false, error: error.message || 'Failed to delete photo' }
+  }
+}
+
+async function attachSignedUrlsToJobPhotos(
+  supabaseAdmin: ReturnType<typeof createSupabaseAdmin>,
+  photos: JobPhoto[]
+): Promise<JobPhotoWithUrl[]> {
+  const withUrls: JobPhotoWithUrl[] = []
+
+  for (const photo of photos) {
+    const { data: signed, error: signedError } = await supabaseAdmin.storage
+      .from(JOB_PHOTO_BUCKET)
+      .createSignedUrl(photo.storage_path, 60 * 60)
+
+    if (signedError || !signed?.signedUrl) continue
+    withUrls.push({ ...photo, url: signed.signedUrl })
+  }
+
+  return withUrls
+}
+
+async function getCompanyPhotoStorageUsage(companyId: string) {
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data, error } = await supabaseAdmin
+    .from('job_photos')
+    .select('file_size')
+    .eq('company_id', companyId)
+
+  if (error) {
+    if (error.code === '42P01') return 0
+    throw error
+  }
+
+  return (data || []).reduce((sum, row) => sum + Number(row.file_size || 0), 0)
+}
+
+export async function getCompanyPhotoStorageAction(): Promise<
+  | {
+      success: true
+      usedBytes: number
+      limitBytes: number
+      plan: string
+      usedLabel: string
+      limitLabel: string
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const { getCompanySubscriptionAccessForCompany } = await import(
+      '@/lib/platform-trial-server'
+    )
+    const subscription = await getCompanySubscriptionAccessForCompany(check.companyId)
+    const plan = subscription?.plan ?? 'trial'
+    const limitBytes = getPhotoStorageLimitForPlan(plan)
+    const usedBytes = await getCompanyPhotoStorageUsage(check.companyId)
+
+    return {
+      success: true,
+      usedBytes,
+      limitBytes,
+      plan,
+      usedLabel: formatPhotoStorageBytes(usedBytes),
+      limitLabel: formatPhotoStorageBytes(limitBytes),
+    }
+  } catch (error: any) {
+    console.error('getCompanyPhotoStorageAction error:', error)
+    return { success: false, error: error.message || 'Failed to load photo storage' }
+  }
+}
+
+export async function getClientPhotosAction(
+  clientId: string,
+  options?: { scheduleId?: string | null }
+): Promise<
+  | {
+      success: true
+      photos: JobPhotoWithUrl[]
+      categories: JobPhotoCategory[]
+      storage: {
+        usedBytes: number
+        limitBytes: number
+        usedLabel: string
+        limitLabel: string
+        plan: string
+      }
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const owned = await verifyClientOwnership(clientId, check.companyId)
+    if (!owned) return { success: false, error: 'Client not found' }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    let query = supabaseAdmin
+      .from('job_photos')
+      .select('*')
+      .eq('client_id', clientId)
+      .eq('company_id', check.companyId)
+      .order('created_at', { ascending: false })
+
+    if (options?.scheduleId) {
+      query = query.eq('schedule_id', options.scheduleId)
+    }
+
+    const [{ data: photos, error }, { data: company }, storageResult] = await Promise.all([
+      query,
+      supabaseAdmin
+        .from('companies')
+        .select('job_photo_categories')
+        .eq('id', check.companyId)
+        .single(),
+      getCompanyPhotoStorageAction(),
+    ])
+
+    if (error) {
+      if (error.code === '42P01') {
+        return {
+          success: true,
+          photos: [],
+          categories: normalizeJobPhotoCategories(null),
+          storage: storageResult.success
+            ? {
+                usedBytes: storageResult.usedBytes,
+                limitBytes: storageResult.limitBytes,
+                usedLabel: storageResult.usedLabel,
+                limitLabel: storageResult.limitLabel,
+                plan: storageResult.plan,
+              }
+            : {
+                usedBytes: 0,
+                limitBytes: getPhotoStorageLimitForPlan('trial'),
+                usedLabel: '0 B',
+                limitLabel: formatPhotoStorageBytes(getPhotoStorageLimitForPlan('trial')),
+                plan: 'trial',
+              },
+        }
+      }
+      throw error
+    }
+
+    const withUrls = await attachSignedUrlsToJobPhotos(supabaseAdmin, photos || [])
+
+    return {
+      success: true,
+      photos: withUrls,
+      categories: normalizeJobPhotoCategories(company?.job_photo_categories),
+      storage: storageResult.success
+        ? {
+            usedBytes: storageResult.usedBytes,
+            limitBytes: storageResult.limitBytes,
+            usedLabel: storageResult.usedLabel,
+            limitLabel: storageResult.limitLabel,
+            plan: storageResult.plan,
+          }
+        : {
+            usedBytes: 0,
+            limitBytes: getPhotoStorageLimitForPlan('trial'),
+            usedLabel: '0 B',
+            limitLabel: formatPhotoStorageBytes(getPhotoStorageLimitForPlan('trial')),
+            plan: 'trial',
+          },
+    }
+  } catch (error: any) {
+    console.error('getClientPhotosAction error:', error)
+    return { success: false, error: error.message || 'Failed to load photos' }
+  }
+}
+
+export async function getClientJobsForPhotosAction(clientId: string) {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false as const, error: check.error }
+
+    const owned = await verifyClientOwnership(clientId, check.companyId)
+    if (!owned) return { success: false as const, error: 'Client not found' }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: jobs, error } = await supabaseAdmin
+      .from('schedules')
+      .select('id, title, start_time, status')
+      .eq('client_id', clientId)
+      .order('start_time', { ascending: false })
+
+    if (error) throw error
+    return { success: true as const, jobs: jobs || [] }
+  } catch (error: any) {
+    console.error('getClientJobsForPhotosAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to load jobs' }
   }
 }
 
@@ -4003,7 +4235,7 @@ export async function getDashboardUserDataAction() {
   }
 }
 
-export async function getDashboardShellDataAction() {
+export const getDashboardShellDataAction = cache(async () => {
   try {
     const session = await getSessionProfile()
     if (!session) {
@@ -4061,7 +4293,7 @@ export async function getDashboardShellDataAction() {
     console.error('getDashboardShellDataAction error:', error)
     return { success: false as const, error: error.message || 'Failed to load shell data' }
   }
-}
+})
 
 export async function getClientsListAction() {
   try {
@@ -4256,6 +4488,176 @@ export async function getJobDetailPageAction(jobId: string, clientId: string) {
   } catch (error: any) {
     console.error('getJobDetailPageAction error:', error)
     return { success: false as const, error: error.message || 'Failed to load job' }
+  }
+}
+
+export async function getCrewsPageDataAction() {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false as const, error: check.error }
+
+    const { CREW_ASSIGNABLE_ROLES } = await import('@/lib/company-operations')
+    const { getPlanEntitlements } = await import('@/lib/platform-entitlements')
+    const { getCompanySoloContext } = await import('@/lib/solo-business-server')
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const [soloContext, shell] = await Promise.all([
+      getCompanySoloContext(check.companyId),
+      getDashboardShellDataAction(),
+    ])
+
+    const entitlements =
+      shell.success && shell.data.subscriptionAccess
+        ? getPlanEntitlements(shell.data.subscriptionAccess.plan)
+        : null
+
+    if (soloContext.isSoloBusiness) {
+      return {
+        success: true as const,
+        data: {
+          crews: [] as Array<{
+            id: string
+            name: string
+            created_at: string
+            crew_lead_id: string | null
+            members: Array<{ id: string; full_name: string; avatar_url: string | null }>
+          }>,
+          availableMembers: [] as Array<{
+            id: string
+            full_name: string
+            avatar_url: string | null
+          }>,
+          isSoloBusiness: true,
+          entitlements,
+        },
+      }
+    }
+
+    const [{ data: crewsData }, { data: membersData }] = await Promise.all([
+      supabaseAdmin
+        .from('crews')
+        .select(`
+          *,
+          profiles!crew_id (
+            id,
+            full_name,
+            avatar_url
+          )
+        `)
+        .eq('company_id', check.companyId)
+        .order('created_at', { ascending: false }),
+      supabaseAdmin
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .eq('company_id', check.companyId)
+        .in('role', CREW_ASSIGNABLE_ROLES)
+        .is('crew_id', null),
+    ])
+
+    const crews = (crewsData || []).map((crew: any) => ({
+      id: crew.id,
+      name: crew.name,
+      created_at: crew.created_at,
+      crew_lead_id: crew.crew_lead_id ?? null,
+      members: crew.profiles || [],
+    }))
+
+    return {
+      success: true as const,
+      data: {
+        crews,
+        availableMembers: membersData || [],
+        isSoloBusiness: false,
+        entitlements,
+      },
+    }
+  } catch (error: any) {
+    console.error('getCrewsPageDataAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to load crews' }
+  }
+}
+
+export async function getSettingsPageInitialDataAction() {
+  try {
+    const [shell, accountResult] = await Promise.all([
+      getDashboardShellDataAction(),
+      getAccountSettingsAction(),
+    ])
+
+    if (!shell.success) {
+      return { success: false as const, error: shell.error }
+    }
+    if (!accountResult.success) {
+      return { success: false as const, error: accountResult.error }
+    }
+
+    let company: {
+      name: string | null
+      logo_url: string | null
+      timezone: string | null
+      business_hours_start: string | null
+      business_hours_end: string | null
+      address: string | null
+      address_street: string | null
+      address_unit: string | null
+      address_city: string | null
+      address_state: string | null
+      address_zip: string | null
+      is_solo_business: boolean | null
+      subscription_plan: string | null
+      subscription_status: string | null
+      stripe_platform_customer_id: string | null
+    } | null = null
+
+    if (
+      accountResult.account.role === 'company_admin' &&
+      shell.data.profile.company_id
+    ) {
+      const supabaseAdmin = createSupabaseAdmin()
+      const { data: companyData } = await supabaseAdmin
+        .from('companies')
+        .select(`
+          name,
+          logo_url,
+          timezone,
+          business_hours_start,
+          business_hours_end,
+          address,
+          address_street,
+          address_unit,
+          address_city,
+          address_state,
+          address_zip,
+          is_solo_business,
+          subscription_plan,
+          subscription_status,
+          stripe_platform_customer_id
+        `)
+        .eq('id', shell.data.profile.company_id)
+        .single()
+
+      company = companyData
+    }
+
+    const { getPlanEntitlements } = await import('@/lib/platform-entitlements')
+    const entitlements = shell.data.subscriptionAccess
+      ? getPlanEntitlements(shell.data.subscriptionAccess.plan)
+      : null
+
+    return {
+      success: true as const,
+      data: {
+        account: accountResult.account,
+        company,
+        entitlements,
+      },
+    }
+  } catch (error: any) {
+    console.error('getSettingsPageInitialDataAction error:', error)
+    return {
+      success: false as const,
+      error: error.message || 'Failed to load settings',
+    }
   }
 }
 

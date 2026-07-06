@@ -57,6 +57,7 @@ import { JobStatusBadge } from '@/components/dashboard/job-status-badge'
 import { ClientBillingPanel } from '@/components/dashboard/client-billing-panel'
 import { ClientEstimatesPanel } from '@/components/dashboard/client-estimates-panel'
 import { ClientDocumentsPanel } from '@/components/dashboard/client-documents-panel'
+import { ClientPhotosPanel } from '@/components/dashboard/client-photos-panel'
 import { ClientMessagingPanel } from '@/components/dashboard/client-messaging-panel'
 import { ClientPortalAccess } from '@/components/dashboard/client-portal-access'
 import { StripeConnectGate } from '@/components/dashboard/stripe-connect-gate'
@@ -121,7 +122,7 @@ export function ClientDetailPageClient({
   const [jobSearchQuery, setJobSearchQuery] = useState('')
 
   const [activeTab, setActiveTab] = useState<
-    'jobs' | 'estimates' | 'billing' |  'documents' | 'messaging'
+    'jobs' | 'estimates' | 'billing' | 'documents' | 'photos' | 'messaging'
     >('jobs')
 
   const [newJob, setNewJob] = useState({
@@ -137,6 +138,7 @@ export function ClientDetailPageClient({
   const [schedules, setSchedules] = useState<any[]>(initialSchedules)
   const [convertingEstimate, setConvertingEstimate] = useState<Estimate | null>(null)
   const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0)
+  const [photosRefreshKey, setPhotosRefreshKey] = useState(0)
   const [clientStatusConfirm, setClientStatusConfirm] = useState<'archive' | 'restore' | null>(null)
   const [isClientStatusLoading, setIsClientStatusLoading] = useState(false)
 
@@ -516,7 +518,7 @@ export function ClientDetailPageClient({
     <Tabs
       value={activeTab}
       onValueChange={(value) =>
-        setActiveTab(value as 'jobs' | 'estimates' | 'billing' | 'documents' | 'messaging')
+        setActiveTab(value as 'jobs' | 'estimates' | 'billing' | 'documents' | 'photos' | 'messaging')
       }
       className="flex flex-col h-full min-h-0 p-6 max-md:p-4"
     >
@@ -556,6 +558,9 @@ export function ClientDetailPageClient({
         </TabsTrigger>
         <TabsTrigger value="documents" className="px-4 py-1.5 text-sm">
           Documents
+        </TabsTrigger>
+        <TabsTrigger value="photos" className="px-4 py-1.5 text-sm">
+          Photos
         </TabsTrigger>
         <TabsTrigger value="messaging" className="px-4 py-1.5 text-sm">
           Messaging
@@ -764,6 +769,10 @@ export function ClientDetailPageClient({
 
           <TabsContent value="documents" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
             <ClientDocumentsPanel clientId={clientId} refreshKey={documentsRefreshKey} />
+          </TabsContent>
+
+          <TabsContent value="photos" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+            <ClientPhotosPanel clientId={clientId} refreshKey={photosRefreshKey} />
           </TabsContent>
 
           <TabsContent value="messaging" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">

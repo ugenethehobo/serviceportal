@@ -14,6 +14,8 @@ import {
 } from '@/lib/portal-jobs'
 import { syncEstimateDocument } from '@/lib/estimates-server'
 import { validateMessageBody, type MessagingMessage } from '@/lib/messaging'
+import { normalizeJobPhotoCategories } from '@/lib/job-photo-categories'
+import { JOB_PHOTO_BUCKET, type JobPhoto, type JobPhotoWithUrl } from '@/lib/job-photos'
 import type { UploadedDocument } from '@/lib/uploaded-documents'
 import {
   notifyStaffEstimateResponse,
@@ -459,6 +461,51 @@ export async function sendPortalMessagingMessageAction(
   }
 }
 
+export async function getPortalDocumentsPageDataAction(): Promise<
+  | {
+      success: true
+      documents: UploadedDocument[]
+      jobs: Array<{ id: string; title: string; start_time: string; status: string }>
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const { clientId } = await requirePortalClient()
+    const admin = createSupabaseAdmin()
+
+    const [documentsResult, jobsResult] = await Promise.all([
+      admin
+        .from('client_documents')
+        .select('*')
+        .eq('client_id', clientId)
+        .in('source', ['upload', 'estimate', 'invoice'])
+        .order('created_at', { ascending: false }),
+      admin
+        .from('schedules')
+        .select('id, title, start_time, status')
+        .eq('client_id', clientId)
+        .order('start_time', { ascending: false }),
+    ])
+
+    if (documentsResult.error) {
+      if (documentsResult.error.code === '42703') {
+        return { success: true, documents: [], jobs: jobsResult.data || [] }
+      }
+      throw documentsResult.error
+    }
+    if (jobsResult.error) throw jobsResult.error
+
+    return {
+      success: true,
+      documents: (documentsResult.data || []) as UploadedDocument[],
+      jobs: jobsResult.data || [],
+    }
+  } catch (error: any) {
+    console.error('getPortalDocumentsPageDataAction error:', error)
+    return { success: false, error: error.message || 'Failed to load documents' }
+  }
+}
+
 export async function getPortalClientJobsForDocumentsAction(): Promise<
   | { success: true; jobs: Array<{ id: string; title: string; start_time: string; status: string }> }
   | { success: false; error: string }
@@ -506,5 +553,89 @@ export async function getPortalUploadedDocumentsAction(): Promise<
   } catch (error: any) {
     console.error('getPortalUploadedDocumentsAction error:', error)
     return { success: false, error: error.message || 'Failed to load documents' }
+  }
+}
+
+async function attachPortalPhotoUrls(
+  admin: ReturnType<typeof createSupabaseAdmin>,
+  photos: JobPhoto[]
+): Promise<JobPhotoWithUrl[]> {
+  const withUrls: JobPhotoWithUrl[] = []
+
+  for (const photo of photos) {
+    const { data: signed, error: signedError } = await admin.storage
+      .from(JOB_PHOTO_BUCKET)
+      .createSignedUrl(photo.storage_path, 60 * 60)
+
+    if (signedError || !signed?.signedUrl) continue
+    withUrls.push({ ...photo, url: signed.signedUrl })
+  }
+
+  return withUrls
+}
+
+export async function getPortalPhotosPageDataAction(options?: {
+  scheduleId?: string | null
+}): Promise<
+  | {
+      success: true
+      photos: JobPhotoWithUrl[]
+      jobs: Array<{ id: string; title: string; start_time: string; status: string }>
+      categories: string[]
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const { clientId, companyId } = await requirePortalClient()
+    const admin = createSupabaseAdmin()
+
+    let photosQuery = admin
+      .from('job_photos')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+
+    if (options?.scheduleId) {
+      photosQuery = photosQuery.eq('schedule_id', options.scheduleId)
+    }
+
+    const [photosResult, jobsResult, companyResult] = await Promise.all([
+      photosQuery,
+      admin
+        .from('schedules')
+        .select('id, title, start_time, status')
+        .eq('client_id', clientId)
+        .order('start_time', { ascending: false }),
+      admin
+        .from('companies')
+        .select('job_photo_categories')
+        .eq('id', companyId)
+        .single(),
+    ])
+
+    if (photosResult.error) {
+      if (photosResult.error.code === '42P01') {
+        return {
+          success: true,
+          photos: [],
+          jobs: jobsResult.data || [],
+          categories: normalizeJobPhotoCategories(null),
+        }
+      }
+      throw photosResult.error
+    }
+    if (jobsResult.error) throw jobsResult.error
+
+    const photos = await attachPortalPhotoUrls(admin, photosResult.data || [])
+
+    return {
+      success: true,
+      photos,
+      jobs: jobsResult.data || [],
+      categories: normalizeJobPhotoCategories(companyResult.data?.job_photo_categories),
+    }
+  } catch (error: any) {
+    console.error('getPortalPhotosPageDataAction error:', error)
+    return { success: false, error: error.message || 'Failed to load photos' }
   }
 }

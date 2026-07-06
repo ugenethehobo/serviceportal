@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { FolderPhotosPanel } from '@/components/dashboard/folder-photos-panel'
 import { PortalJobPayPanel } from '@/components/portal/portal-job-pay-panel'
 import { PortalScheduleHero } from '@/components/portal/portal-schedule-hero'
 import { Card } from '@/components/ui/card'
@@ -14,6 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatCurrency, type BillingLineItem, type BillingPayment } from '@/lib/billing'
+import type { JobPhotoWithUrl } from '@/lib/job-photos'
 import type { PortalJobCrew } from '@/lib/portal-jobs'
 import { ChevronLeft } from 'lucide-react'
 
@@ -43,9 +45,18 @@ interface PortalJobDetailProps {
   clientId: string
   billing: PortalJobDetailBilling
   timezone: string
+  initialPhotos?: JobPhotoWithUrl[]
+  initialPhotoCategories?: string[]
 }
 
-export function PortalJobDetail({ jobId, clientId, billing, timezone }: PortalJobDetailProps) {
+export function PortalJobDetail({
+  jobId,
+  clientId,
+  billing,
+  timezone,
+  initialPhotos = [],
+  initialPhotoCategories = [],
+}: PortalJobDetailProps) {
   const searchParams = useSearchParams()
   const autoPay = searchParams.get('pay') === '1'
   const showPaymentFirst = autoPay || billing.canPay
@@ -205,6 +216,18 @@ export function PortalJobDetail({ jobId, clientId, billing, timezone }: PortalJo
           </Table>
         </Card>
       )}
+
+      <Card className="shadow-sm p-5">
+        <FolderPhotosPanel
+          clientId={clientId}
+          scheduleId={jobId}
+          variant="portal"
+          initialPhotos={initialPhotos}
+          initialCategories={initialPhotoCategories}
+          title="Job photos"
+          description="Site photos from this visit, grouped by category."
+        />
+      </Card>
 
     </div>
   )

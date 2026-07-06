@@ -45,6 +45,7 @@ import {
   toGalleryDocuments,
   UPLOADED_DOCUMENT_ACCEPT_ATTRIBUTE,
   type GalleryDocument,
+  type UploadedDocument,
 } from '@/lib/uploaded-documents'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -71,6 +72,8 @@ interface FolderDocumentsPanelProps {
   title?: string
   description?: string
   variant?: 'staff' | 'portal'
+  initialDocuments?: UploadedDocument[]
+  initialJobs?: JobMeta[]
 }
 
 type PendingUpload = {
@@ -134,11 +137,16 @@ export function FolderDocumentsPanel({
   title,
   description,
   variant = 'staff',
+  initialDocuments,
+  initialJobs,
 }: FolderDocumentsPanelProps) {
   const isPortal = variant === 'portal'
-  const [documents, setDocuments] = useState<GalleryDocument[]>([])
-  const [jobs, setJobs] = useState<JobMeta[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const hasInitialData = initialDocuments !== undefined
+  const [documents, setDocuments] = useState<GalleryDocument[]>(
+    hasInitialData ? toGalleryDocuments(initialDocuments) : []
+  )
+  const [jobs, setJobs] = useState<JobMeta[]>(initialJobs ?? [])
+  const [isLoading, setIsLoading] = useState(!hasInitialData)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
@@ -175,9 +183,10 @@ export function FolderDocumentsPanel({
   }, [clientId, scheduleId, isClientView, isPortal])
 
   useEffect(() => {
+    if (hasInitialData && refreshKey === 0) return
     setIsLoading(true)
-    fetchData()
-  }, [fetchData, refreshKey])
+    void fetchData()
+  }, [fetchData, refreshKey, hasInitialData])
 
   const categorySuggestions = useMemo(() => {
     const seen = new Set<string>()

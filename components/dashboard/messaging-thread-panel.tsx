@@ -56,6 +56,7 @@ interface MessagingThreadPanelProps {
   subtitle?: string
   emptyHint?: string
   className?: string
+  initialMessages?: MessagingMessage[]
   loadMessages: () => Promise<ThreadResult>
   sendMessage: (body: string) => Promise<SendResult>
 }
@@ -68,12 +69,13 @@ export function MessagingThreadPanel({
   subtitle,
   emptyHint = 'Send a message to start the conversation.',
   className,
+  initialMessages,
   loadMessages,
   sendMessage,
 }: MessagingThreadPanelProps) {
-  const [messages, setMessages] = useState<MessagingMessage[]>([])
+  const [messages, setMessages] = useState<MessagingMessage[]>(initialMessages ?? [])
   const [draft, setDraft] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(initialMessages === undefined)
   const [isSending, setIsSending] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -101,8 +103,9 @@ export function MessagingThreadPanel({
   )
 
   useEffect(() => {
+    if (initialMessages !== undefined) return
     void refreshMessages()
-  }, [refreshMessages])
+  }, [refreshMessages, initialMessages])
 
   useEffect(() => {
     const interval = window.setInterval(() => {

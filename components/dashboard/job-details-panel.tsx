@@ -121,7 +121,7 @@ export function JobDetailsPanel({
   )
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="flex w-full min-h-0 flex-col gap-6 lg:gap-8">
       <section className="rounded-xl border bg-muted/25 p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-3 min-w-0">
@@ -160,7 +160,13 @@ export function JobDetailsPanel({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <section
+        className={
+          isTeamMember
+            ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
+            : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4'
+        }
+      >
         <DetailMetric icon={Users} label="Crew" value={crewLabel} />
         <DetailMetric icon={DollarSign} label="Quoted price" value={priceLabel} />
         {!isTeamMember && (
@@ -178,57 +184,61 @@ export function JobDetailsPanel({
         />
       </section>
 
-      <section className="rounded-xl border overflow-hidden">
-        <div className="flex items-center gap-2 border-b bg-muted/20 px-4 py-3 sm:px-5">
-          <MapPin className="size-4 text-muted-foreground" />
-          <h2 className="font-semibold text-sm">Service location</h2>
-        </div>
-        <div className="p-4 sm:p-5 space-y-4">
-          {!isTeamMember && clientName && (
-            <p className="text-sm">
-              <span className="text-muted-foreground">Client: </span>
-              <Link
-                href={`/dashboard/clients/${clientId}`}
-                className="font-medium hover:underline"
-              >
-                {clientName}
-              </Link>
-            </p>
-          )}
-          <p className="text-sm leading-relaxed">
-            {jobAddress === 'No address on file' ? (
-              <span className="text-muted-foreground italic">{jobAddress}</span>
-            ) : (
-              jobAddress
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8 lg:items-stretch">
+        <section className="flex flex-col overflow-hidden rounded-xl border">
+          <div className="flex items-center gap-2 border-b bg-muted/20 px-4 py-3 sm:px-5">
+            <MapPin className="size-4 text-muted-foreground" />
+            <h2 className="font-semibold text-sm">Service location</h2>
+          </div>
+          <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
+            {!isTeamMember && clientName && (
+              <p className="text-sm">
+                <span className="text-muted-foreground">Client: </span>
+                <Link
+                  href={`/dashboard/clients/${clientId}`}
+                  className="font-medium hover:underline"
+                >
+                  {clientName}
+                </Link>
+              </p>
             )}
-          </p>
-          {jobAddress !== 'No address on file' && (
-            <MapsNavigateButton
-              address={jobAddress}
-              className="w-full sm:w-auto"
-              size={isTeamMember ? 'lg' : 'default'}
-            />
-          )}
-        </div>
-      </section>
+            <p className="text-sm leading-relaxed">
+              {jobAddress === 'No address on file' ? (
+                <span className="text-muted-foreground italic">{jobAddress}</span>
+              ) : (
+                jobAddress
+              )}
+            </p>
+            {jobAddress !== 'No address on file' && (
+              <MapsNavigateButton
+                address={jobAddress}
+                className="mt-auto w-full sm:w-auto"
+                size={isTeamMember ? 'lg' : 'default'}
+              />
+            )}
+          </div>
+        </section>
 
-      <section className="rounded-xl border overflow-hidden">
-        <div className="flex items-center gap-2 border-b bg-muted/20 px-4 py-3 sm:px-5">
-          <FileText className="size-4 text-muted-foreground" />
-          <h2 className="font-semibold text-sm">Work description</h2>
-        </div>
-        <div className="p-4 sm:p-5">
-          {job.description?.trim() ? (
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{job.description}</p>
-          ) : (
-            <p className="text-sm text-muted-foreground italic">No description provided for this job.</p>
-          )}
-        </div>
-      </section>
+        <section className="flex flex-col overflow-hidden rounded-xl border">
+          <div className="flex items-center gap-2 border-b bg-muted/20 px-4 py-3 sm:px-5">
+            <FileText className="size-4 text-muted-foreground" />
+            <h2 className="font-semibold text-sm">Work description</h2>
+          </div>
+          <div className="flex-1 p-4 sm:p-5">
+            {job.description?.trim() ? (
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{job.description}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">
+                No description provided for this job.
+              </p>
+            )}
+          </div>
+        </section>
+      </div>
 
       <Separator className="opacity-60" />
 
-      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <dt className="text-muted-foreground">Job ID</dt>
           <dd className="font-mono text-xs mt-0.5 break-all">{job.id}</dd>

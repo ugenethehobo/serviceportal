@@ -2,8 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { getAccountSettingsAction, getCompanySubscriptionAccessAction } from '@/app/action'
+import { getAccountSettingsAction, getCompanyPhotoStorageAction } from '@/app/action'
 import {
   getPlatformFeatureUpgradeMessage,
   type PlanEntitlements,
@@ -11,6 +10,7 @@ import {
 import { AppearanceSettings } from '@/components/appearance-settings'
 import { CompanyProfileSettings } from '@/components/dashboard/company-profile-settings'
 import { JobPhotoCategoriesSettings } from '@/components/dashboard/job-photo-categories-settings'
+import { PhotoStorageMeter } from '@/components/dashboard/photo-storage-meter'
 import { ClientBookingSettings } from '@/components/dashboard/client-booking-settings'
 import { NotificationSettings } from '@/components/dashboard/notification-settings'
 import { IntegrationsSettings } from '@/components/dashboard/integrations-settings'
@@ -45,12 +45,7 @@ import {
   User,
   type LucideIcon,
 } from 'lucide-react'
-import {
-  normalizePlatformPlan,
-  normalizeSubscriptionStatus,
-  type PlatformPlanId,
-  type PlatformSubscriptionStatus,
-} from '@/lib/platform-billing'
+import type { PlatformPlanId, PlatformSubscriptionStatus } from '@/lib/platform-billing'
 import { toast } from 'sonner'
 
 type SettingsSectionId =
@@ -224,24 +219,48 @@ function SettingsSectionButton({
   )
 }
 
-function SettingsPageContent() {
+type SettingsPageInitialData = {
+  role: string
+  fullName: string
+  email: string
+  avatarUrl: string | null
+  company: CompanySettings
+  entitlements: PlanEntitlements | null
+  subscriptionPlan: PlatformPlanId
+  subscriptionStatus: PlatformSubscriptionStatus
+  hasPlatformCustomer: boolean
+}
+
+function SettingsPageContent({ initialData }: { initialData: SettingsPageInitialData }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const supabase = createClient()
 
-  const [company, setCompany] = useState<CompanySettings>(null)
-  const [role, setRole] = useState<string | null>(null)
-  const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [company, setCompany] = useState<CompanySettings>(initialData.company)
+  const [role, setRole] = useState<string | null>(initialData.role)
+  const [fullName, setFullName] = useState(initialData.fullName)
+  const [email, setEmail] = useState(initialData.email)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialData.avatarUrl)
+  const [isLoading, setIsLoading] = useState(false)
   const [profileSaveStatus, setProfileSaveStatus] = useState<SaveStatus>('idle')
   const [profileSaveMessage, setProfileSaveMessage] = useState('')
-  const [subscriptionPlan, setSubscriptionPlan] = useState<PlatformPlanId>('trial')
-  const [subscriptionStatus, setSubscriptionStatus] =
-    useState<PlatformSubscriptionStatus>('trialing')
-  const [hasPlatformCustomer, setHasPlatformCustomer] = useState(false)
-  const [entitlements, setEntitlements] = useState<PlanEntitlements | null>(null)
+  const [subscriptionPlan, setSubscriptionPlan] = useState<PlatformPlanId>(
+    initialData.subscriptionPlan
+  )
+  const [subscriptionStatus, setSubscriptionStatus] = useState<PlatformSubscriptionStatus>(
+    initialData.subscriptionStatus
+  )
+  const [hasPlatformCustomer, setHasPlatformCustomer] = useState(
+    initialData.hasPlatformCustomer
+  )
+  const [entitlements, setEntitlements] = useState<PlanEntitlements | null>(
+    initialData.entitlements
+  )
+  const [photoStorage, setPhotoStorage] = useState<{
+    usedBytes: number
+    limitBytes: number
+    usedLabel: string
+    limitLabel: string
+  } | null>(null)
 
   const isAdmin = role === 'company_admin'
 
@@ -281,69 +300,18 @@ function SettingsPageContent() {
   )
 
   useEffect(() => {
-    const loadSettings = async () => {
-      const accountResult = await getAccountSettingsAction()
-      if (accountResult.success) {
-        setRole(accountResult.account.role)
-        setFullName(accountResult.account.fullName)
-        setEmail(accountResult.account.email)
-        setAvatarUrl(accountResult.account.avatarUrl)
-      } else {
-        toast.error(accountResult.error || 'Failed to load account settings')
+    if (activeSection !== 'job-photos' || !isAdmin) return
+    void getCompanyPhotoStorageAction().then((result) => {
+      if (result.success) {
+        setPhotoStorage({
+          usedBytes: result.usedBytes,
+          limitBytes: result.limitBytes,
+          usedLabel: result.usedLabel,
+          limitLabel: result.limitLabel,
+        })
       }
-
-      if (accountResult.success && accountResult.account.role === 'company_admin') {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('company_id')
-            .eq('id', user.id)
-            .single()
-
-          if (profile?.company_id) {
-            const { data: companyData } = await supabase
-              .from('companies')
-              .select(`
-                name,
-                logo_url,
-                timezone,
-                business_hours_start,
-                business_hours_end,
-                address,
-                address_street,
-                address_unit,
-                address_city,
-                address_state,
-                address_zip,
-                is_solo_business,
-                subscription_plan,
-                subscription_status,
-                stripe_platform_customer_id
-              `)
-              .eq('id', profile.company_id)
-              .single()
-
-            setCompany(companyData)
-            setSubscriptionPlan(normalizePlatformPlan(companyData?.subscription_plan))
-            setSubscriptionStatus(
-              normalizeSubscriptionStatus(companyData?.subscription_status)
-            )
-            setHasPlatformCustomer(Boolean(companyData?.stripe_platform_customer_id))
-          }
-        }
-      }
-
-      const accessResult = await getCompanySubscriptionAccessAction()
-      if (accessResult.success) {
-        setEntitlements(accessResult.entitlements)
-      }
-
-      setIsLoading(false)
-    }
-
-    loadSettings()
-  }, [supabase])
+    })
+  }, [activeSection, isAdmin])
 
   useEffect(() => {
     if (requestedSection === 'integrations' && integrationsLocked) {
@@ -522,6 +490,14 @@ function SettingsPageContent() {
                     Custom categories and order for job site photo uploads.
                   </p>
                 </div>
+                {photoStorage && (
+                  <PhotoStorageMeter
+                    usedLabel={photoStorage.usedLabel}
+                    limitLabel={photoStorage.limitLabel}
+                    usedBytes={photoStorage.usedBytes}
+                    limitBytes={photoStorage.limitBytes}
+                  />
+                )}
                 <JobPhotoCategoriesSettings embedded />
               </div>
             )}
@@ -567,7 +543,11 @@ function SettingsPageContent() {
   )
 }
 
-export function SettingsPageClient() {
+export function SettingsPageClient({
+  initialData,
+}: {
+  initialData: SettingsPageInitialData
+}) {
   return (
     <Suspense
       fallback={
@@ -576,7 +556,7 @@ export function SettingsPageClient() {
         </div>
       }
     >
-      <SettingsPageContent />
+      <SettingsPageContent initialData={initialData} />
     </Suspense>
   )
 }

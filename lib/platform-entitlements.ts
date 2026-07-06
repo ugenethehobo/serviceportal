@@ -2,6 +2,7 @@ import {
   PLATFORM_SEAT_LIMITS,
   type PlatformPlanId,
 } from '@/lib/platform-billing'
+import { getPhotoStorageLimitForPlan } from '@/lib/job-photo-storage'
 
 export type PlatformFeature = 'routes' | 'reports' | 'integrations'
 
@@ -15,6 +16,7 @@ export type PlanEntitlements = {
   plan: PlatformPlanId
   seatLimit: number
   crewLimit: number | null
+  photoStorageBytes: number
   routes: boolean
   reports: boolean
   integrations: boolean
@@ -41,6 +43,7 @@ export function getPlanEntitlements(plan: PlatformPlanId): PlanEntitlements {
     plan,
     seatLimit: PLATFORM_SEAT_LIMITS[plan],
     crewLimit: PLATFORM_CREW_LIMITS[plan],
+    photoStorageBytes: getPhotoStorageLimitForPlan(plan),
     routes: plan === 'pro',
     reports: plan === 'basic' || plan === 'pro',
     integrations: plan === 'pro',

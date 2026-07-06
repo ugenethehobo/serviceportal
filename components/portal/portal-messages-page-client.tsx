@@ -7,16 +7,18 @@ import {
 } from '@/app/portal/actions'
 import { MessagingThreadPanel } from '@/components/dashboard/messaging-thread-panel'
 import { PortalPageHeader } from '@/components/portal/portal-page-header'
-
+import type { MessagingMessage } from '@/lib/messaging'
 
 interface PortalMessagesPageClientProps {
   clientName: string
   companyName: string
+  initialMessages: MessagingMessage[]
 }
 
 export function PortalMessagesPageClient({
   clientName,
   companyName,
+  initialMessages,
 }: PortalMessagesPageClientProps) {
 
   const loadMessages = useMemo(
@@ -49,6 +51,7 @@ export function PortalMessagesPageClient({
         subtitle={`Signed in as ${clientName}`}
         emptyHint="Send a message to your service provider. They will reply here in the portal."
         className="flex-1 min-h-0"
+        initialMessages={initialMessages}
         loadMessages={loadMessages}
         sendMessage={sendMessage}
       />

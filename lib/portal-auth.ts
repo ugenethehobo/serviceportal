@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 
 export type PortalProfile = {
   id: string
@@ -75,10 +76,10 @@ export async function assertPlatformAdminSession() {
   return { ok: true as const, userId: user.id, email: user.email! }
 }
 
-export async function getSessionProfile(): Promise<{
+export const getSessionProfile = cache(async (): Promise<{
   userId: string
   profile: PortalProfile
-} | null> {
+} | null> => {
   const user = await getAuthUser()
   if (!user) return null
 
@@ -92,7 +93,7 @@ export async function getSessionProfile(): Promise<{
   if (!profile) return null
 
   return { userId: user.id, profile: profile as PortalProfile }
-}
+})
 
 export function isStaffRole(role: string) {
   return role === 'company_admin' || role === 'team_member'
@@ -174,14 +175,15 @@ export function getPostLoginPath(role: string, adminEmail?: string | null, userE
 }
 
 export type PortalShellData = {
+  clientId: string
   clientName: string
   companyName: string
   companyLogo: string | null
 }
 
-export async function getPortalShellDataAction(): Promise<
+export const getPortalShellDataAction = cache(async (): Promise<
   { success: true; data: PortalShellData } | { success: false; error: string }
-> {
+> => {
   const session = await getSessionProfile()
   if (!session || session.profile.role !== 'client' || !session.profile.client_id) {
     return { success: false, error: 'Not authenticated' }
@@ -220,9 +222,10 @@ export async function getPortalShellDataAction(): Promise<
   return {
     success: true,
     data: {
+      clientId: session.profile.client_id,
       clientName: client.name,
       companyName: company?.name || 'Your service provider',
       companyLogo: company?.logo_url ?? null,
     },
   }
-}
+})

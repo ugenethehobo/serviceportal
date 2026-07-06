@@ -11,13 +11,5 @@ export default async function PortalLayout({ children }: { children: React.React
     redirect('/login')
   }
 
-  return (
-    <PortalShell
-      clientName={result.data.clientName}
-      companyName={result.data.companyName}
-      companyLogo={result.data.companyLogo}
-    >
-      {children}
-    </PortalShell>
-  )
+  return <PortalShell shellData={result.data}>{children}</PortalShell>
 }
