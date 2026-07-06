@@ -8,6 +8,7 @@ import { MapsNavigateButton } from '@/components/dashboard/maps-navigate-button'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
 import {
   Map as RouteMap,
   MapControls,
@@ -18,7 +19,7 @@ import {
   MarkerTooltip,
   useMap,
 } from '@/components/ui/map'
-import { ScrollArea } from '@/components/ui/scroll-area'
+
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   formatRouteDistance,
@@ -332,8 +333,8 @@ export function TeamPageClient({
           </p>
         </Card>
       ) : viewMode === 'map' ? (
-        <Card className="mx-4 sm:mx-6 flex-1 flex flex-col overflow-hidden min-h-0 gap-0 p-0">
-          <div className="flex-1 relative min-h-[50vh] sm:min-h-0 isolate">
+        <MainPageCard className="mx-4 sm:mx-6 min-h-0 flex-1 gap-0 overflow-hidden p-0">
+          <div className="relative isolate min-h-[50vh] flex-1 sm:min-h-0">
             {hasRoute ? (
               <>
                 <div className="absolute inset-0 z-0">
@@ -427,10 +428,10 @@ export function TeamPageClient({
               </div>
             )}
           </div>
-        </Card>
+        </MainPageCard>
       ) : (
-        <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
-          <div className="px-4 sm:px-6 pb-4 flex flex-col gap-3 max-w-2xl mx-auto w-full">
+        <div className="mx-4 flex min-h-0 flex-1 flex-col sm:mx-6">
+          <MainPageCardScroll contentClassName="flex flex-col gap-3 px-4 pb-4 sm:px-6 max-w-2xl mx-auto w-full">
             {data.jobs.map((job) => (
               <TeamJobCard
                 key={job.id}
@@ -438,8 +439,8 @@ export function TeamPageClient({
                 stopOrder={stopOrderByJobId.get(job.id)}
               />
             ))}
-          </div>
-        </ScrollArea>
+          </MainPageCardScroll>
+        </div>
       )}
 
       <div className="sm:hidden fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">

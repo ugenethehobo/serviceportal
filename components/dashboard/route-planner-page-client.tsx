@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, Building2, MapPin } from 'lucide-react'
 import { getRoutePlannerDataAction } from '@/app/action'
-import { Card } from '@/components/ui/card'
+import { MainPageCard } from '@/components/ui/main-page-card'
 import {
   Map,
   MapControls,
@@ -201,7 +201,7 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
         )}
       </div>
 
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 gap-0 p-0">
+      <MainPageCard className="gap-0 overflow-hidden p-0">
         <div className="flex-1 relative min-h-0 isolate">
           {error ? (
             <div className="h-full flex items-center justify-center">
@@ -356,7 +356,7 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
             </div>
           )}
         </div>
-      </Card>
+      </MainPageCard>
     </div>
   )
 }

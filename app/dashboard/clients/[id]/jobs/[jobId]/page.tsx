@@ -21,8 +21,7 @@ import { JobMessagingPanel } from '@/components/dashboard/job-messaging-panel'
 import { MapsNavigateButton } from '@/components/dashboard/maps-navigate-button'
 import { getDisplayAddressFromClient } from '@/lib/address'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -41,6 +40,7 @@ import {
 import { JobFormFields, type JobFormValues } from '@/components/dashboard/job-form-fields'
 import { JobBillingPanel } from '@/components/dashboard/job-billing-panel'
 import { StripeConnectGate } from '@/components/dashboard/stripe-connect-gate'
+import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
 import { toast } from 'sonner'
 
 const statusLabels: Record<string, string> = {
@@ -398,7 +398,11 @@ export default function JobDetailPage() {
   }
 
   if (isLoading || !job) {
-    return <div className="p-6">Loading...</div>
+    return (
+      <div className="flex h-full min-h-0 flex-col p-6">
+        <PageLoadingSkeleton />
+      </div>
+    )
   }
 
   const canEdit = !isTeamMember && (job.status === 'scheduled' || job.status === 'in_progress')
@@ -516,9 +520,9 @@ export default function JobDetailPage() {
         </div>
       )}
 
-      <Card className="flex-1 flex flex-col p-4 sm:p-6 min-h-0">
+      <MainPageCard className="p-4 sm:p-6">
         {activeTab === 'details' && (
-          <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+          <MainPageCardScroll>
             {isEditing ? (
               <div className="max-w-2xl">
                 <h2 className="text-lg font-semibold tracking-tight mb-4">Edit Job</h2>
@@ -545,7 +549,7 @@ export default function JobDetailPage() {
                 isTeamMember={isTeamMember}
               />
             )}
-          </ScrollArea>
+          </MainPageCardScroll>
         )}
 
         {activeTab === 'billing' && (
@@ -570,7 +574,7 @@ export default function JobDetailPage() {
             clientName={clientName}
           />
         )}
-      </Card>
+      </MainPageCard>
 
       {isTeamMember && (
         <div className="sm:hidden fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 backdrop-blur p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">

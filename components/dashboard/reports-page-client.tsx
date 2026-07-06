@@ -6,6 +6,10 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { getReportsDataAction } from '@/app/action'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
+import { PageHeader } from '@/components/ui/page-header'
+import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
 import {
   ChartContainer,
   ChartLegend,
@@ -21,7 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
 import { AR_AGING_BUCKET_LABELS } from '@/lib/ar-aging'
 import { formatReportsCurrency, REPORTS_PERIOD_LABELS, type ReportsData, type ReportsPeriod } from '@/lib/reports'
 
@@ -82,44 +85,40 @@ export function ReportsPageClient() {
   }, [period, fetchReports])
 
   return (
-    <div className="p-6 flex flex-col gap-6 min-h-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-          <p className="text-muted-foreground">
-            Revenue, collections, job activity, and outstanding balances
-          </p>
-        </div>
+    <div className="p-6 flex flex-col h-full min-h-0">
+      <PageHeader
+        title="Reports"
+        description="Revenue, collections, job activity, and outstanding balances"
+        actions={
+          <Select
+            value={period}
+            onValueChange={(value) => setPeriod((value ?? '30d') as ReportsPeriod)}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(REPORTS_PERIOD_LABELS) as ReportsPeriod[]).map((key) => (
+                <SelectItem key={key} value={key}>
+                  {REPORTS_PERIOD_LABELS[key]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
 
-        <Select
-          value={period}
-          onValueChange={(value) => setPeriod((value ?? '30d') as ReportsPeriod)}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(REPORTS_PERIOD_LABELS) as ReportsPeriod[]).map((key) => (
-              <SelectItem key={key} value={key}>
-                {REPORTS_PERIOD_LABELS[key]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {error ? (
-        <Card className="p-8 text-center">
-          <p className="text-sm text-muted-foreground">{error}</p>
-        </Card>
-      ) : isLoading || !data ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 rounded-lg" />
-          ))}
-        </div>
-      ) : (
-        <>
+      <MainPageCard className="p-6">
+        {error ? (
+          <EmptyState
+            title="Could not load reports"
+            description={error}
+            onRetry={() => void fetchReports(period)}
+          />
+        ) : isLoading || !data ? (
+          <PageLoadingSkeleton variant="cards" />
+        ) : (
+          <MainPageCardScroll contentClassName="flex flex-col gap-6 pr-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <SummaryCard
               label="Billed"
@@ -395,8 +394,9 @@ export function ReportsPageClient() {
               </div>
             )}
           </Card>
-        </>
-      )}
+          </MainPageCardScroll>
+        )}
+      </MainPageCard>
     </div>
   )
 }

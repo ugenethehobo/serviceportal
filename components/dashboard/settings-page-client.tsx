@@ -20,6 +20,9 @@ import { DocumentTemplateEditor } from '@/components/dashboard/document-template
 import { UserProfileSettings } from '@/components/dashboard/user-profile-settings'
 import { UserSignInSettings } from '@/components/dashboard/user-sign-in-settings'
 import { SaveStatusBadge, type SaveStatus } from '@/components/dashboard/save-status-badge'
+import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
+import { PageHeader } from '@/components/ui/page-header'
+import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Tooltip,
@@ -368,8 +371,8 @@ function SettingsPageContent() {
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading settings...</p>
+      <div className="flex h-full min-h-0 flex-col p-6">
+        <PageLoadingSkeleton />
       </div>
     )
   }
@@ -380,49 +383,51 @@ function SettingsPageContent() {
   const activeMeta = visibleSections.find((section) => section.id === activeSection)
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="shrink-0 border-b px-4 py-4 sm:px-6">
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {isAdmin
+    <div className="flex h-full min-h-0 flex-col p-6">
+      <PageHeader
+        title="Settings"
+        description={
+          isAdmin
             ? 'Manage your profile, company preferences, billing, and notifications.'
-            : 'Manage your profile and personal preferences.'}
-        </p>
-      </div>
+            : 'Manage your profile and personal preferences.'
+        }
+        size="compact"
+      />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <aside className="shrink-0 border-b lg:flex lg:w-72 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r xl:w-80">
-          <ScrollArea className="w-full lg:min-h-0 lg:flex-1" viewportClassName="scroll-fade-x lg:scroll-fade">
-            <TooltipProvider>
-              <nav className="flex lg:flex-col gap-1 p-3 min-w-max lg:min-w-0">
-                {visibleSections.map((section) => (
-                  <SettingsSectionButton
-                    key={section.id}
-                    section={section}
-                    isActive={activeSection === section.id}
-                    onClick={() => setActiveSection(section.id)}
-                    locked={section.id === 'integrations' && integrationsLocked}
-                    lockedTooltip={
-                      section.id === 'integrations' && integrationsLocked
-                        ? integrationsUpgradeMessage
-                        : undefined
-                    }
-                  />
-                ))}
-              </nav>
-            </TooltipProvider>
-          </ScrollArea>
-        </aside>
+      <MainPageCard className="min-h-0 flex-1 overflow-hidden p-0">
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <aside className="shrink-0 border-b lg:flex lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r xl:w-80">
+            <ScrollArea
+              className="w-full lg:min-h-0 lg:flex-1"
+              viewportClassName="scroll-fade-x lg:scroll-fade"
+            >
+              <TooltipProvider>
+                <nav className="flex min-w-max gap-1 p-3 lg:min-w-0 lg:flex-col">
+                  {visibleSections.map((section) => (
+                    <SettingsSectionButton
+                      key={section.id}
+                      section={section}
+                      isActive={activeSection === section.id}
+                      onClick={() => setActiveSection(section.id)}
+                      locked={section.id === 'integrations' && integrationsLocked}
+                      lockedTooltip={
+                        section.id === 'integrations' && integrationsLocked
+                          ? integrationsUpgradeMessage
+                          : undefined
+                      }
+                    />
+                  ))}
+                </nav>
+              </TooltipProvider>
+            </ScrollArea>
+          </aside>
 
-        {activeSection === 'invoice-template' && isAdmin ? (
-          <ScrollArea className="min-h-0 flex-1" viewportClassName="scroll-fade">
-            <main className="max-w-none p-4 sm:p-6 lg:p-8">
+          {activeSection === 'invoice-template' && isAdmin ? (
+            <MainPageCardScroll contentClassName="max-w-none p-4 sm:p-6 lg:p-8">
               <DocumentTemplateEditor />
-            </main>
-          </ScrollArea>
-        ) : (
-          <ScrollArea className="min-h-0 flex-1">
-            <main className={cn('p-4 sm:p-6 lg:p-8', 'max-w-4xl')}>
+            </MainPageCardScroll>
+          ) : (
+            <MainPageCardScroll contentClassName={cn('max-w-4xl p-4 sm:p-6 lg:p-8')}>
             {activeSection === 'profile' && (
               <UserProfileSettings
                 fullName={fullName}
@@ -554,10 +559,10 @@ function SettingsPageContent() {
             {activeMeta && (
               <p className="sr-only">Viewing {activeMeta.label} settings</p>
             )}
-            </main>
-          </ScrollArea>
-        )}
-      </div>
+            </MainPageCardScroll>
+          )}
+        </div>
+      </MainPageCard>
     </div>
   )
 }
@@ -566,8 +571,8 @@ export function SettingsPageClient() {
   return (
     <Suspense
       fallback={
-        <div className="h-full flex items-center justify-center">
-          <p className="text-sm text-muted-foreground">Loading settings...</p>
+        <div className="flex h-full min-h-0 flex-col p-6">
+          <PageLoadingSkeleton />
         </div>
       }
     >

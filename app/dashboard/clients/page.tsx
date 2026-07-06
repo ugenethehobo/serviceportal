@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
+import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
@@ -175,7 +176,7 @@ export default function ClientsPage() {
 
   const handleSaveClient = async () => {
     if (!newClient.name.trim()) {
-      alert('Client name is required')
+      toast.error('Client name is required')
       return
     }
 
@@ -228,7 +229,7 @@ export default function ClientsPage() {
       setIsAddModalOpen(false)
       await fetchClients()
     } else {
-      alert(result.error || 'Failed to save client')
+      toast.error(result.error || 'Failed to save client')
     }
 
     setIsCreatingClient(false)
@@ -320,7 +321,7 @@ const openEditClient = (client: Client) => {
       </div>
 
       {/* Main Content Card */}
-      <Card className="p-6 flex flex-col flex-1 min-h-0">
+      <MainPageCard className="p-6">
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-6">
           <div className="flex gap-4 items-center w-full sm:w-auto">
@@ -349,7 +350,7 @@ const openEditClient = (client: Client) => {
           </Tabs>
         </div>
 
-        <ScrollArea className="flex-1" viewportClassName="scroll-fade">
+        <MainPageCardScroll>
           {isLoading ? (
             // Loading Skeletons
             viewMode === 'list' ? (
@@ -532,8 +533,8 @@ const openEditClient = (client: Client) => {
               </div>
             )
           )}
-        </ScrollArea>
-      </Card>
+        </MainPageCardScroll>
+      </MainPageCard>
 
       {/* Add / Edit Client Modal */}
       <Dialog open={isAddModalOpen} onOpenChange={(open) => {

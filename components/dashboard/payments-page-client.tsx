@@ -5,7 +5,11 @@ import Link from 'next/link'
 import { getCompanyPaymentsAction, type PaymentsFilterSource } from '@/app/action'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
+import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
+import { PageHeader } from '@/components/ui/page-header'
+import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
 import {
   Select,
   SelectContent,
@@ -13,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -24,7 +27,7 @@ import {
 } from '@/components/ui/table'
 import { formatCurrency, type CompanyPaymentRow } from '@/lib/billing'
 import { REPORTS_PERIOD_LABELS, type ReportsPeriod } from '@/lib/reports'
-import { ExternalLink, Search } from 'lucide-react'
+import { CreditCard, ExternalLink, Search } from 'lucide-react'
 
 const SOURCE_LABELS: Record<PaymentsFilterSource, string> = {
   all: 'All sources',
@@ -104,132 +107,140 @@ export function PaymentsPageClient() {
   }, [fetchPayments])
 
   return (
-    <div className="p-6 flex flex-col gap-6 min-h-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
-          <p className="text-muted-foreground">
-            Every transaction across your company — portal card payments and in-person cash/check
-          </p>
-        </div>
+    <div className="p-6 flex flex-col h-full min-h-0">
+      <PageHeader
+        title="Payments"
+        description="Every transaction across your company — portal card payments and in-person cash/check"
+        actions={
+          <>
+            <Select
+              value={source}
+              onValueChange={(value) => setSource((value ?? 'all') as PaymentsFilterSource)}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(SOURCE_LABELS) as PaymentsFilterSource[]).map((key) => (
+                  <SelectItem key={key} value={key}>
+                    {SOURCE_LABELS[key]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Select value={source} onValueChange={(value) => setSource((value ?? 'all') as PaymentsFilterSource)}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(SOURCE_LABELS) as PaymentsFilterSource[]).map((key) => (
-                <SelectItem key={key} value={key}>
-                  {SOURCE_LABELS[key]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select
+              value={period}
+              onValueChange={(value) => setPeriod((value ?? '30d') as ReportsPeriod)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(REPORTS_PERIOD_LABELS) as ReportsPeriod[]).map((key) => (
+                  <SelectItem key={key} value={key}>
+                    {REPORTS_PERIOD_LABELS[key]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        }
+      />
 
-          <Select value={period} onValueChange={(value) => setPeriod((value ?? '30d') as ReportsPeriod)}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(REPORTS_PERIOD_LABELS) as ReportsPeriod[]).map((key) => (
-                <SelectItem key={key} value={key}>
-                  {REPORTS_PERIOD_LABELS[key]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="relative max-w-md">
-        <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search client, job, method..."
-          className="pl-9"
-        />
-      </div>
-
-      {error ? (
-        <Card className="p-8 text-center">
-          <p className="text-sm text-muted-foreground">{error}</p>
-        </Card>
-      ) : isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 rounded-lg" />
-          ))}
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <SummaryCard
-              label="Collected"
-              value={formatCurrency(summary.totalCollected)}
-              hint={`${summary.paymentCount} payments · ${periodLabel}`}
-            />
-            <SummaryCard
-              label="Client portal"
-              value={formatCurrency(summary.stripeTotal)}
-              hint="Stripe card payments"
-            />
-            <SummaryCard
-              label="Cash & check"
-              value={formatCurrency(summary.manualTotal)}
-              hint="Recorded in the dashboard"
-            />
+      <MainPageCard className="p-6">
+        {error ? (
+          <EmptyState
+            title="Could not load payments"
+            description={error}
+            onRetry={() => void fetchPayments()}
+          />
+        ) : isLoading ? (
+          <div className="space-y-6">
+            <PageLoadingSkeleton variant="cards" className="sm:grid-cols-3 xl:grid-cols-3" />
+            <PageLoadingSkeleton variant="table" />
           </div>
-
-          <Card className="shadow-sm overflow-hidden">
-            {payments.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Job</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="w-28" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {payments.map((payment) => (
-                    <TableRow key={payment.id}>
-                      <TableCell className="whitespace-nowrap">
-                        {new Date(payment.paymentDate + 'T00:00:00').toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="font-medium">{payment.clientName}</TableCell>
-                      <TableCell className="max-w-[220px] truncate">{payment.jobTitle}</TableCell>
-                      <TableCell>
-                        <PaymentSourceBadge payment={payment} />
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-green-700">
-                        {formatCurrency(payment.amount)}
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/dashboard/clients/${payment.clientId}/jobs/${payment.scheduleId}?tab=billing`}
-                          className="inline-flex items-center gap-1 text-sm font-medium hover:underline"
-                        >
-                          View
-                          <ExternalLink className="size-3.5" />
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="p-10 text-center text-sm text-muted-foreground">
-                No payments match this period and filter.
+        ) : (
+          <MainPageCardScroll contentClassName="flex flex-col gap-6 pr-2">
+              <div className="relative max-w-md">
+                <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search client, job, method..."
+                  className="pl-9"
+                />
               </div>
-            )}
-          </Card>
-        </>
-      )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <SummaryCard
+                  label="Collected"
+                  value={formatCurrency(summary.totalCollected)}
+                  hint={`${summary.paymentCount} payments · ${periodLabel}`}
+                />
+                <SummaryCard
+                  label="Client portal"
+                  value={formatCurrency(summary.stripeTotal)}
+                  hint="Stripe card payments"
+                />
+                <SummaryCard
+                  label="Cash & check"
+                  value={formatCurrency(summary.manualTotal)}
+                  hint="Recorded in the dashboard"
+                />
+              </div>
+
+              {payments.length > 0 ? (
+                <div className="rounded-lg border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Client</TableHead>
+                        <TableHead>Job</TableHead>
+                        <TableHead>Source</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="w-28" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {payments.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell className="whitespace-nowrap">
+                            {new Date(payment.paymentDate + 'T00:00:00').toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="font-medium">{payment.clientName}</TableCell>
+                          <TableCell className="max-w-[220px] truncate">{payment.jobTitle}</TableCell>
+                          <TableCell>
+                            <PaymentSourceBadge payment={payment} />
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-green-700">
+                            {formatCurrency(payment.amount)}
+                          </TableCell>
+                          <TableCell>
+                            <Link
+                              href={`/dashboard/clients/${payment.clientId}/jobs/${payment.scheduleId}?tab=billing`}
+                              className="inline-flex items-center gap-1 text-sm font-medium hover:underline"
+                            >
+                              View
+                              <ExternalLink className="size-3.5" />
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={CreditCard}
+                  title="No payments found"
+                  description="No payments match this period and filter."
+                />
+              )}
+          </MainPageCardScroll>
+        )}
+      </MainPageCard>
     </div>
   )
 }

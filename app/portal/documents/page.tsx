@@ -1,7 +1,7 @@
 import { getSessionProfile } from '@/lib/portal-auth'
 import { PortalPageHeader } from '@/components/portal/portal-page-header'
 import { ClientDocumentsPanel } from '@/components/dashboard/client-documents-panel'
-import { Card } from '@/components/ui/card'
+import { MainPageCard } from '@/components/ui/main-page-card'
 
 export default async function PortalDocumentsPage() {
   const session = await getSessionProfile()
@@ -14,12 +14,12 @@ export default async function PortalDocumentsPage() {
         description="Browse invoices, estimates, and files organized by job folder."
       />
 
-      <Card className="p-5 shadow-sm flex flex-col flex-1 min-h-0">
+      <MainPageCard className="p-5 shadow-sm">
         <ClientDocumentsPanel
           clientId={session.profile.client_id}
           variant="portal"
         />
-      </Card>
+      </MainPageCard>
     </div>
   )
 }

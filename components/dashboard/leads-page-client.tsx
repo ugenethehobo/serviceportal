@@ -26,6 +26,7 @@ import { StructuredAddressForm } from '@/components/dashboard/company-address-fo
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -410,7 +411,7 @@ export function LeadsPageClient() {
         </Button>
       </div>
 
-      <Card className="flex-1 flex flex-col overflow-hidden min-h-0 p-6">
+      <MainPageCard className="overflow-hidden p-6">
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-6 shrink-0">
           <div className="flex flex-wrap gap-3 items-center w-full lg:w-auto">
             <Input
@@ -482,7 +483,7 @@ export function LeadsPageClient() {
             </p>
           </div>
         ) : viewMode === 'list' ? (
-          <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+          <MainPageCardScroll>
             <div className="border rounded-lg overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40">
@@ -527,9 +528,9 @@ export function LeadsPageClient() {
                 </tbody>
               </table>
             </div>
-          </ScrollArea>
+          </MainPageCardScroll>
         ) : (
-          <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+          <MainPageCardScroll contentClassName="min-w-0">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 min-w-[960px] pb-2">
               {LEAD_PIPELINE_STATUSES.map((status) => (
                 <div
@@ -566,9 +567,9 @@ export function LeadsPageClient() {
                 </div>
               ))}
             </div>
-          </ScrollArea>
+          </MainPageCardScroll>
         )}
-      </Card>
+      </MainPageCard>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="w-full sm:max-w-lg flex flex-col p-0 gap-0">

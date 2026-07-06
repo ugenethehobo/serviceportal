@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react'
 import { getScheduleCalendarAction } from '@/app/action'
 import { ScheduleWeekGrid } from '@/components/dashboard/schedule-week-grid'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { MainPageCard } from '@/components/ui/main-page-card'
 import type { ScheduleCalendarData } from '@/lib/schedule-calendar'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 
@@ -87,13 +87,13 @@ export function ScheduleCalendarPageClient({
         </div>
       </div>
 
-      <Card className="flex-1 min-h-0 p-0 overflow-hidden shadow-sm flex flex-col">
+      <MainPageCard className="gap-0 overflow-hidden p-0 shadow-sm">
         <ScheduleWeekGrid
           data={data}
           isLoadingWeek={isLoadingWeek}
           onRescheduled={refresh}
         />
-      </Card>
+      </MainPageCard>
     </div>
   )
 }

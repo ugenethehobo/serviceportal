@@ -27,6 +27,7 @@ import { createCompanyUser } from '@/app/action'
 import { getCompanyData } from '@/app/action'
 import { updateCompanyUser } from '@/app/action'
 import { ImageAttachmentField } from '@/components/admin/image-attachment-field'
+import { toast } from 'sonner'
 
 interface User {
   id: string
@@ -98,15 +99,15 @@ export default function CompanyUsersPage() {
 
         setIsDeleteConfirmOpen(false)
         setUserToDelete(null)
-        alert('User and all associated data deleted successfully.')
+        toast.success('User and all associated data deleted successfully.')
       } else {
-        alert(result.error || 'Failed to delete user')
+        toast.error(result.error || 'Failed to delete user')
         setIsDeleteConfirmOpen(false)
         setUserToDelete(null)
       }
     } catch (error: any) {
       console.error('Delete error:', error)
-      alert(error.message || 'An unexpected error occurred')
+      toast.error(error.message || 'An unexpected error occurred')
       setIsDeleteConfirmOpen(false)
       setUserToDelete(null)
     }
@@ -172,7 +173,7 @@ export default function CompanyUsersPage() {
 
   const handleSaveUser = async () => {
     if (!newUser.displayName || !newUser.email || !company) {
-      alert('Display name and email are required')
+      toast.error('Display name and email are required')
       return
     }
 
@@ -213,7 +214,7 @@ export default function CompanyUsersPage() {
       } else {
         // === ADD MODE ===
         if (!newUser.password) {
-          alert('Password is required when creating a new user')
+          toast.error('Password is required when creating a new user')
           setIsCreatingUser(false)
           return
         }
@@ -236,11 +237,11 @@ export default function CompanyUsersPage() {
       setNewUser({ displayName: '', email: '', password: '', role: 'team_member' })
       resetPhotoState(null)
 
-      alert(editingUser ? 'User updated successfully!' : 'User created successfully!')
+      toast.success(editingUser ? 'User updated successfully!' : 'User created successfully!')
 
     } catch (error: any) {
       console.error('Error saving user:', error)
-      alert(error.message || 'Failed to save user')
+      toast.error(error.message || 'Failed to save user')
     } finally {
       setIsCreatingUser(false)
     }

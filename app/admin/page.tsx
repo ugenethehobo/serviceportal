@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import {
   adminUpsertCompanyAction,
@@ -268,7 +269,7 @@ export default function AdminDashboard() {
 
   const handleSaveCompany = async () => {
     if (!companyForm.name.trim()) {
-      alert('Company name is required')
+      toast.error('Company name is required')
       return
     }
 
@@ -306,7 +307,7 @@ export default function AdminDashboard() {
       })
 
       if (!result.success) {
-        alert(result.error || 'Failed to save company')
+        toast.error(result.error || 'Failed to save company')
         return
       }
 
@@ -315,7 +316,7 @@ export default function AdminDashboard() {
     } catch (error: unknown) {
       console.error('Error saving company:', error)
       const message = error instanceof Error ? error.message : 'Failed to save company'
-      alert(message)
+      toast.error(message)
     } finally {
       setIsSavingCompany(false)
     }

@@ -20,6 +20,7 @@ import { TeamPageSkeleton } from '@/components/dashboard/team-page-client'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -28,7 +29,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { toast } from 'sonner'
 import { X } from 'lucide-react'
+import { PageHeader } from '@/components/ui/page-header'
 
 interface Profile {
   id: string
@@ -155,7 +158,7 @@ export default function CrewsPage() {
 
   const handleCreateCrew = async () => {
     if (!newCrewName.trim()) {
-      alert('Crew name is required')
+      toast.error('Crew name is required')
       return
     }
 
@@ -184,7 +187,7 @@ export default function CrewsPage() {
       setIsAddModalOpen(false)
       await fetchData()
     } else {
-      alert(result.error || 'Failed to create crew')
+      toast.error(result.error || 'Failed to create crew')
     }
     setIsCreating(false)
   }
@@ -206,7 +209,7 @@ export default function CrewsPage() {
       setEditingCrew(null)
       await fetchData()
     } else {
-      alert(result.error || 'Failed to update crew')
+      toast.error(result.error || 'Failed to update crew')
     }
     setIsCreating(false)
   }
@@ -223,7 +226,7 @@ export default function CrewsPage() {
       setEditingCrew(null)
       await fetchData()
     } else {
-      alert(result.error || 'Failed to delete crew')
+      toast.error(result.error || 'Failed to delete crew')
     }
   }
 
@@ -247,7 +250,7 @@ export default function CrewsPage() {
 
   if (!modeLoaded) {
     return (
-      <div className="h-[100vh] flex flex-col min-h-0">
+      <div className="flex h-full min-h-0 flex-col p-6">
         <TeamPageSkeleton />
       </div>
     )
@@ -255,20 +258,18 @@ export default function CrewsPage() {
 
   if (isSoloBusiness) {
     return (
-      <div className="h-[100vh] flex flex-col min-h-0">
+      <div className="flex h-full min-h-0 flex-col">
         <SoloTeamView />
       </div>
     )
   }
 
   return (
-    <div className="p-6 flex flex-col h-[100vh]">
-      <div className="mb-4 flex-shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight">Crews & Team</h1>
-        <p className="text-muted-foreground">
-          Manage field crews and team member accounts
-        </p>
-      </div>
+    <div className="p-6 flex flex-col h-full min-h-0">
+      <PageHeader
+        title="Crews & Team"
+        description="Manage field crews and team member accounts"
+      />
 
       <Tabs
         value={activeTab}
@@ -304,8 +305,8 @@ export default function CrewsPage() {
             </TooltipProvider>
           </div>
 
-      <Card className="flex-1 flex flex-col overflow-hidden p-6 min-h-0">
-        <ScrollArea className="flex-1 pr-2" viewportClassName="scroll-fade">
+      <MainPageCard className="overflow-hidden p-6">
+        <MainPageCardScroll className="pr-2">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {crews.length > 0 ? (
               crews.map((crew) => {
@@ -352,8 +353,8 @@ export default function CrewsPage() {
               </div>
             )}
           </div>
-        </ScrollArea>
-      </Card>
+        </MainPageCardScroll>
+      </MainPageCard>
         </TabsContent>
 
         <TabsContent value="team" className="flex flex-1 flex-col min-h-0 mt-0">

@@ -4,14 +4,7 @@ import { usePathname } from 'next/navigation'
 import { NavigationProgress } from '@/components/navigation/navigation-progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
-const FULL_SCREEN_ROUTE_PREFIXES = [
-  '/dashboard/clients',
-  '/dashboard/leads',
-  '/dashboard/routes',
-  '/dashboard/schedule',
-  '/dashboard/settings',
-  '/dashboard/team',
-]
+const FULL_SCREEN_ROUTE_PREFIXES = ['/dashboard']
 
 function isFullScreenRoute(pathname: string) {
   return FULL_SCREEN_ROUTE_PREFIXES.some(

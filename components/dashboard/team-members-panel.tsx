@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ScrollArea } from '@/components/ui/scroll-area'
+
 import {
   Tooltip,
   TooltipContent,
@@ -284,8 +285,8 @@ export function TeamMembersPanel() {
           )}
         </div>
 
-        <Card className="flex-1 flex flex-col overflow-hidden p-6 min-h-0">
-          <ScrollArea className="flex-1 pr-2" viewportClassName="scroll-fade">
+        <MainPageCard className="overflow-hidden p-6">
+          <MainPageCardScroll className="pr-2">
             {members.length > 0 ? (
               <div className="space-y-3">
                 {members.map((member) => {
@@ -359,8 +360,8 @@ export function TeamMembersPanel() {
                 )}
               </div>
             )}
-          </ScrollArea>
-        </Card>
+          </MainPageCardScroll>
+        </MainPageCard>
 
         <Dialog
           open={isModalOpen}

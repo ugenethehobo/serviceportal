@@ -37,6 +37,7 @@ import {
   updateClientAction,
 } from '@/app/action'
 import { SOLO_CREW_NAME } from '@/lib/company-operations'
+import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
 import { toast } from 'sonner'
 import { StructuredAddressForm } from '@/components/dashboard/company-address-form'
 import {
@@ -201,7 +202,7 @@ export default function ClientDetailPage() {
     if (result.success) {
       setClient({ ...client, [field]: value || undefined })
     } else {
-      alert('Failed to save changes')
+      toast.error('Failed to save changes')
       setTempValue((client as any)[field] || '')
     }
     setEditingField(null)
@@ -264,7 +265,7 @@ export default function ClientDetailPage() {
       })
       closeAddressModal()
     } else {
-      alert(result.error || 'Failed to save address')
+      toast.error(result.error || 'Failed to save address')
     }
 
     setIsSavingAddress(false)
@@ -364,7 +365,7 @@ export default function ClientDetailPage() {
 
   const handleCreateJob = async () => {
     if (!newJob.title || !newJob.startTime || !newJob.endTime) {
-      alert('Title, start time, and end time are required')
+      toast.error('Title, start time, and end time are required')
       return
     }
 
@@ -444,7 +445,7 @@ export default function ClientDetailPage() {
           suggestedCrews: result.suggestedCrews,
         })
       } else {
-        alert(result.error || 'Failed to create job')
+        toast.error(result.error || 'Failed to create job')
       }
     }
 
@@ -537,7 +538,11 @@ export default function ClientDetailPage() {
 
   // ==================== RENDER ====================
   if (isLoading || !client) {
-    return <div className="p-6">Loading...</div>
+    return (
+      <div className="flex h-full min-h-0 flex-col p-6">
+        <PageLoadingSkeleton />
+      </div>
+    )
   }
 
   const archivedFiltered = showArchived
