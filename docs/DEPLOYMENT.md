@@ -51,6 +51,17 @@ Copy `.env.example` to `.env.local` for local development. Set the same values i
 
 Register the redirect URI in the [Intuit Developer Portal](https://developer.intuit.com/). P0 stores OAuth tokens only — invoice/payment sync is deferred to P3.
 
+### Google Calendar (Pro integrations)
+
+| Variable | Purpose |
+|----------|---------|
+| `GOOGLE_CALENDAR_CLIENT_ID` | Google Cloud OAuth client ID |
+| `GOOGLE_CALENDAR_CLIENT_SECRET` | Google Cloud OAuth client secret |
+| `GOOGLE_CALENDAR_REDIRECT_URI` | OAuth callback URL. Defaults to `{NEXT_PUBLIC_APP_URL}/api/integrations/google-calendar/callback` |
+| `GOOGLE_CALENDAR_OAUTH_STATE_SECRET` | HMAC secret for OAuth state. Defaults to `SUPABASE_SERVICE_ROLE_KEY` |
+
+Enable the Google Calendar API in [Google Cloud Console](https://console.cloud.google.com/) and add the redirect URI to your OAuth client. P1 ships one-way export: jobs → calendar events.
+
 ### Optional
 
 | Variable | Purpose |
@@ -96,6 +107,8 @@ All SQL files live in `supabase/`. Run them in the **Supabase SQL editor** (or v
 | 24 | `platform-trial-schema.sql` | Backfill / expire trial companies (data migration) |
 | 25 | `company-solo-schema.sql` | `is_solo_business` on `companies` |
 | 26 | `document-templates-schema.sql` | Unified `document_templates` JSONB on `companies` |
+| 27 | `booking-schema.sql` | Public client booking mode, slug, bookable services |
+| 28 | `google-calendar-schema.sql` | `google_calendar_event_id` on `schedules` |
 
 ### Quick checklist for common feature gaps
 

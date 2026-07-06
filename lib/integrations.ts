@@ -20,7 +20,7 @@ export const INTEGRATION_PROVIDERS: Record<
   },
   google_calendar: {
     label: 'Google Calendar',
-    description: 'Two-way sync between jobs and your Google Calendar.',
+    description: 'Export scheduled jobs to a Google Calendar (one-way).',
     connectType: 'oauth',
   },
   zapier: {

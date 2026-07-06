@@ -517,6 +517,59 @@ export async function notifyPaymentReceived(
   }
 }
 
+export async function notifyClientBookingConfirmed(
+  supabaseAdmin: SupabaseClient,
+  input: {
+    companyId: string
+    companyName?: string
+    clientId: string
+    clientEmail?: string | null
+    clientPhone?: string | null
+    clientName?: string | null
+    jobTitle: string
+    startTime: string
+    scheduleId: string
+  }
+) {
+  const baseUrl = getAppBaseUrl()
+  const portalUrl = `${baseUrl}/portal/jobs`
+  const companyName = input.companyName?.trim() || 'Your service company'
+  const clientLabel = input.clientName?.trim() || 'there'
+  const when = new Date(input.startTime).toLocaleString([], {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+
+  await dispatchNotification(supabaseAdmin, {
+    companyId: input.companyId,
+    event: 'visit_reminder',
+    email: input.clientEmail
+      ? {
+          to: input.clientEmail,
+          subject: `Visit confirmed with ${companyName}`,
+          html: buildEmailShell(
+            companyName,
+            'Your visit is confirmed',
+            `<p>Hi ${escapeHtml(clientLabel)},</p><p>Your booking for <strong>${escapeHtml(input.jobTitle)}</strong> is confirmed for <strong>${escapeHtml(when)}</strong>.</p>`,
+            { label: 'View your visits', href: portalUrl }
+          ),
+          text: `Your visit "${input.jobTitle}" is confirmed for ${when}. View: ${portalUrl}`,
+        }
+      : undefined,
+    sms: input.clientPhone
+      ? {
+          phone: input.clientPhone,
+          message: `${companyName}: "${input.jobTitle}" confirmed for ${when}. ${portalUrl}`,
+        }
+      : undefined,
+    metadata: {
+      schedule_id: input.scheduleId,
+      client_id: input.clientId,
+      source: 'online_booking',
+    },
+  })
+}
+
 export async function notifyClientVisitReminder(
   supabaseAdmin: SupabaseClient,
   input: {

@@ -1,4 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
+import {
+  expandWindowWithBuffer,
+  schedulesOverlapWithBuffer,
+} from '@/lib/schedule-conflicts'
+
+export { schedulesOverlapWithBuffer } from '@/lib/schedule-conflicts'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,8 +18,13 @@ const supabaseAdmin = createClient(
 )
 
 // ============================================
-// CORE SCHEDULING ENGINE - Phase 1
+// CORE SCHEDULING ENGINE
 // ============================================
+
+export type SchedulingConflictOptions = {
+  bufferMinutes?: number
+  excludeScheduleId?: string
+}
 
 /**
  * Get all jobs for a crew that overlap with a given time window
@@ -21,9 +32,11 @@ const supabaseAdmin = createClient(
  export async function getCrewConflictingSchedules(
    crewId: string,
    startTime: string | Date,
-   endTime: string | Date
+   endTime: string | Date,
+   options?: SchedulingConflictOptions
  ) {
-   const { data, error } = await supabaseAdmin
+   const window = expandWindowWithBuffer(startTime, endTime, options?.bufferMinutes ?? 0)
+   let query = supabaseAdmin
      .from('schedules')
      .select(`
        id,
@@ -35,8 +48,15 @@ const supabaseAdmin = createClient(
      `)
      .eq('crew_id', crewId)
      .neq('status', 'cancelled')
-     .lte('start_time', endTime)
-     .gte('end_time', startTime)
+     .neq('status', 'archived')
+     .lte('start_time', window.endIso)
+     .gte('end_time', window.startIso)
+
+   if (options?.excludeScheduleId) {
+     query = query.neq('id', options.excludeScheduleId)
+   }
+
+   const { data, error } = await query
 
    if (error) {
      console.error('Error fetching conflicting schedules:', error)
@@ -52,10 +72,25 @@ const supabaseAdmin = createClient(
 export async function isCrewAvailable(
   crewId: string,
   startTime: string | Date,
-  endTime: string | Date
+  endTime: string | Date,
+  options?: SchedulingConflictOptions
 ): Promise<boolean> {
-  const conflictingJobs = await getCrewConflictingSchedules(crewId, startTime, endTime)
-  return conflictingJobs.length === 0
+  const conflictingJobs = await getCrewConflictingSchedules(
+    crewId,
+    startTime,
+    endTime,
+    options
+  )
+  const bufferMinutes = options?.bufferMinutes ?? 0
+  return !conflictingJobs.some((job) =>
+    schedulesOverlapWithBuffer(
+      job.start_time,
+      job.end_time,
+      startTime,
+      endTime,
+      bufferMinutes
+    )
+  )
 }
 
 /**
@@ -64,7 +99,8 @@ export async function isCrewAvailable(
 export async function getAvailableCrews(
   companyId: string,
   startTime: string | Date,
-  endTime: string | Date
+  endTime: string | Date,
+  options?: SchedulingConflictOptions
 ) {
   // Get all crews for the company
   const { data: crews, error } = await supabaseAdmin
@@ -81,7 +117,7 @@ export async function getAvailableCrews(
   const availableCrews = []
 
   for (const crew of crews) {
-    const isAvailable = await isCrewAvailable(crew.id, startTime, endTime)
+    const isAvailable = await isCrewAvailable(crew.id, startTime, endTime, options)
     if (isAvailable) {
       availableCrews.push(crew)
     }
@@ -97,9 +133,10 @@ export async function suggestAlternativeCrews(
   companyId: string,
   startTime: string | Date,
   endTime: string | Date,
-  excludeCrewId?: string
+  excludeCrewId?: string,
+  options?: SchedulingConflictOptions
 ) {
-  const available = await getAvailableCrews(companyId, startTime, endTime)
+  const available = await getAvailableCrews(companyId, startTime, endTime, options)
 
   if (excludeCrewId) {
     return available.filter(crew => crew.id !== excludeCrewId)
@@ -114,16 +151,32 @@ export async function suggestAlternativeCrews(
 export async function checkJobConflict(
   crewId: string | null,
   startTime: string | Date,
-  endTime: string | Date
+  endTime: string | Date,
+  options?: SchedulingConflictOptions
 ): Promise<{ hasConflict: boolean; conflictingJobs: any[] }> {
   if (!crewId) {
     return { hasConflict: false, conflictingJobs: [] }
   }
 
-  const conflictingJobs = await getCrewConflictingSchedules(crewId, startTime, endTime)
+  const bufferMinutes = options?.bufferMinutes ?? 0
+  const conflictingJobs = await getCrewConflictingSchedules(
+    crewId,
+    startTime,
+    endTime,
+    options
+  )
+  const filtered = conflictingJobs.filter((job) =>
+    schedulesOverlapWithBuffer(
+      job.start_time,
+      job.end_time,
+      startTime,
+      endTime,
+      bufferMinutes
+    )
+  )
 
   return {
-    hasConflict: conflictingJobs.length > 0,
-    conflictingJobs,
+    hasConflict: filtered.length > 0,
+    conflictingJobs: filtered,
   }
 }

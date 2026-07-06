@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
+import { sanitizeGoogleCalendarConfigForClient } from '@/lib/google-calendar-oauth'
 
 export const QUICKBOOKS_OAUTH_SCOPES = ['com.intuit.quickbooks.accounting'] as const
 
@@ -237,6 +238,10 @@ export function sanitizeIntegrationConfigForClient(
   provider: 'quickbooks' | 'google_calendar' | 'zapier',
   config: Record<string, unknown>
 ): Record<string, unknown> {
+  if (provider === 'google_calendar') {
+    return sanitizeGoogleCalendarConfigForClient(config)
+  }
+
   if (provider !== 'quickbooks') return config
 
   const sanitized: Record<string, unknown> = {}

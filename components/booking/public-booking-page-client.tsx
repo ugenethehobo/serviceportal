@@ -1,0 +1,544 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import {
+  confirmPublicOnlineBookingAction,
+  createPublicBookingRequestAction,
+  getPublicBookingSlotsAction,
+  type PublicBookingPageData,
+} from '@/app/booking-actions'
+import { StructuredAddressForm } from '@/components/dashboard/company-address-form'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  emptyStructuredAddress,
+  isStructuredAddressEmpty,
+  validateStructuredAddressIfPresent,
+  type StructuredAddress,
+  type StructuredAddressErrors,
+} from '@/lib/address'
+import {
+  formatBookingDuration,
+  formatBookingPrice,
+  type BookingSlot,
+} from '@/lib/booking-slots'
+import type { BookableService } from '@/lib/booking'
+import { cn } from '@/lib/utils'
+import { CalendarDays, CheckCircle2, ClipboardList, Loader2 } from 'lucide-react'
+
+type BookingDateOption = {
+  dateStr: string
+  label: string
+}
+
+interface PublicBookingPageClientProps {
+  slug: string
+  data: PublicBookingPageData
+  dateOptions: BookingDateOption[]
+}
+
+type SuccessState =
+  | { mode: 'request_form' }
+  | { mode: 'online_booking'; serviceName: string; startTime: string }
+
+export function PublicBookingPageClient({
+  slug,
+  data,
+  dateOptions,
+}: PublicBookingPageClientProps) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [notes, setNotes] = useState('')
+  const [preferredTime, setPreferredTime] = useState('')
+  const [address, setAddress] = useState<StructuredAddress>(emptyStructuredAddress())
+  const [addressErrors, setAddressErrors] = useState<StructuredAddressErrors>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState<SuccessState | null>(null)
+
+  const [selectedServiceId, setSelectedServiceId] = useState<string>(
+    data.services[0]?.id || ''
+  )
+  const [selectedDate, setSelectedDate] = useState(dateOptions[0]?.dateStr || '')
+  const [slots, setSlots] = useState<BookingSlot[]>([])
+  const [slotsLoading, setSlotsLoading] = useState(false)
+  const [selectedSlotIso, setSelectedSlotIso] = useState<string | null>(null)
+
+  const selectedService = useMemo(
+    () => data.services.find((service) => service.id === selectedServiceId) || null,
+    [data.services, selectedServiceId]
+  )
+
+  useEffect(() => {
+    if (data.bookingMode !== 'online_booking' || !selectedServiceId || !selectedDate) return
+    void loadSlots(selectedServiceId, selectedDate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const heading =
+    data.bookingMode === 'online_booking'
+      ? data.bookingSettings.online_booking_heading
+      : data.bookingSettings.request_form_heading
+
+  const validateAddress = () => {
+    const validation = validateStructuredAddressIfPresent(address)
+    setAddressErrors(validation.errors)
+    return validation.valid
+  }
+
+  const addressPayload = isStructuredAddressEmpty(address) ? undefined : address
+
+  const handleRequestSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setError('')
+
+    if (!name.trim()) {
+      setError('Name is required')
+      return
+    }
+    if (!email.trim() && !phone.trim()) {
+      setError('Email or phone is required')
+      return
+    }
+    if (!validateAddress()) return
+
+    setIsSubmitting(true)
+    const result = await createPublicBookingRequestAction({
+      slug,
+      name,
+      email,
+      phone,
+      notes,
+      preferredTime,
+      leadAddress: addressPayload,
+    })
+    setIsSubmitting(false)
+
+    if (!result.success) {
+      setError(result.error || 'Could not submit request')
+      return
+    }
+
+    setSuccess({ mode: 'request_form' })
+  }
+
+  const loadSlots = async (serviceId: string, dateStr: string) => {
+    if (!serviceId || !dateStr) {
+      setSlots([])
+      setSelectedSlotIso(null)
+      return
+    }
+
+    setSlotsLoading(true)
+    setError('')
+    const result = await getPublicBookingSlotsAction({ slug, serviceId, dateStr })
+    setSlotsLoading(false)
+
+    if (!result.success) {
+      setError(result.error || 'Could not load available times')
+      setSlots([])
+      setSelectedSlotIso(null)
+      return
+    }
+
+    setSlots(result.slots)
+    setSelectedSlotIso(result.slots[0]?.startIso || null)
+  }
+
+  const handleServiceChange = async (serviceId: string) => {
+    setSelectedServiceId(serviceId)
+    await loadSlots(serviceId, selectedDate)
+  }
+
+  const handleDateChange = async (dateStr: string) => {
+    setSelectedDate(dateStr)
+    await loadSlots(selectedServiceId, dateStr)
+  }
+
+  const handleOnlineSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setError('')
+
+    if (!selectedServiceId) {
+      setError('Select a service')
+      return
+    }
+    if (!selectedSlotIso) {
+      setError('Select an available time')
+      return
+    }
+    if (!name.trim()) {
+      setError('Name is required')
+      return
+    }
+    if (!email.trim()) {
+      setError('Email is required')
+      return
+    }
+    if (!validateAddress()) return
+
+    setIsSubmitting(true)
+    const result = await confirmPublicOnlineBookingAction({
+      slug,
+      serviceId: selectedServiceId,
+      startIso: selectedSlotIso,
+      name,
+      email,
+      phone,
+      notes,
+      leadAddress: addressPayload,
+    })
+    setIsSubmitting(false)
+
+    if (!result.success) {
+      setError(result.error || 'Could not complete booking')
+      await loadSlots(selectedServiceId, selectedDate)
+      return
+    }
+
+    setSuccess({
+      mode: 'online_booking',
+      serviceName: result.serviceName,
+      startTime: result.startTime,
+    })
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
+        <Card className="w-full max-w-lg">
+          <CardHeader className="text-center space-y-3">
+            <div className="mx-auto rounded-full bg-emerald-500/10 p-3 w-fit">
+              <CheckCircle2 className="size-8 text-emerald-600" />
+            </div>
+            <CardTitle>
+              {success.mode === 'online_booking' ? 'Visit booked' : 'Request received'}
+            </CardTitle>
+            <CardDescription>
+              {success.mode === 'online_booking' ? (
+                <>
+                  Your <strong>{success.serviceName}</strong> visit is confirmed for{' '}
+                  <strong>
+                    {new Date(success.startTime).toLocaleString([], {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </strong>
+                  . We sent a confirmation to your email.
+                </>
+              ) : (
+                <>
+                  Thanks — {data.companyName} received your request and will follow up soon.
+                </>
+              )}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-muted/30 py-8 px-4">
+      <div className="mx-auto w-full max-w-2xl space-y-6">
+        <div className="text-center space-y-3">
+          {data.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.logoUrl}
+              alt={`${data.companyName} logo`}
+              className="mx-auto h-14 w-auto object-contain"
+            />
+          ) : null}
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">{data.companyName}</h1>
+            <p className="text-muted-foreground mt-1">{heading}</p>
+          </div>
+          {data.bookingSettings.welcome_message ? (
+            <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+              {data.bookingSettings.welcome_message}
+            </p>
+          ) : null}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              {data.bookingMode === 'online_booking' ? (
+                <CalendarDays className="size-5 text-muted-foreground" />
+              ) : (
+                <ClipboardList className="size-5 text-muted-foreground" />
+              )}
+              {data.bookingMode === 'online_booking' ? 'Book a visit' : 'Request service'}
+            </CardTitle>
+            <CardDescription>
+              {data.bookingMode === 'online_booking'
+                ? 'Choose a service and available time. We assign the best crew automatically.'
+                : 'Tell us what you need and we will reach out to schedule.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {data.bookingMode === 'request_form' ? (
+              <form onSubmit={handleRequestSubmit} className="space-y-4">
+                <ContactFields
+                  name={name}
+                  email={email}
+                  phone={phone}
+                  notes={notes}
+                  onNameChange={setName}
+                  onEmailChange={setEmail}
+                  onPhoneChange={setPhone}
+                  onNotesChange={setNotes}
+                  emailRequired={false}
+                />
+                <div>
+                  <Label htmlFor="preferred-time">Preferred time (optional)</Label>
+                  <Input
+                    id="preferred-time"
+                    value={preferredTime}
+                    onChange={(event) => setPreferredTime(event.target.value)}
+                    placeholder="Weekday mornings, after 3pm, etc."
+                    className="mt-1"
+                  />
+                </div>
+                <StructuredAddressForm
+                  value={address}
+                  onChange={setAddress}
+                  errors={addressErrors}
+                  idPrefix="booking"
+                  required={false}
+                />
+                {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="size-4 mr-2 animate-spin" />
+                      Submitting…
+                    </>
+                  ) : (
+                    'Submit request'
+                  )}
+                </Button>
+              </form>
+            ) : data.services.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Online booking is not available yet. Please contact {data.companyName} directly.
+              </p>
+            ) : (
+              <form onSubmit={handleOnlineSubmit} className="space-y-5">
+                <div className="space-y-2">
+                  <Label>Service</Label>
+                  <div className="grid gap-2">
+                    {data.services.map((service) => (
+                      <ServiceOption
+                        key={service.id}
+                        service={service}
+                        selected={selectedServiceId === service.id}
+                        onSelect={() => handleServiceChange(service.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="booking-date">Date</Label>
+                  <select
+                    id="booking-date"
+                    value={selectedDate}
+                    onChange={(event) => handleDateChange(event.target.value)}
+                    className="w-full border rounded-md px-3 py-2 bg-background h-9 text-sm"
+                  >
+                    {dateOptions.map((option) => (
+                      <option key={option.dateStr} value={option.dateStr}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Available times</Label>
+                  {slotsLoading ? (
+                    <p className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="size-4 animate-spin" />
+                      Loading times…
+                    </p>
+                  ) : slots.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No open times on this day. Try another date
+                      {selectedService ? ` for ${selectedService.name}` : ''}.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {slots.map((slot) => (
+                        <button
+                          key={slot.startIso}
+                          type="button"
+                          onClick={() => setSelectedSlotIso(slot.startIso)}
+                          className={cn(
+                            'rounded-md border px-3 py-2 text-sm transition-colors',
+                            selectedSlotIso === slot.startIso
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'hover:bg-muted'
+                          )}
+                        >
+                          {slot.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <ContactFields
+                  name={name}
+                  email={email}
+                  phone={phone}
+                  notes={notes}
+                  onNameChange={setName}
+                  onEmailChange={setEmail}
+                  onPhoneChange={setPhone}
+                  onNotesChange={setNotes}
+                  emailRequired
+                />
+                <StructuredAddressForm
+                  value={address}
+                  onChange={setAddress}
+                  errors={addressErrors}
+                  idPrefix="booking-online"
+                  required={false}
+                />
+                {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting || slotsLoading || !selectedSlotIso}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="size-4 mr-2 animate-spin" />
+                      Booking…
+                    </>
+                  ) : (
+                    'Confirm booking'
+                  )}
+                </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+function ServiceOption({
+  service,
+  selected,
+  onSelect,
+}: {
+  service: BookableService
+  selected: boolean
+  onSelect: () => void
+}) {
+  const priceLabel = formatBookingPrice(service.price_estimate)
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        'w-full rounded-lg border px-4 py-3 text-left transition-colors',
+        selected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-medium">{service.name}</p>
+          {service.description ? (
+            <p className="text-sm text-muted-foreground mt-0.5">{service.description}</p>
+          ) : null}
+        </div>
+        <div className="text-right text-sm text-muted-foreground shrink-0">
+          <p>{formatBookingDuration(service.duration_minutes)}</p>
+          {priceLabel ? <p>{priceLabel}</p> : null}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function ContactFields({
+  name,
+  email,
+  phone,
+  notes,
+  onNameChange,
+  onEmailChange,
+  onPhoneChange,
+  onNotesChange,
+  emailRequired,
+}: {
+  name: string
+  email: string
+  phone: string
+  notes: string
+  onNameChange: (value: string) => void
+  onEmailChange: (value: string) => void
+  onPhoneChange: (value: string) => void
+  onNotesChange: (value: string) => void
+  emailRequired: boolean
+}) {
+  return (
+    <div className="space-y-4 border-t pt-5">
+      <p className="text-sm font-medium">Your contact info</p>
+      <div>
+        <Label htmlFor="booking-name">Name *</Label>
+        <Input
+          id="booking-name"
+          value={name}
+          onChange={(event) => onNameChange(event.target.value)}
+          className="mt-1"
+          required
+        />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="booking-email">
+            Email{emailRequired ? ' *' : ' (email or phone required)'}
+          </Label>
+          <Input
+            id="booking-email"
+            type="email"
+            value={email}
+            onChange={(event) => onEmailChange(event.target.value)}
+            className="mt-1"
+            required={emailRequired}
+          />
+        </div>
+        <div>
+          <Label htmlFor="booking-phone">Phone</Label>
+          <Input
+            id="booking-phone"
+            type="tel"
+            value={phone}
+            onChange={(event) => onPhoneChange(event.target.value)}
+            className="mt-1"
+          />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor="booking-notes">Notes (optional)</Label>
+        <Textarea
+          id="booking-notes"
+          value={notes}
+          onChange={(event) => onNotesChange(event.target.value)}
+          className="mt-1"
+          rows={3}
+        />
+      </div>
+    </div>
+  )
+}

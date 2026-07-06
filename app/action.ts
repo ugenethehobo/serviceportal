@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { normalizeBookingSettings } from '@/lib/booking'
 import {
   checkJobConflict,
   suggestAlternativeCrews
@@ -879,22 +880,19 @@ export async function createJobAction(data: {
   )
 
   try {
-    // Check for conflicts using schedules table
     if (data.crewId) {
-      const { data: conflicting } = await supabaseAdmin
-        .from('schedules')
-        .select('id')
-        .eq('crew_id', data.crewId)
-        .neq('status', 'cancelled')
-        .lte('start_time', data.endTime)
-        .gte('end_time', data.startTime)
+      const bufferMinutes = await getCompanyTravelBufferMinutes(supabaseAdmin, data.companyId)
+      const conflict = await checkJobConflict(data.crewId, data.startTime, data.endTime, {
+        bufferMinutes,
+      })
 
-      if (conflicting && conflicting.length > 0) {
+      if (conflict.hasConflict) {
         const alternatives = await suggestAlternativeCrews(
           data.companyId,
           data.startTime,
           data.endTime,
-          data.crewId
+          data.crewId,
+          { bufferMinutes }
         )
 
         return {
@@ -983,6 +981,9 @@ export async function createJobAction(data: {
         revalidatePath(`/dashboard/clients/${data.clientId}`)
         revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${newSchedule.id}`)
         revalidatePath('/dashboard/schedule')
+
+        const { queueGoogleCalendarSync } = await import('@/lib/google-calendar-sync')
+        await queueGoogleCalendarSync(supabaseAdmin, newSchedule.id)
 
         return { success: true, schedule: newSchedule }
   } catch (error: any) {
@@ -1183,6 +1184,19 @@ function createSupabaseAdmin() {
   )
 }
 
+async function getCompanyTravelBufferMinutes(
+  supabaseAdmin: ReturnType<typeof createSupabaseAdmin>,
+  companyId: string
+) {
+  const { data } = await supabaseAdmin
+    .from('companies')
+    .select('booking_settings')
+    .eq('id', companyId)
+    .single()
+
+  return normalizeBookingSettings(data?.booking_settings).travel_buffer_minutes
+}
+
 export async function getJobAction(jobId: string, clientId: string) {
   const supabaseAdmin = createSupabaseAdmin()
 
@@ -1251,22 +1265,19 @@ export async function updateJobAction(data: {
     const crewId = data.crewId !== undefined ? data.crewId : existing.crew_id
 
     if (crewId) {
-      const { data: conflicting } = await supabaseAdmin
-        .from('schedules')
-        .select('id')
-        .eq('crew_id', crewId)
-        .neq('id', data.jobId)
-        .neq('status', 'cancelled')
-        .neq('status', 'archived')
-        .lte('start_time', endTime)
-        .gte('end_time', startTime)
+      const bufferMinutes = await getCompanyTravelBufferMinutes(supabaseAdmin, data.companyId)
+      const conflict = await checkJobConflict(crewId, startTime, endTime, {
+        bufferMinutes,
+        excludeScheduleId: data.jobId,
+      })
 
-      if (conflicting && conflicting.length > 0) {
+      if (conflict.hasConflict) {
         const alternatives = await suggestAlternativeCrews(
           data.companyId,
           startTime,
           endTime,
-          crewId
+          crewId,
+          { bufferMinutes, excludeScheduleId: data.jobId }
         )
 
         return {
@@ -1356,6 +1367,9 @@ export async function updateJobAction(data: {
     revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.jobId}`)
     revalidatePath('/dashboard/schedule')
 
+    const { queueGoogleCalendarSync } = await import('@/lib/google-calendar-sync')
+    await queueGoogleCalendarSync(supabaseAdmin, data.jobId)
+
     return { success: true, job: updated }
   } catch (error: any) {
     console.error('updateJobAction error:', error)
@@ -1397,6 +1411,10 @@ export async function cancelJobAction(jobId: string, clientId: string) {
 
     revalidatePath(`/dashboard/clients/${clientId}`)
     revalidatePath(`/dashboard/clients/${clientId}/jobs/${jobId}`)
+    revalidatePath('/dashboard/schedule')
+
+    const { queueGoogleCalendarSync } = await import('@/lib/google-calendar-sync')
+    await queueGoogleCalendarSync(supabaseAdmin, jobId)
 
     return { success: true }
   } catch (error: any) {
@@ -1430,6 +1448,10 @@ export async function archiveJobAction(jobId: string, clientId: string) {
 
     revalidatePath(`/dashboard/clients/${clientId}`)
     revalidatePath(`/dashboard/clients/${clientId}/jobs/${jobId}`)
+    revalidatePath('/dashboard/schedule')
+
+    const { queueGoogleCalendarSync } = await import('@/lib/google-calendar-sync')
+    await queueGoogleCalendarSync(supabaseAdmin, jobId)
 
     return { success: true }
   } catch (error: any) {
@@ -1454,6 +1476,9 @@ export async function deleteJobAction(jobId: string, clientId: string) {
       return { success: false, error: 'Only scheduled or cancelled jobs can be deleted' }
     }
 
+    const { queueGoogleCalendarRemoval } = await import('@/lib/google-calendar-sync')
+    await queueGoogleCalendarRemoval(supabaseAdmin, jobId)
+
     const { error } = await supabaseAdmin
       .from('schedules')
       .delete()
@@ -1462,6 +1487,7 @@ export async function deleteJobAction(jobId: string, clientId: string) {
     if (error) throw error
 
     revalidatePath(`/dashboard/clients/${clientId}`)
+    revalidatePath('/dashboard/schedule')
 
     return { success: true }
   } catch (error: any) {
@@ -2180,6 +2206,111 @@ export async function testZapierIntegrationAction(
     return { success: true }
   } catch (error: any) {
     return { success: false, error: error.message || 'Test failed' }
+  }
+}
+
+export async function listGoogleCalendarsAction(): Promise<
+  | {
+      success: true
+      calendars: import('@/lib/google-calendar-oauth').GoogleCalendarListEntry[]
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    if (check.session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can manage integrations' }
+    }
+
+    const { assertCompanyPlatformFeature } = await import(
+      '@/lib/platform-entitlements-server'
+    )
+    const featureGate = await assertCompanyPlatformFeature(check.companyId, 'integrations')
+    if (!featureGate.ok) return { success: false, error: featureGate.error }
+
+    const { listGoogleCalendarsForCompany } = await import('@/lib/google-calendar-sync')
+    const supabaseAdmin = createSupabaseAdmin()
+    const calendars = await listGoogleCalendarsForCompany(supabaseAdmin, check.companyId)
+    return { success: true, calendars }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to load Google calendars' }
+  }
+}
+
+export async function saveGoogleCalendarSettingsAction(input: {
+  syncEnabled: boolean
+  calendarId: string | null
+  calendarSummary?: string | null
+}): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const check = await verifyCompanyStaff()
+    if (!check.ok) return { success: false, error: check.error }
+    if (check.session.profile.role !== 'company_admin') {
+      return { success: false, error: 'Only company admins can manage integrations' }
+    }
+
+    const { assertCompanyPlatformFeature } = await import(
+      '@/lib/platform-entitlements-server'
+    )
+    const featureGate = await assertCompanyPlatformFeature(check.companyId, 'integrations')
+    if (!featureGate.ok) return { success: false, error: featureGate.error }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: integration, error: loadError } = await supabaseAdmin
+      .from('company_integrations')
+      .select('status, config')
+      .eq('company_id', check.companyId)
+      .eq('provider', 'google_calendar')
+      .maybeSingle()
+
+    if (loadError?.code === '42P01') {
+      return {
+        success: false,
+        error: 'Integrations are not enabled yet. Run supabase/integrations-schema.sql.',
+      }
+    }
+    if (loadError) return { success: false, error: loadError.message }
+    if (integration?.status !== 'connected') {
+      return { success: false, error: 'Connect Google Calendar first' }
+    }
+
+    const { normalizeGoogleCalendarIntegrationConfig } = await import(
+      '@/lib/google-calendar-oauth'
+    )
+    const config = normalizeGoogleCalendarIntegrationConfig(
+      (integration.config || {}) as Record<string, unknown>
+    )
+    if (!config) {
+      return { success: false, error: 'Google Calendar tokens are missing. Reconnect.' }
+    }
+
+    if (input.syncEnabled && !input.calendarId?.trim()) {
+      return { success: false, error: 'Choose a target calendar before enabling sync' }
+    }
+
+    const nextConfig = {
+      ...config,
+      sync_enabled: input.syncEnabled,
+      calendar_id: input.syncEnabled ? input.calendarId?.trim() || null : config.calendar_id,
+      calendar_summary: input.calendarSummary?.trim() || null,
+    }
+
+    const { error } = await supabaseAdmin
+      .from('company_integrations')
+      .update({
+        config: nextConfig,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('company_id', check.companyId)
+      .eq('provider', 'google_calendar')
+
+    if (error) return { success: false, error: error.message }
+
+    revalidatePath('/dashboard/settings')
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to save Google Calendar settings' }
   }
 }
 
@@ -4835,6 +4966,10 @@ export async function rescheduleScheduleCalendarJobAction(data: {
         revalidatePath(`/dashboard/clients/${data.clientId}`)
         revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${created.id}`)
         revalidatePath('/dashboard/schedule')
+
+        const { queueGoogleCalendarSync } = await import('@/lib/google-calendar-sync')
+        await queueGoogleCalendarSync(supabaseAdmin, created.id)
+
         return { success: true, jobId: created.id }
       }
 

@@ -11,6 +11,7 @@ import {
 import { AppearanceSettings } from '@/components/appearance-settings'
 import { CompanyProfileSettings } from '@/components/dashboard/company-profile-settings'
 import { JobPhotoCategoriesSettings } from '@/components/dashboard/job-photo-categories-settings'
+import { ClientBookingSettings } from '@/components/dashboard/client-booking-settings'
 import { NotificationSettings } from '@/components/dashboard/notification-settings'
 import { IntegrationsSettings } from '@/components/dashboard/integrations-settings'
 import { PlatformSubscriptionSettings } from '@/components/dashboard/platform-subscription-settings'
@@ -30,6 +31,7 @@ import { cn } from '@/lib/utils'
 import {
   Bell,
   Building2,
+  CalendarClock,
   Camera,
   CreditCard,
   FileText,
@@ -57,6 +59,7 @@ type SettingsSectionId =
   | 'subscription'
   | 'invoice-template'
   | 'job-photos'
+  | 'client-booking'
   | 'notifications'
   | 'integrations'
 
@@ -120,6 +123,13 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Job photos',
     description: 'Photo upload categories.',
     icon: Camera,
+    adminOnly: true,
+  },
+  {
+    id: 'client-booking',
+    label: 'Client booking',
+    description: 'Public booking link and intake mode.',
+    icon: CalendarClock,
     adminOnly: true,
   },
   {
@@ -508,6 +518,18 @@ function SettingsPageContent() {
                   </p>
                 </div>
                 <JobPhotoCategoriesSettings embedded />
+              </div>
+            )}
+
+            {activeSection === 'client-booking' && isAdmin && (
+              <div className="space-y-6 max-w-3xl">
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight">Client booking</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Let clients book online or submit a request through your public link.
+                  </p>
+                </div>
+                <ClientBookingSettings embedded />
               </div>
             )}
 

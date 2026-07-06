@@ -1,3 +1,23 @@
+const WEEKDAY_SHORT_TO_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+}
+
+/** 0=Sun … 6=Sat for a YYYY-MM-DD date in the company timezone. */
+export function getWeekdayInCompanyTimezone(dateStr: string, timezone: string): number {
+  const anchor = new Date(parseAsCompanyTime(`${dateStr}T12:00`, timezone))
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'short',
+  }).format(anchor)
+  return WEEKDAY_SHORT_TO_INDEX[weekday] ?? 0
+}
+
 /** YYYY-MM-DD for a moment in the company timezone. */
 export function getCompanyDateString(timezone: string, date: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {

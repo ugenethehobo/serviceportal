@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   getCompanyIntegrationsAction,
+  listGoogleCalendarsAction,
+  saveGoogleCalendarSettingsAction,
   saveZapierIntegrationAction,
   testZapierIntegrationAction,
 } from '@/app/action'
@@ -12,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -27,6 +30,7 @@ import {
   type IntegrationRecord,
   type ZapierEventType,
 } from '@/lib/integrations'
+import { getGoogleCalendarSyncSettings } from '@/lib/google-calendar-oauth'
 import { getQuickBooksRealmId } from '@/lib/quickbooks-oauth'
 import { Calendar, Link2, Loader2, Webhook } from 'lucide-react'
 import { toast } from 'sonner'
@@ -47,6 +51,15 @@ export function IntegrationsSettings() {
   const [isTesting, setIsTesting] = useState(false)
   const [isConnectingQuickBooks, setIsConnectingQuickBooks] = useState(false)
   const [isDisconnectingQuickBooks, setIsDisconnectingQuickBooks] = useState(false)
+  const [isConnectingGoogleCalendar, setIsConnectingGoogleCalendar] = useState(false)
+  const [isDisconnectingGoogleCalendar, setIsDisconnectingGoogleCalendar] = useState(false)
+  const [isSavingGoogleCalendar, setIsSavingGoogleCalendar] = useState(false)
+  const [isLoadingGoogleCalendars, setIsLoadingGoogleCalendars] = useState(false)
+  const [googleSyncEnabled, setGoogleSyncEnabled] = useState(false)
+  const [googleCalendarId, setGoogleCalendarId] = useState('')
+  const [googleCalendars, setGoogleCalendars] = useState<
+    Array<{ id: string; summary: string; primary?: boolean }>
+  >([])
   const [testEvent, setTestEvent] = useState<ZapierEventType>('invoice_sent')
 
   const load = useCallback(async () => {
@@ -58,6 +71,11 @@ export function IntegrationsSettings() {
       setZapierUrl(
         typeof zapier?.config.webhook_url === 'string' ? zapier.config.webhook_url : ''
       )
+
+      const google = result.integrations.find((row) => row.provider === 'google_calendar')
+      const googleSettings = getGoogleCalendarSyncSettings(google?.config || {})
+      setGoogleSyncEnabled(googleSettings.sync_enabled)
+      setGoogleCalendarId(googleSettings.calendar_id || '')
     } else {
       toast.error(result.error || 'Failed to load integrations')
     }
@@ -70,7 +88,8 @@ export function IntegrationsSettings() {
 
   useEffect(() => {
     const quickbooksParam = searchParams.get('quickbooks')
-    if (!quickbooksParam) return
+    const googleCalendarParam = searchParams.get('google_calendar')
+    if (!quickbooksParam && !googleCalendarParam) return
 
     const message = searchParams.get('message')
 
@@ -81,8 +100,16 @@ export function IntegrationsSettings() {
       toast.error(message || 'QuickBooks connection failed')
     }
 
+    if (googleCalendarParam === 'connected') {
+      toast.success('Google Calendar connected successfully')
+      void load()
+    } else if (googleCalendarParam === 'error') {
+      toast.error(message || 'Google Calendar connection failed')
+    }
+
     const params = new URLSearchParams(searchParams.toString())
     params.delete('quickbooks')
+    params.delete('google_calendar')
     params.delete('message')
     const query = params.toString()
     router.replace(query ? `/dashboard/settings?${query}` : '/dashboard/settings')
@@ -129,6 +156,78 @@ export function IntegrationsSettings() {
     } finally {
       setIsConnectingQuickBooks(false)
     }
+  }
+
+  const connectGoogleCalendar = async () => {
+    setIsConnectingGoogleCalendar(true)
+    try {
+      const res = await fetch('/api/integrations/google-calendar/connect', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok && data.url) {
+        window.location.href = data.url
+        return
+      }
+      toast.error(data.error || 'Failed to start Google Calendar connection')
+    } catch {
+      toast.error('Failed to start Google Calendar connection')
+    } finally {
+      setIsConnectingGoogleCalendar(false)
+    }
+  }
+
+  const disconnectGoogleCalendar = async () => {
+    setIsDisconnectingGoogleCalendar(true)
+    try {
+      const res = await fetch('/api/integrations/google-calendar/disconnect', {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success('Google Calendar disconnected')
+        setGoogleSyncEnabled(false)
+        setGoogleCalendarId('')
+        setGoogleCalendars([])
+        await load()
+      } else {
+        toast.error(data.error || 'Failed to disconnect Google Calendar')
+      }
+    } catch {
+      toast.error('Failed to disconnect Google Calendar')
+    } finally {
+      setIsDisconnectingGoogleCalendar(false)
+    }
+  }
+
+  const loadGoogleCalendars = async () => {
+    setIsLoadingGoogleCalendars(true)
+    const result = await listGoogleCalendarsAction()
+    if (result.success) {
+      setGoogleCalendars(result.calendars)
+      if (!googleCalendarId && result.calendars.length > 0) {
+        const primary = result.calendars.find((calendar) => calendar.primary)
+        setGoogleCalendarId(primary?.id || result.calendars[0].id)
+      }
+    } else {
+      toast.error(result.error || 'Failed to load calendars')
+    }
+    setIsLoadingGoogleCalendars(false)
+  }
+
+  const saveGoogleCalendarSettings = async () => {
+    setIsSavingGoogleCalendar(true)
+    const selected = googleCalendars.find((calendar) => calendar.id === googleCalendarId)
+    const result = await saveGoogleCalendarSettingsAction({
+      syncEnabled: googleSyncEnabled,
+      calendarId: googleCalendarId || null,
+      calendarSummary: selected?.summary || null,
+    })
+    if (result.success) {
+      toast.success('Google Calendar settings saved')
+      await load()
+    } else {
+      toast.error(result.error || 'Failed to save Google Calendar settings')
+    }
+    setIsSavingGoogleCalendar(false)
   }
 
   const disconnectQuickBooks = async () => {
@@ -222,6 +321,98 @@ export function IntegrationsSettings() {
                   )}
                 </div>
               </div>
+            ) : provider === 'google_calendar' ? (
+              <div className="mt-4 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Connect Google Calendar to export scheduled and in-progress jobs one-way.
+                  Updates, cancellations, and archives remove or refresh the linked calendar
+                  event automatically.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {status === 'connected' ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => void disconnectGoogleCalendar()}
+                      disabled={isDisconnectingGoogleCalendar}
+                    >
+                      {isDisconnectingGoogleCalendar && (
+                        <Loader2 className="size-4 animate-spin" />
+                      )}
+                      Disconnect Google Calendar
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => void connectGoogleCalendar()}
+                      disabled={isConnectingGoogleCalendar}
+                    >
+                      {isConnectingGoogleCalendar && (
+                        <Loader2 className="size-4 animate-spin" />
+                      )}
+                      Connect Google Calendar
+                    </Button>
+                  )}
+                </div>
+
+                {status === 'connected' ? (
+                  <div className="space-y-4 rounded-lg border p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <Label htmlFor="google-sync-enabled">Export jobs to Google Calendar</Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          New and updated jobs sync when this is enabled.
+                        </p>
+                      </div>
+                      <Switch
+                        id="google-sync-enabled"
+                        checked={googleSyncEnabled}
+                        onCheckedChange={setGoogleSyncEnabled}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="google-calendar-id">Target calendar</Label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Select
+                          value={googleCalendarId || undefined}
+                          onValueChange={(value) => setGoogleCalendarId(value || '')}
+                          disabled={googleCalendars.length === 0}
+                        >
+                          <SelectTrigger id="google-calendar-id" className="min-w-[240px]">
+                            <SelectValue placeholder="Choose a calendar" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {googleCalendars.map((calendar) => (
+                              <SelectItem key={calendar.id} value={calendar.id}>
+                                {calendar.summary}
+                                {calendar.primary ? ' (Primary)' : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void loadGoogleCalendars()}
+                          disabled={isLoadingGoogleCalendars}
+                        >
+                          {isLoadingGoogleCalendars && (
+                            <Loader2 className="size-4 animate-spin" />
+                          )}
+                          Load calendars
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={() => void saveGoogleCalendarSettings()}
+                      disabled={isSavingGoogleCalendar}
+                    >
+                      {isSavingGoogleCalendar && <Loader2 className="size-4 animate-spin" />}
+                      Save Google Calendar settings
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
             ) : provider === 'zapier' ? (
               <div className="mt-4 space-y-3">
                 <p className="text-sm text-muted-foreground">
@@ -289,11 +480,7 @@ export function IntegrationsSettings() {
                   </div>
                 </div>
               </div>
-            ) : (
-              <Button className="mt-4" variant="outline" disabled>
-                Connect {meta.label} (OAuth setup required)
-              </Button>
-            )}
+            ) : null}
           </Card>
         )
       })}
