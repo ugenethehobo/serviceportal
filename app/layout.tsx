@@ -59,6 +59,8 @@ export default async function RootLayout({
           {children}
           <Toaster />
         </ThemeProvider>
+        <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
