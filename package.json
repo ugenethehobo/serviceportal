@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx --yes tsx --test lib/integration-events.test.ts lib/quickbooks-oauth.test.ts lib/google-calendar-oauth.test.ts lib/google-calendar-sync.test.ts lib/notification-reminders.test.ts lib/recurring-schedule-projection.test.ts lib/schedule-calendar.test.ts lib/schedule-conflicts.test.ts lib/booking.test.ts lib/booking-slots.test.ts lib/job-photo-storage.test.ts lib/auth-password-reset.test.ts"
+    "test": "npx --yes tsx --test lib/integration-events.test.ts lib/quickbooks-oauth.test.ts lib/google-calendar-oauth.test.ts lib/google-calendar-sync.test.ts lib/notification-reminders.test.ts lib/recurring-schedule-projection.test.ts lib/schedule-calendar.test.ts lib/schedule-conflicts.test.ts lib/booking.test.ts lib/booking-slots.test.ts lib/job-photo-storage.test.ts lib/auth-password-reset.test.ts lib/client-job-stats.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

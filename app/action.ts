@@ -4324,7 +4324,7 @@ export async function getClientsListAction() {
         await Promise.all([
           supabaseAdmin
             .from('schedules')
-            .select('id, client_id, status, start_time, price')
+            .select('id, client_id, status, start_time, end_time, price')
             .in('client_id', clientIds)
             .in('status', ['scheduled', 'in_progress']),
           supabaseAdmin
@@ -4344,20 +4344,27 @@ export async function getClientsListAction() {
         payments || []
       )
 
+      const { countActiveClientJobs } = await import('@/lib/client-job-stats')
+
       if (schedules) {
+        const schedulesByClient = new Map<string, typeof schedules>()
         for (const schedule of schedules) {
-          if (!statsMap[schedule.client_id]) {
-            statsMap[schedule.client_id] = { jobsInProgress: 0, amountDue: 0 }
-          }
-          const stats = statsMap[schedule.client_id]
+          const list = schedulesByClient.get(schedule.client_id) || []
+          list.push(schedule)
+          schedulesByClient.set(schedule.client_id, list)
+        }
 
-          if (schedule.status === 'in_progress') {
-            stats.jobsInProgress++
+        for (const [clientId, clientSchedules] of schedulesByClient.entries()) {
+          if (!statsMap[clientId]) {
+            statsMap[clientId] = { jobsInProgress: 0, amountDue: 0 }
           }
+          statsMap[clientId].jobsInProgress = countActiveClientJobs(clientSchedules, new Date(now))
 
-          if (schedule.status === 'scheduled' && schedule.start_time > now) {
-            if (!stats.nextJobDate || schedule.start_time < stats.nextJobDate) {
-              stats.nextJobDate = schedule.start_time
+          for (const schedule of clientSchedules) {
+            if (schedule.status === 'scheduled' && schedule.start_time > now) {
+              if (!statsMap[clientId].nextJobDate || schedule.start_time < statsMap[clientId].nextJobDate!) {
+                statsMap[clientId].nextJobDate = schedule.start_time
+              }
             }
           }
         }

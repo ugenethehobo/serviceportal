@@ -60,6 +60,7 @@ export type PublicBookingPageData = {
   bookingSettings: BookingSettings
   timezone: string
   services: BookableService[]
+  hasBookableCrews: boolean
 }
 
 async function getCompanyByBookingSlug(slug: string) {
@@ -96,13 +97,19 @@ export async function getPublicBookingPageAction(
   }
 
   const supabaseAdmin = createSupabaseAdmin()
-  const { data: services } = await supabaseAdmin
-    .from('bookable_services')
-    .select('*')
-    .eq('company_id', company.id)
-    .eq('active', true)
-    .order('sort_order', { ascending: true })
-    .order('name', { ascending: true })
+  const [{ data: services }, { count: crewCount }] = await Promise.all([
+    supabaseAdmin
+      .from('bookable_services')
+      .select('*')
+      .eq('company_id', company.id)
+      .eq('active', true)
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true }),
+    supabaseAdmin
+      .from('crews')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', company.id),
+  ])
 
   return {
     success: true,
@@ -114,6 +121,7 @@ export async function getPublicBookingPageAction(
       bookingSettings: normalizeBookingSettings(company.booking_settings),
       timezone: company.timezone || 'America/Chicago',
       services: (services || []) as BookableService[],
+      hasBookableCrews: (crewCount || 0) > 0,
     },
   }
 }
@@ -512,9 +520,11 @@ export async function confirmPublicOnlineBookingAction(input: {
       },
     })
 
-    const { notifyClientBookingConfirmed, queueNotification } = await import(
-      '@/lib/notifications-server'
-    )
+    const {
+      notifyClientBookingConfirmed,
+      notifyStaffOnlineBookingReceived,
+      queueNotification,
+    } = await import('@/lib/notifications-server')
     await queueNotification(supabaseAdmin, async (admin) => {
       await notifyClientBookingConfirmed(admin, {
         companyId: company.id,
@@ -526,6 +536,20 @@ export async function confirmPublicOnlineBookingAction(input: {
         jobTitle: schedule.title,
         startTime: schedule.start_time,
         scheduleId: schedule.id,
+      })
+      await notifyStaffOnlineBookingReceived(admin, {
+        companyId: company.id,
+        companyName: company.name,
+        clientId,
+        clientName: client?.name ?? input.name.trim(),
+        clientEmail: client?.email ?? input.email.trim(),
+        clientPhone: client?.phone ?? (input.phone?.trim() || null),
+        jobTitle: schedule.title,
+        startTime: schedule.start_time,
+        endTime: schedule.end_time,
+        scheduleId: schedule.id,
+        crewName: crew?.name ?? null,
+        serviceName: service.name,
       })
     })
 

@@ -12,13 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { BookingDatePicker } from '@/components/booking/booking-date-picker'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -36,7 +30,7 @@ import {
 } from '@/lib/booking-slots'
 import type { BookableService } from '@/lib/booking'
 import { cn } from '@/lib/utils'
-import { CalendarDays, CheckCircle2, ClipboardList, Loader2 } from 'lucide-react'
+import { CalendarDays, CheckCircle2, ClipboardList, Loader2, Users } from 'lucide-react'
 
 type BookingDateOption = {
   dateStr: string
@@ -72,7 +66,7 @@ export function PublicBookingPageClient({
   const [selectedServiceId, setSelectedServiceId] = useState<string>(
     data.services[0]?.id || ''
   )
-  const [selectedDate, setSelectedDate] = useState(dateOptions[0]?.dateStr || '')
+  const [selectedDate, setSelectedDate] = useState('')
   const [slots, setSlots] = useState<BookingSlot[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [selectedSlotIso, setSelectedSlotIso] = useState<string | null>(null)
@@ -83,10 +77,28 @@ export function PublicBookingPageClient({
   )
 
   useEffect(() => {
-    if (data.bookingMode !== 'online_booking' || !selectedServiceId || !selectedDate) return
+    if (!dateOptions.length) {
+      setSelectedDate('')
+      return
+    }
+    setSelectedDate((current) =>
+      current && dateOptions.some((option) => option.dateStr === current)
+        ? current
+        : dateOptions[0].dateStr
+    )
+  }, [dateOptions])
+
+  useEffect(() => {
+    if (
+      data.bookingMode !== 'online_booking' ||
+      !data.hasBookableCrews ||
+      !selectedServiceId ||
+      !selectedDate
+    ) {
+      return
+    }
     void loadSlots(selectedServiceId, selectedDate)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [data.bookingMode, data.hasBookableCrews, selectedServiceId, selectedDate])
 
   const heading =
     data.bookingMode === 'online_booking'
@@ -337,6 +349,23 @@ export function PublicBookingPageClient({
               <p className="text-sm text-muted-foreground">
                 Online booking is not available yet. Please contact {data.companyName} directly.
               </p>
+            ) : !data.hasBookableCrews ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950 space-y-2">
+                <div className="flex items-start gap-2">
+                  <Users className="size-4 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <p className="font-medium">Online scheduling is temporarily unavailable</p>
+                    <p className="text-amber-900/90">
+                      {data.companyName} has not finished setting up crews for booking yet. Please
+                      contact them directly to schedule your visit.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : dateOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No bookable days are configured right now. Please contact {data.companyName} directly.
+              </p>
             ) : (
               <form onSubmit={handleOnlineSubmit} className="space-y-5">
                 <div className="space-y-2">
@@ -360,21 +389,16 @@ export function PublicBookingPageClient({
 
                 <div className="space-y-2">
                   <Label htmlFor="booking-date">Date</Label>
-                  <Select
-                    value={selectedDate || undefined}
-                    onValueChange={(value) => handleDateChange(value ?? '')}
-                  >
-                    <SelectTrigger id="booking-date" className="w-full">
-                      <SelectValue placeholder="Select a date" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {dateOptions.map((option) => (
-                        <SelectItem key={option.dateStr} value={option.dateStr}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <BookingDatePicker
+                    id="booking-date"
+                    value={selectedDate}
+                    onChange={(value) => void handleDateChange(value)}
+                    timezone={data.timezone}
+                    bookingSettings={data.bookingSettings}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Only bookable days from {data.companyName}&apos;s schedule are shown.
+                  </p>
                 </div>
 
                 <div className="space-y-2">

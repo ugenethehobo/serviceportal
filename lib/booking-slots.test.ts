@@ -7,6 +7,7 @@ import {
   crewIsAvailableForSlot,
   formatBookingDuration,
   formatBookingPrice,
+  isBookingDateSelectable,
   isSlotStartAllowed,
   pickAutoAssignedCrewId,
 } from '@/lib/booking-slots'
@@ -125,5 +126,16 @@ describe('booking slots', () => {
     assert.deepEqual(available.get(480), ['crew-a', 'crew-b'])
     assert.deepEqual(available.get(540), ['crew-b'])
     assert.deepEqual(available.get(600), ['crew-a', 'crew-b'])
+  })
+
+  it('allows only configured bookable weekdays within lookahead', () => {
+    const timezone = 'America/Chicago'
+    const settings = { lookahead_days: 7, bookable_weekdays: [1, 2, 3, 4, 5] }
+    const now = new Date('2026-07-06T15:00:00.000Z') // Monday
+
+    assert.equal(isBookingDateSelectable('2026-07-05', timezone, settings, now), false)
+    assert.equal(isBookingDateSelectable('2026-07-06', timezone, settings, now), true)
+    assert.equal(isBookingDateSelectable('2026-07-11', timezone, settings, now), false)
+    assert.equal(isBookingDateSelectable('2026-07-13', timezone, settings, now), false)
   })
 })

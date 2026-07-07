@@ -35,6 +35,7 @@ const EVENT_ORDER: NotificationEvent[] = [
   'invoice_sent',
   'payment_received',
   'lead_follow_up_due',
+  'online_booking_received',
   'visit_reminder',
   'invoice_overdue_reminder',
 ]

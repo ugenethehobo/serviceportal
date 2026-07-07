@@ -335,7 +335,7 @@ const openEditClient = (client: Client) => {
                           <TableCell className="px-4 text-muted-foreground">{client.phone || '-'}</TableCell>
                           <TableCell className="px-4">
                             <Badge variant="outline">
-                              {client.jobsInProgress ?? 0} in progress
+                              {client.jobsInProgress ?? 0} active
                             </Badge>
                           </TableCell>
                           <TableCell className="px-4 text-sm text-muted-foreground">
@@ -408,7 +408,7 @@ const openEditClient = (client: Client) => {
                       <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
                         <div>
                           <div className="text-muted-foreground text-xs">Jobs</div>
-                          <div className="font-medium">{client.jobsInProgress ?? 0} in progress</div>
+                          <div className="font-medium">{client.jobsInProgress ?? 0} active</div>
                         </div>
                         <div>
                           <div className="text-muted-foreground text-xs">Next Job</div>

@@ -517,6 +517,65 @@ export async function notifyPaymentReceived(
   }
 }
 
+export async function notifyStaffOnlineBookingReceived(
+  supabaseAdmin: SupabaseClient,
+  input: {
+    companyId: string
+    companyName?: string
+    clientId: string
+    clientName: string
+    clientEmail?: string | null
+    clientPhone?: string | null
+    jobTitle: string
+    serviceName: string
+    startTime: string
+    endTime: string
+    scheduleId: string
+    crewName?: string | null
+  }
+) {
+  const staffEmails = await getStaffEmailsForCompany(supabaseAdmin, input.companyId)
+  if (staffEmails.length === 0) return
+
+  const baseUrl = getAppBaseUrl()
+  const companyName = input.companyName?.trim() || 'Service Portal'
+  const when = new Date(input.startTime).toLocaleString([], {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+  const jobUrl = `${baseUrl}/dashboard/clients/${input.clientId}/jobs/${input.scheduleId}`
+  const contactBits = [
+    input.clientEmail ? `Email: ${input.clientEmail}` : null,
+    input.clientPhone ? `Phone: ${input.clientPhone}` : null,
+  ].filter(Boolean)
+  const crewLine = input.crewName
+    ? `<p>Assigned crew: <strong>${escapeHtml(input.crewName)}</strong></p>`
+    : ''
+
+  for (const email of staffEmails) {
+    await dispatchNotification(supabaseAdmin, {
+      companyId: input.companyId,
+      event: 'online_booking_received',
+      email: {
+        to: email,
+        subject: `New online booking: ${input.clientName}`,
+        html: buildEmailShell(
+          companyName,
+          'New online booking',
+          `<p><strong>${escapeHtml(input.clientName)}</strong> booked <strong>${escapeHtml(input.serviceName)}</strong> for <strong>${escapeHtml(when)}</strong>.</p>${crewLine}${contactBits.length ? `<p>${contactBits.map((line) => escapeHtml(line!)).join('<br/>')}</p>` : ''}`,
+          { label: 'View job', href: jobUrl }
+        ),
+        text: `${input.clientName} booked ${input.serviceName} for ${when}. View: ${jobUrl}`,
+      },
+      metadata: {
+        schedule_id: input.scheduleId,
+        client_id: input.clientId,
+        source: 'online_booking',
+      },
+    })
+  }
+}
+
 export async function notifyClientBookingConfirmed(
   supabaseAdmin: SupabaseClient,
   input: {

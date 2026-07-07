@@ -7,6 +7,7 @@ import { schedulesOverlapWithBuffer } from '@/lib/schedule-conflicts'
 import { buildIsoFromDayAndMinutes } from '@/lib/schedule-calendar'
 import {
   formatTimeInTimezone,
+  getCompanyDateString,
   getCompanyDayBounds,
   getWeekdayInCompanyTimezone,
 } from '@/lib/timezone'
@@ -229,4 +230,32 @@ export function getBookingDateOptions(
     }).format(new Date(bounds.startIso))
     return { dateStr: bounds.dateStr, label }
   }).filter((option): option is { dateStr: string; label: string } => option != null)
+}
+
+export function getBookingLastSelectableDateStr(
+  timezone: string,
+  lookaheadDays: number,
+  now = new Date()
+): string {
+  const lastIndex = Math.max(0, lookaheadDays - 1)
+  return getCompanyDayBounds(timezone, now, lastIndex).dateStr
+}
+
+export function isBookingDateSelectable(
+  dateStr: string,
+  timezone: string,
+  slotSettings: Pick<BookingSettings, 'lookahead_days' | 'bookable_weekdays'>,
+  now = new Date()
+): boolean {
+  const todayStr = getCompanyDateString(timezone, now)
+  if (dateStr < todayStr) return false
+
+  const lastDateStr = getBookingLastSelectableDateStr(
+    timezone,
+    slotSettings.lookahead_days,
+    now
+  )
+  if (dateStr > lastDateStr) return false
+
+  return isBookableWeekday(dateStr, timezone, slotSettings.bookable_weekdays)
 }

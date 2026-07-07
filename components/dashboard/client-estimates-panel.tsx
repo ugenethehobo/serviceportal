@@ -43,7 +43,7 @@ import {
 import { SearchBar } from '@/components/search-bar'
 import { matchesSearch } from '@/lib/search'
 import { toast } from 'sonner'
-import { Trash2, ArrowRight, Plus, FileDown, X, Check } from 'lucide-react'
+import { Trash2, ArrowRight, Plus, FileDown, X, Check, AlertTriangle } from 'lucide-react'
 
 function filterEstimates(estimates: Estimate[], query: string) {
   return estimates.filter((estimate) =>
@@ -518,8 +518,24 @@ export function ClientEstimatesPanel({
             )}
 
             {!isCreateMode && (
-              <section>
-                <h4 className="font-medium mb-3">Line Items</h4>
+              <section className="space-y-3">
+                <div>
+                  <h4 className="font-medium">Line items</h4>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Add at least one line item with a description, quantity, and price. The estimate
+                    moves to <strong>Sent</strong> automatically once items are added.
+                  </p>
+                </div>
+
+                {lineItems.length === 0 && !isConverted && (
+                  <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                    <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+                    <p>
+                      This estimate has no line items yet. Add at least one item below before sharing
+                      it with your client or converting it to a job.
+                    </p>
+                  </div>
+                )}
 
                 {lineItems.length > 0 ? (
                   <div className="border rounded-lg overflow-hidden">
@@ -576,15 +592,19 @@ export function ClientEstimatesPanel({
                       </TableBody>
                     </Table>
                   </div>
-                ) : (
-                  <div className="border border-dashed rounded-lg p-4 text-center text-sm text-muted-foreground">
-                    Add line items to build the estimate — status will move to Sent automatically.
-                  </div>
-                )}
+                ) : null}
 
                 {!isConverted && !editingLineId && (
-                  <div className="mt-3 p-4 rounded-lg bg-muted/30 border border-dashed space-y-3">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Add line item</p>
+                  <div
+                    className={`p-4 rounded-lg border space-y-3 ${
+                      lineItems.length === 0
+                        ? 'border-amber-200 bg-amber-50/40'
+                        : 'bg-muted/30 border-dashed'
+                    }`}
+                  >
+                    <p className="text-sm font-medium">
+                      {lineItems.length === 0 ? 'Add your first line item' : 'Add another line item'}
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                       <div className="sm:col-span-5">
                         <Label className="text-xs">Description</Label>
@@ -631,9 +651,10 @@ export function ClientEstimatesPanel({
             )}
 
             {isCreateMode && (
-              <p className="text-sm text-muted-foreground">
-                Start with a title — it saves automatically. Then add line items.
-              </p>
+              <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+                Enter a title to create the estimate. After it saves, you can add line items and the
+                total will update automatically.
+              </div>
             )}
             </div>
           </ScrollArea>
@@ -665,7 +686,13 @@ export function ClientEstimatesPanel({
             {!isConverted && selectedEstimate && (
               <Button
                 size="sm"
+                disabled={lineItems.length === 0}
+                title={lineItems.length === 0 ? 'Add at least one line item first' : undefined}
                 onClick={() => {
+                  if (lineItems.length === 0) {
+                    toast.error('Add at least one line item before converting to a job')
+                    return
+                  }
                   onConvertToJob(selectedEstimate)
                   closeEditor()
                 }}

@@ -8,6 +8,7 @@ export type NotificationEvent =
   | 'lead_follow_up_due'
   | 'visit_reminder'
   | 'invoice_overdue_reminder'
+  | 'online_booking_received'
 
 export type NotificationChannel = 'email' | 'sms'
 
@@ -41,6 +42,7 @@ export const NOTIFICATION_EVENT_LABELS: Record<NotificationEvent, string> = {
   lead_follow_up_due: 'Lead follow-up reminder',
   visit_reminder: 'Upcoming visit reminder (client)',
   invoice_overdue_reminder: 'Invoice overdue reminder (client)',
+  online_booking_received: 'New online booking (staff)',
 }
 
 export const DEFAULT_NOTIFICATION_REMINDER_SETTINGS: NotificationReminderSettings = {
@@ -65,6 +67,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
     lead_follow_up_due: { email: true, sms: false },
     visit_reminder: { email: true, sms: true },
     invoice_overdue_reminder: { email: true, sms: true },
+    online_booking_received: { email: true, sms: false },
   },
 }
 
