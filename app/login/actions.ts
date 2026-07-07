@@ -1,6 +1,59 @@
 'use server'
 
+import {
+  buildPasswordResetVerifyUrl,
+  getPasswordResetRedirectUrl,
+} from '@/lib/auth-password-reset'
+import { sendPasswordResetEmail } from '@/lib/email/password-reset-email'
+import { isResendConfigured } from '@/lib/email/resend'
 import { createSupabaseAdmin } from '@/lib/portal-auth'
+import { createClient } from '@/lib/supabase/server'
+
+/** Always succeeds from the caller's perspective to avoid email enumeration. */
+export async function requestPasswordResetAction(email: string) {
+  const trimmed = email.trim().toLowerCase()
+  if (!trimmed || !trimmed.includes('@')) {
+    return { ok: true as const }
+  }
+
+  try {
+    if (isResendConfigured()) {
+      const admin = createSupabaseAdmin()
+      const { data, error } = await admin.auth.admin.generateLink({
+        type: 'recovery',
+        email: trimmed,
+      })
+
+      if (error || !data?.properties?.hashed_token) {
+        if (error) {
+          console.warn('requestPasswordResetAction generateLink:', error.message)
+        }
+        return { ok: true as const }
+      }
+
+      const resetUrl = buildPasswordResetVerifyUrl(data.properties.hashed_token)
+      const sendResult = await sendPasswordResetEmail({
+        to: trimmed,
+        resetUrl,
+      })
+
+      if (!sendResult.ok) {
+        console.warn('requestPasswordResetAction Resend:', sendResult.error)
+      }
+
+      return { ok: true as const }
+    }
+
+    const supabase = await createClient()
+    await supabase.auth.resetPasswordForEmail(trimmed, {
+      redirectTo: getPasswordResetRedirectUrl(),
+    })
+  } catch (error) {
+    console.warn('requestPasswordResetAction error:', error)
+  }
+
+  return { ok: true as const }
+}
 
 /** Portal-only gate — never blocks staff/admin logins; fails open if schema is missing. */
 export async function verifyClientPortalLoginAction(userId: string) {

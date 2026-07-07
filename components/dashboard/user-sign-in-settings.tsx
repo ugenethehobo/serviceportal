@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { updateAccountSettingsAction } from '@/app/action'
 import { Button } from '@/components/ui/button'
@@ -80,7 +81,11 @@ export function UserSignInSettings({
             autoComplete="new-password"
           />
           <p className="text-xs text-muted-foreground">
-            Use at least 8 characters when changing your password.
+            Use at least 8 characters when changing your password. Signed out on another device?{' '}
+            <Link href="/login/forgot-password" className="font-medium text-primary hover:underline">
+              Reset via email
+            </Link>
+            .
           </p>
         </div>
 

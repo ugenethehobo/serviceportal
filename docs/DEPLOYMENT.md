@@ -69,6 +69,34 @@ Enable the Google Calendar API in [Google Cloud Console](https://console.cloud.g
 | `TEXTBELT_API_KEY` | SMS via Textbelt. Defaults to `textbelt` (1 free SMS/day). |
 | `OSRM_BASE_URL` | OSRM server base URL for route geometry. Defaults to the public demo server. |
 
+## Supabase Auth (password reset)
+
+Password reset links land on `/auth/callback` first, then `/login/reset-password`.
+
+### Sending via Resend (recommended)
+
+When `RESEND_API_KEY` is set, password reset emails are sent through **Resend** (same as other app notifications). The app generates a recovery token with the Supabase Admin API and emails a branded reset link — **Supabase’s built-in email quota is not used**.
+
+Requirements:
+
+- `RESEND_API_KEY` and a verified `RESEND_FROM_EMAIL` (see `.env.example`)
+- `SUPABASE_SERVICE_ROLE_KEY` (already required for server actions)
+
+### Fallback without Resend
+
+If `RESEND_API_KEY` is unset, resets fall back to `supabase.auth.resetPasswordForEmail`, which uses Supabase’s default mailer (very limited on the free tier). For production without Resend API, configure **Custom SMTP** in Supabase → Authentication → Email → SMTP Settings using [Resend SMTP](https://resend.com/docs/send-with-supabase-smtp) (`smtp.resend.com`, port `465`, user `resend`, password = your API key).
+
+### Redirect URLs
+
+In Supabase Dashboard → **Authentication** → **URL configuration**, add:
+
+| Environment | URL |
+|-------------|-----|
+| Local | `http://localhost:3000/auth/callback` |
+| Production | `{NEXT_PUBLIC_APP_URL}/auth/callback` |
+
+Set **Site URL** to your canonical app URL (`NEXT_PUBLIC_APP_URL`).
+
 ## Database migrations
 
 All SQL files live in `supabase/`. Run them in the **Supabase SQL editor** (or via `psql`) in the order below.
