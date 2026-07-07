@@ -15,6 +15,13 @@ import {
   Settings,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { usePersonalization } from '@/components/personalization-provider'
+import {
+  chromeBackgroundClass,
+  chromeHeaderBackgroundClass,
+  chromeSheetClass,
+} from '@/lib/personalization'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -108,10 +115,12 @@ function MobilePortalHeader({
   pathname,
   isLoggingOut,
   onLogout,
+  hasAppBackground,
 }: PortalSidebarProps & {
   pathname: string
   isLoggingOut: boolean
   onLogout: () => void
+  hasAppBackground: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -120,7 +129,13 @@ function MobilePortalHeader({
   }, [pathname])
 
   return (
-    <header className="flex md:hidden shrink-0 z-40 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur min-h-14 supports-[padding:max(0px)]:pt-[max(0px,env(safe-area-inset-top))]">
+    <header
+      className={cn(
+        'flex md:hidden shrink-0 z-40 items-center gap-3 px-4 min-h-14 supports-[padding:max(0px)]:pt-[max(0px,env(safe-area-inset-top))]',
+        !hasAppBackground && 'border-b',
+        chromeHeaderBackgroundClass(hasAppBackground)
+      )}
+    >
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <Button
           type="button"
@@ -133,7 +148,13 @@ function MobilePortalHeader({
           <Menu className="size-5" />
         </Button>
 
-        <SheetContent side="left" className="flex h-full max-h-[100dvh] w-[min(85vw,18rem)] flex-col gap-0 p-0">
+        <SheetContent
+          side="left"
+          className={cn(
+            'flex h-full max-h-[100dvh] w-[min(85vw,18rem)] flex-col gap-0 p-0',
+            chromeSheetClass(hasAppBackground)
+          )}
+        >
           <SheetHeader className="border-b p-4 text-left">
             <div className="flex items-center gap-3 pr-8">
               <CompanyMark companyName={companyName} companyLogo={companyLogo} className="h-9 w-9" />
@@ -180,18 +201,22 @@ function DesktopPortalSidebar({
   pathname,
   isLoggingOut,
   onLogout,
+  hasAppBackground,
 }: PortalSidebarProps & {
   pathname: string
   isLoggingOut: boolean
   onLogout: () => void
+  hasAppBackground: boolean
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   return (
     <aside
-      className={`hidden md:flex h-full shrink-0 flex-col bg-background transition-[width] duration-300 ${
+      className={cn(
+        'hidden md:flex h-full shrink-0 flex-col transition-[width] duration-300',
+        chromeBackgroundClass(hasAppBackground),
         isExpanded ? 'w-64' : 'w-16'
-      }`}
+      )}
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
@@ -277,6 +302,9 @@ export function PortalSidebar(props: PortalSidebarProps) {
     }
   }
 
+  const { backgroundImageUrl } = usePersonalization()
+  const hasAppBackground = Boolean(backgroundImageUrl)
+
   return (
     <>
       <MobilePortalHeader
@@ -284,12 +312,14 @@ export function PortalSidebar(props: PortalSidebarProps) {
         pathname={pathname}
         isLoggingOut={isLoggingOut}
         onLogout={handleLogout}
+        hasAppBackground={hasAppBackground}
       />
       <DesktopPortalSidebar
         {...props}
         pathname={pathname}
         isLoggingOut={isLoggingOut}
         onLogout={handleLogout}
+        hasAppBackground={hasAppBackground}
       />
     </>
   )

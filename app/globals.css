@@ -150,3 +150,9 @@
     @apply hidden!;
   }
 }
+
+html:has(body.has-app-background),
+html[data-app-background],
+body.has-app-background {
+  background: transparent !important;
+}

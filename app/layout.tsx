@@ -3,7 +3,15 @@ import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
+import { AppBackground } from "@/components/app-background";
+import { PersonalizationProvider } from "@/components/personalization-provider";
 import { ThemeProvider } from "@/components/theme-provider";
+import {
+  ACCENT_COLOR_STORAGE_KEY,
+  buildAccentBootstrapSnippet,
+  buildBackgroundBootstrapSnippet,
+} from "@/lib/personalization";
+import { getUserPersonalization } from "@/lib/personalization-server";
 import { THEME_STORAGE_KEY } from "@/lib/theme";
 import { getThemeScriptDefault } from "@/lib/theme-server";
 import { SpeedInsights } from "@vercel/speed-insights/next"
@@ -31,7 +39,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const initialTheme = await getThemeScriptDefault();
+  const [initialTheme, initialPersonalization] = await Promise.all([
+    getThemeScriptDefault(),
+    getUserPersonalization(),
+  ]);
 
   return (
     <html
@@ -50,14 +61,26 @@ export default async function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('${THEME_STORAGE_KEY}')||'${initialTheme}';if(t==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('${THEME_STORAGE_KEY}')||'${initialTheme}';if(t==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}${buildBackgroundBootstrapSnippet(initialPersonalization.backgroundImageUrl)}${buildAccentBootstrapSnippet(ACCENT_COLOR_STORAGE_KEY, initialPersonalization.accentColor)}}catch(e){}})();`,
           }}
         />
       </head>
-      <body className="min-h-full flex flex-col">
+      <body
+        className={cn(
+          'min-h-full flex flex-col',
+          initialPersonalization.backgroundImageUrl && 'has-app-background'
+        )}
+      >
         <ThemeProvider initialTheme={initialTheme}>
-          {children}
-          <Toaster />
+          <PersonalizationProvider initialPersonalization={initialPersonalization}>
+            <div className="relative isolate flex min-h-full flex-1 flex-col">
+              <AppBackground />
+              <div className="relative z-10 flex min-h-full flex-1 flex-col">
+                {children}
+                <Toaster />
+              </div>
+            </div>
+          </PersonalizationProvider>
         </ThemeProvider>
         <Analytics />
         <SpeedInsights />

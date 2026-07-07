@@ -30,6 +30,7 @@ import {
 } from '@/lib/booking-slots'
 import type { BookableService } from '@/lib/booking'
 import { cn } from '@/lib/utils'
+import { ServicePackageRequestSelector } from '@/components/booking/service-package-request-selector'
 import { CalendarDays, CheckCircle2, ClipboardList, Loader2, Users } from 'lucide-react'
 
 type BookingDateOption = {
@@ -70,6 +71,7 @@ export function PublicBookingPageClient({
   const [slots, setSlots] = useState<BookingSlot[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [selectedSlotIso, setSelectedSlotIso] = useState<string | null>(null)
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
 
   const selectedService = useMemo(
     () => data.services.find((service) => service.id === selectedServiceId) || null,
@@ -135,6 +137,7 @@ export function PublicBookingPageClient({
       phone,
       notes,
       preferredTime,
+      serviceIds: selectedServiceIds,
       leadAddress: addressPayload,
     })
     setIsSubmitting(false)
@@ -299,12 +302,17 @@ export function PublicBookingPageClient({
             <CardDescription>
               {data.bookingMode === 'online_booking'
                 ? 'Choose a service and available time. We assign the best crew automatically.'
-                : 'Tell us what you need and we will reach out to schedule.'}
+                : 'Select the services you need, tell us what you want done, and we will reach out to schedule.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {data.bookingMode === 'request_form' ? (
               <form onSubmit={handleRequestSubmit} className="space-y-4">
+                <ServicePackageRequestSelector
+                  packages={data.services}
+                  selectedIds={selectedServiceIds}
+                  onChange={setSelectedServiceIds}
+                />
                 <ContactFields
                   name={name}
                   email={email}

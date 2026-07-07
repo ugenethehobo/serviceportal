@@ -8,7 +8,7 @@ export default function PortalSettingsPage() {
         title="Settings"
         description="Manage your client portal preferences."
       />
-      <AppearanceSettings />
+      <AppearanceSettings canEditCompanyBranding={false} />
     </div>
   )
 }

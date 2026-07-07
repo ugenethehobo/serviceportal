@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { syncCompanyStripeAccount, getCompanyIdForUser } from '@/lib/stripe-connect'
+import { assertCompanyAdminForStripe, syncCompanyStripeAccount } from '@/lib/stripe-connect'
 
 export async function POST() {
   try {
@@ -23,10 +23,12 @@ export async function POST() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const companyId = await getCompanyIdForUser(user.id)
-    if (!companyId) {
-      return NextResponse.json({ error: 'No company found' }, { status: 404 })
+    const adminCheck = await assertCompanyAdminForStripe(user.id)
+    if (!adminCheck.ok) {
+      return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status })
     }
+
+    const { companyId } = adminCheck
 
     const status = await syncCompanyStripeAccount(companyId)
     return NextResponse.json(status)

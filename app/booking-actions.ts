@@ -134,6 +134,7 @@ export async function createPublicBookingRequestAction(input: {
   phone?: string
   notes?: string
   preferredTime?: string
+  serviceIds?: string[]
   leadAddress?: StructuredAddress
 }) {
   const company = await getCompanyByBookingSlug(input.slug.trim().toLowerCase())
@@ -163,10 +164,33 @@ export async function createPublicBookingRequestAction(input: {
     addressFields = buildStructuredAddressDbFields(normalized)
   }
 
+  const requestedServiceIds = [...new Set((input.serviceIds || []).filter(Boolean))]
+  let selectedServices: BookableService[] = []
+
+  if (requestedServiceIds.length > 0) {
+    const { data: services } = await supabaseAdmin
+      .from('bookable_services')
+      .select('*')
+      .eq('company_id', company.id)
+      .eq('active', true)
+      .in('id', requestedServiceIds)
+
+    selectedServices = (services || []) as BookableService[]
+    if (selectedServices.length !== requestedServiceIds.length) {
+      return { success: false as const, error: 'One or more selected services are unavailable' }
+    }
+  }
+
+  const { buildRequestedServicesNote, sumServicePackageEstimates } = await import(
+    '@/lib/service-packages'
+  )
+
   const noteParts = [
-    input.notes?.trim() || null,
+    buildRequestedServicesNote(selectedServices, input.notes?.trim() || undefined),
     input.preferredTime?.trim() ? `Preferred time: ${input.preferredTime.trim()}` : null,
   ].filter(Boolean)
+
+  const estimatedValue = sumServicePackageEstimates(selectedServices)
 
   const { data: lead, error } = await supabaseAdmin
     .from('leads')
@@ -186,6 +210,7 @@ export async function createPublicBookingRequestAction(input: {
       status: 'new',
       priority: 'normal',
       notes: noteParts.length > 0 ? noteParts.join('\n\n') : null,
+      estimated_value: estimatedValue,
     })
     .select('*')
     .single()
@@ -194,11 +219,16 @@ export async function createPublicBookingRequestAction(input: {
     return { success: false as const, error: error?.message || 'Could not submit request' }
   }
 
+  const activityBody =
+    selectedServices.length > 0
+      ? `Submitted via public request form for: ${selectedServices.map((service) => service.name).join(', ')}`
+      : 'Submitted via public booking request form'
+
   await insertLeadActivity(supabaseAdmin, {
     leadId: lead.id,
     companyId: company.id,
     type: 'note',
-    body: 'Submitted via public booking request form',
+    body: activityBody,
     createdBy: null,
   })
 
@@ -603,7 +633,7 @@ export async function getBookingSettingsAction(): Promise<
       bookingSlug: string
       bookingUrl: string
       bookingSettings: BookingSettings
-      services: BookableService[]
+      activePackageCount: number
       suggestedSlug: string
     }
   | { success: false; error: string }
@@ -628,12 +658,8 @@ export async function getBookingSettingsAction(): Promise<
     return { success: false, error: error.message }
   }
 
-  const { data: services } = await supabaseAdmin
-    .from('bookable_services')
-    .select('*')
-    .eq('company_id', check.companyId)
-    .order('sort_order', { ascending: true })
-    .order('name', { ascending: true })
+  const { countActiveServicePackages } = await import('@/app/service-package-actions')
+  const activePackageCount = await countActiveServicePackages(check.companyId)
 
   const slug = company.booking_slug || suggestBookingSlug(company.name || 'company')
 
@@ -643,7 +669,7 @@ export async function getBookingSettingsAction(): Promise<
     bookingSlug: slug,
     bookingUrl: getPublicBookingUrl(slug),
     bookingSettings: normalizeBookingSettings(company.booking_settings),
-    services: (services || []) as BookableService[],
+    activePackageCount,
     suggestedSlug: suggestBookingSlug(company.name || 'company'),
   }
 }
@@ -652,14 +678,6 @@ export async function updateBookingSettingsAction(input: {
   bookingMode: BookingMode
   bookingSlug: string
   bookingSettings: BookingSettings
-  services: Array<{
-    id?: string
-    name: string
-    description?: string | null
-    duration_minutes: number
-    price_estimate?: number | null
-    active: boolean
-  }>
 }) {
   const check = await verifyCompanyStaffForBooking()
   if (!check.ok) return { success: false as const, error: check.error }
@@ -688,13 +706,12 @@ export async function updateBookingSettingsAction(input: {
   }
 
   if (input.bookingMode === 'online_booking') {
-    const activeServices = input.services.filter(
-      (service) => service.active && service.name.trim()
-    )
-    if (activeServices.length === 0) {
+    const { countActiveServicePackages } = await import('@/app/service-package-actions')
+    const activeCount = await countActiveServicePackages(check.companyId)
+    if (activeCount === 0) {
       return {
         success: false as const,
-        error: 'Add at least one active bookable service for online booking',
+        error: 'Add at least one active service package before enabling online booking',
       }
     }
   }
@@ -718,40 +735,7 @@ export async function updateBookingSettingsAction(input: {
     return { success: false as const, error: companyError.message }
   }
 
-  const { data: existingServices } = await supabaseAdmin
-    .from('bookable_services')
-    .select('id')
-    .eq('company_id', check.companyId)
-
-  const existingIds = new Set((existingServices || []).map((service) => service.id))
-  const retainedIds = new Set<string>()
-
-  for (const [index, service] of input.services.entries()) {
-    if (!service.name.trim()) continue
-
-    const payload = {
-      company_id: check.companyId,
-      name: service.name.trim(),
-      description: service.description?.trim() || null,
-      duration_minutes: Math.min(480, Math.max(15, Math.round(service.duration_minutes || 60))),
-      price_estimate: service.price_estimate ?? null,
-      active: service.active,
-      sort_order: index,
-      updated_at: new Date().toISOString(),
-    }
-
-    if (service.id && existingIds.has(service.id)) {
-      retainedIds.add(service.id)
-      await supabaseAdmin.from('bookable_services').update(payload).eq('id', service.id)
-    } else {
-      await supabaseAdmin.from('bookable_services').insert(payload)
-    }
-  }
-
-  const deleteIds = [...existingIds].filter((id) => !retainedIds.has(id))
-  if (deleteIds.length > 0) {
-    await supabaseAdmin.from('bookable_services').delete().in('id', deleteIds)
-  }
+  revalidatePath('/dashboard/settings')
 
   return {
     success: true as const,

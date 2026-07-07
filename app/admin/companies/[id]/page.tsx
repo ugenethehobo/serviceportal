@@ -17,6 +17,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -29,12 +30,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { deleteUserCompletely } from '@/app/action'
-import { createCompanyUser } from '@/app/action'
-import { getCompanyData } from '@/app/action'
-import { updateCompanyUser } from '@/app/action'
+import {
+  adminDeleteCompanyAction,
+  createCompanyUser,
+  deleteUserCompletely,
+  getCompanyData,
+  updateCompanyUser,
+} from '@/app/action'
 import { ImageAttachmentField } from '@/components/admin/image-attachment-field'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
+import { Trash2 } from 'lucide-react'
 
 interface User {
   id: string
@@ -64,6 +70,7 @@ function revokeBlobUrl(url: string | null) {
 
 export default function CompanyUsersPage() {
   const params = useParams()
+  const router = useRouter()
   const companyId = params.id as string
   const supabase = createClient()
 
@@ -89,6 +96,29 @@ export default function CompanyUsersPage() {
   // Delete confirmation state
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [isDeleteCompanyOpen, setIsDeleteCompanyOpen] = useState(false)
+  const [deleteCompanyConfirmName, setDeleteCompanyConfirmName] = useState('')
+  const [isDeletingCompany, setIsDeletingCompany] = useState(false)
+
+  const handleDeleteCompany = async () => {
+    if (!company) return
+    if (deleteCompanyConfirmName.trim() !== company.name.trim()) {
+      toast.error('Type the company name exactly to confirm deletion')
+      return
+    }
+
+    setIsDeletingCompany(true)
+    const result = await adminDeleteCompanyAction(company.id)
+    setIsDeletingCompany(false)
+
+    if (!result.success) {
+      toast.error(result.error || 'Failed to delete company')
+      return
+    }
+
+    toast.success(`${result.deletedName} was permanently removed`)
+    router.push('/admin')
+  }
 
   const handleDeleteUser = async () => {
     if (!userToDelete || !company) {
@@ -286,7 +316,20 @@ export default function CompanyUsersPage() {
             </div>
           )}
         </div>
-        <Button onClick={() => setIsAddUserModalOpen(true)}>+ Add User</Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={() => {
+              setDeleteCompanyConfirmName('')
+              setIsDeleteCompanyOpen(true)
+            }}
+          >
+            <Trash2 className="size-4 mr-2" />
+            Delete company
+          </Button>
+          <Button onClick={() => setIsAddUserModalOpen(true)}>+ Add User</Button>
+        </div>
       </div>
 
       {/* Users List */}
@@ -398,6 +441,62 @@ export default function CompanyUsersPage() {
               onClick={handleDeleteUser}
             >
               Yes, Delete User
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isDeleteCompanyOpen}
+        onOpenChange={(open) => {
+          setIsDeleteCompanyOpen(open)
+          if (!open) setDeleteCompanyConfirmName('')
+        }}
+      >
+        <DialogContent className="!max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete company permanently?</DialogTitle>
+            <DialogDescription>
+              This removes <strong>{company?.name}</strong>, all staff accounts, clients, jobs,
+              billing data, and uploaded files. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-2">
+            <Label htmlFor="delete-company-confirm-detail">
+              Type <span className="font-medium text-foreground">{company?.name}</span> to confirm
+            </Label>
+            <Input
+              id="delete-company-confirm-detail"
+              value={deleteCompanyConfirmName}
+              onChange={(event) => setDeleteCompanyConfirmName(event.target.value)}
+              placeholder={company?.name || ''}
+              disabled={isDeletingCompany}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsDeleteCompanyOpen(false)
+                setDeleteCompanyConfirmName('')
+              }}
+              disabled={isDeletingCompany}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteCompany()}
+              disabled={
+                isDeletingCompany ||
+                deleteCompanyConfirmName.trim() !== (company?.name || '').trim()
+              }
+            >
+              {isDeletingCompany ? 'Deleting…' : 'Delete company'}
             </Button>
           </div>
         </DialogContent>

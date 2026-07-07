@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
 import { recordStripePayment } from '@/lib/billing-server'
 import { assertJobAccess } from '@/lib/portal-auth'
+import { getCompanyStripeStatus } from '@/lib/stripe-connect'
 
 export async function POST(request: Request) {
   try {
@@ -25,6 +26,11 @@ export async function POST(request: Request) {
 
     if (!scheduleId || !clientId || !companyId) {
       return NextResponse.json({ error: 'Missing payment metadata' }, { status: 400 })
+    }
+
+    const stripeStatus = await getCompanyStripeStatus(companyId)
+    if (!stripeStatus.stripeAccountId || stripeStatus.stripeAccountId !== stripeAccountId) {
+      return NextResponse.json({ error: 'Invalid Stripe account for this company' }, { status: 403 })
     }
 
     const access = await assertJobAccess(scheduleId, clientId)

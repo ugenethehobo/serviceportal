@@ -16,16 +16,10 @@ export type BookingSettings = {
   bookable_weekdays: number[]
 }
 
-export type BookableService = {
-  id: string
-  company_id: string
-  name: string
-  description: string | null
-  duration_minutes: number
-  price_estimate: number | null
-  active: boolean
-  sort_order: number
-}
+import type { ServicePackage } from '@/lib/service-packages'
+
+/** @deprecated Use ServicePackage — kept for booking code compatibility */
+export type BookableService = ServicePackage
 
 export const DEFAULT_BOOKABLE_WEEKDAYS = [1, 2, 3, 4, 5] as const
 

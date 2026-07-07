@@ -25,6 +25,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { usePersonalization } from '@/components/personalization-provider'
+import {
+  chromeBackgroundClass,
+  chromeHeaderBackgroundClass,
+  chromeSheetClass,
+} from '@/lib/personalization'
 import { cn } from '@/lib/utils'
 
 interface UserProfile {
@@ -215,7 +221,8 @@ function MobileDashboardHeader({
   userProfile,
   isLoggingOut,
   handleLogout,
-}: ReturnType<typeof useDashboardNav>) {
+  hasAppBackground,
+}: ReturnType<typeof useDashboardNav> & { hasAppBackground: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -223,7 +230,13 @@ function MobileDashboardHeader({
   }, [pathname])
 
   return (
-    <header className="flex md:hidden shrink-0 z-40 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[padding:max(0px)]:pt-[max(0px,env(safe-area-inset-top))] min-h-14">
+    <header
+      className={cn(
+        'flex md:hidden shrink-0 z-40 items-center gap-3 px-4 supports-[padding:max(0px)]:pt-[max(0px,env(safe-area-inset-top))] min-h-14',
+        !hasAppBackground && 'border-b',
+        chromeHeaderBackgroundClass(hasAppBackground)
+      )}
+    >
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <Button
           type="button"
@@ -236,7 +249,13 @@ function MobileDashboardHeader({
           <Menu className="size-5" />
         </Button>
 
-        <SheetContent side="left" className="flex h-full max-h-[100dvh] w-[min(85vw,18rem)] flex-col gap-0 p-0">
+        <SheetContent
+          side="left"
+          className={cn(
+            'flex h-full max-h-[100dvh] w-[min(85vw,18rem)] flex-col gap-0 p-0',
+            chromeSheetClass(hasAppBackground)
+          )}
+        >
           <SheetHeader className="border-b p-4 text-left">
             <div className="flex items-center gap-3 pr-8">
               <CompanyLogoImage
@@ -318,13 +337,15 @@ function DesktopSidebar({
   userProfile,
   isLoggingOut,
   handleLogout,
-}: ReturnType<typeof useDashboardNav>) {
+  hasAppBackground,
+}: ReturnType<typeof useDashboardNav> & { hasAppBackground: boolean }) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   return (
     <aside
       className={cn(
-        'hidden md:flex h-full shrink-0 flex-col bg-background transition-[width] duration-300',
+        'hidden md:flex h-full shrink-0 flex-col transition-[width] duration-300',
+        chromeBackgroundClass(hasAppBackground),
         isExpanded ? 'w-64' : 'w-16'
       )}
       onMouseEnter={() => setIsExpanded(true)}
@@ -420,11 +441,13 @@ function DesktopSidebar({
 
 export function Sidebar() {
   const nav = useDashboardNav()
+  const { backgroundImageUrl } = usePersonalization()
+  const hasAppBackground = Boolean(backgroundImageUrl)
 
   return (
     <>
-      <MobileDashboardHeader {...nav} />
-      <DesktopSidebar {...nav} />
+      <MobileDashboardHeader {...nav} hasAppBackground={hasAppBackground} />
+      <DesktopSidebar {...nav} hasAppBackground={hasAppBackground} />
     </>
   )
 }

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { LogOut, Settings } from 'lucide-react'
+import { LogOut, Settings, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -35,6 +36,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  adminDeleteCompanyAction,
   adminUpsertCompanyAction,
   getCompanyLogoDisplayUrlAction,
   getDashboardData,
@@ -155,6 +157,9 @@ export default function AdminDashboard() {
   const [logoRemoved, setLogoRemoved] = useState(false)
   const [isResolvingLogo, setIsResolvingLogo] = useState(false)
   const [editingCompany, setEditingCompany] = useState<Company | null>(null)
+  const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null)
+  const [deleteConfirmName, setDeleteConfirmName] = useState('')
+  const [isDeletingCompany, setIsDeletingCompany] = useState(false)
 
   const resetLogoState = (preview: string | null = null) => {
     revokeBlobUrl(logoPreview)
@@ -273,6 +278,40 @@ export default function AdminDashboard() {
             : current.subscriptionStatus,
       trialEndsAt: plan === 'trial' && !current.trialEndsAt ? '' : current.trialEndsAt,
     }))
+  }
+
+  const openDeleteCompanyDialog = (company: Company) => {
+    setCompanyToDelete(company)
+    setDeleteConfirmName('')
+  }
+
+  const closeDeleteCompanyDialog = () => {
+    setCompanyToDelete(null)
+    setDeleteConfirmName('')
+  }
+
+  const handleDeleteCompany = async () => {
+    if (!companyToDelete) return
+    if (deleteConfirmName.trim() !== companyToDelete.name.trim()) {
+      toast.error('Type the company name exactly to confirm deletion')
+      return
+    }
+
+    setIsDeletingCompany(true)
+    const result = await adminDeleteCompanyAction(companyToDelete.id)
+    setIsDeletingCompany(false)
+
+    if (!result.success) {
+      toast.error(result.error || 'Failed to delete company')
+      return
+    }
+
+    toast.success(`${result.deletedName} was permanently removed`)
+    closeDeleteCompanyDialog()
+    if (editingCompany?.id === companyToDelete.id) {
+      handleCompanyModalChange(false)
+    }
+    await fetchDashboardData()
   }
 
   const handleSaveCompany = async () => {
@@ -466,6 +505,14 @@ export default function AdminDashboard() {
                     <Button variant="ghost" size="sm" onClick={() => openEditCompanyModal(company)}>
                       Edit
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => openDeleteCompanyDialog(company)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -505,6 +552,13 @@ export default function AdminDashboard() {
                 </Button>
                 <Button variant="ghost" className="flex-1" onClick={() => openEditCompanyModal(company)}>
                   Edit
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => openDeleteCompanyDialog(company)}
+                >
+                  <Trash2 className="size-4" />
                 </Button>
               </div>
             </Card>
@@ -623,18 +677,89 @@ export default function AdminDashboard() {
             )}
           </div>
 
+          <div className="flex justify-between gap-2">
+            {editingCompany ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  handleCompanyModalChange(false)
+                  openDeleteCompanyDialog(editingCompany)
+                }}
+              >
+                <Trash2 className="size-4 mr-2" />
+                Delete company
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => handleCompanyModalChange(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveCompany} disabled={isSavingCompany}>
+                {isSavingCompany
+                  ? editingCompany
+                    ? 'Saving...'
+                    : 'Creating...'
+                  : editingCompany
+                    ? 'Save Changes'
+                    : 'Create Company'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(companyToDelete)}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteCompanyDialog()
+        }}
+      >
+        <DialogContent className="!max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete company permanently?</DialogTitle>
+            <DialogDescription>
+              This removes <strong>{companyToDelete?.name}</strong>, all staff accounts, clients,
+              jobs, billing data, and uploaded files. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-2">
+            <Label htmlFor="delete-company-confirm">
+              Type <span className="font-medium text-foreground">{companyToDelete?.name}</span> to
+              confirm
+            </Label>
+            <Input
+              id="delete-company-confirm"
+              value={deleteConfirmName}
+              onChange={(event) => setDeleteConfirmName(event.target.value)}
+              placeholder={companyToDelete?.name || ''}
+              disabled={isDeletingCompany}
+            />
+          </div>
+
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => handleCompanyModalChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeDeleteCompanyDialog}
+              disabled={isDeletingCompany}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSaveCompany} disabled={isSavingCompany}>
-              {isSavingCompany
-                ? editingCompany
-                  ? 'Saving...'
-                  : 'Creating...'
-                : editingCompany
-                  ? 'Save Changes'
-                  : 'Create Company'}
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteCompany()}
+              disabled={
+                isDeletingCompany ||
+                deleteConfirmName.trim() !== (companyToDelete?.name || '').trim()
+              }
+            >
+              {isDeletingCompany ? 'Deleting…' : 'Delete company'}
             </Button>
           </div>
         </DialogContent>

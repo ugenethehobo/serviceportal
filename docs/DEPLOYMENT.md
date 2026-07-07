@@ -47,7 +47,7 @@ Copy `.env.example` to `.env.local` for local development. Set the same values i
 | `QUICKBOOKS_CLIENT_SECRET` | Intuit app client secret |
 | `QUICKBOOKS_REDIRECT_URI` | OAuth callback URL. Defaults to `{NEXT_PUBLIC_APP_URL}/api/integrations/quickbooks/callback` |
 | `QUICKBOOKS_ENVIRONMENT` | `sandbox` (default) or `production` |
-| `QUICKBOOKS_OAUTH_STATE_SECRET` | HMAC secret for OAuth state. Defaults to `SUPABASE_SERVICE_ROLE_KEY` |
+| `QUICKBOOKS_OAUTH_STATE_SECRET` | HMAC secret for OAuth state. **Required in production.** Local dev may fall back to `SUPABASE_SERVICE_ROLE_KEY`. |
 
 Register the redirect URI in the [Intuit Developer Portal](https://developer.intuit.com/). P0 stores OAuth tokens only — invoice/payment sync is deferred to P3.
 
@@ -58,7 +58,7 @@ Register the redirect URI in the [Intuit Developer Portal](https://developer.int
 | `GOOGLE_CALENDAR_CLIENT_ID` | Google Cloud OAuth client ID |
 | `GOOGLE_CALENDAR_CLIENT_SECRET` | Google Cloud OAuth client secret |
 | `GOOGLE_CALENDAR_REDIRECT_URI` | OAuth callback URL. Defaults to `{NEXT_PUBLIC_APP_URL}/api/integrations/google-calendar/callback` |
-| `GOOGLE_CALENDAR_OAUTH_STATE_SECRET` | HMAC secret for OAuth state. Defaults to `SUPABASE_SERVICE_ROLE_KEY` |
+| `GOOGLE_CALENDAR_OAUTH_STATE_SECRET` | HMAC secret for OAuth state. **Required in production.** Local dev may fall back to `SUPABASE_SERVICE_ROLE_KEY`. |
 
 Enable the Google Calendar API in [Google Cloud Console](https://console.cloud.google.com/) and add the redirect URI to your OAuth client. P1 ships one-way export: jobs → calendar events.
 
@@ -137,6 +137,13 @@ All SQL files live in `supabase/`. Run them in the **Supabase SQL editor** (or v
 | 26 | `document-templates-schema.sql` | Unified `document_templates` JSONB on `companies` |
 | 27 | `booking-schema.sql` | Public client booking mode, slug, bookable services |
 | 28 | `google-calendar-schema.sql` | `google_calendar_event_id` on `schedules` |
+| 29 | `onboarding-schema.sql` | Company onboarding progress columns |
+| 30 | `personalization-schema.sql` | Company-wide `accent_color` and `background_image_url` |
+| 31 | `user-backgrounds-storage.sql` | `user-backgrounds` storage bucket |
+| 32 | `recurring-occurrence-origin.sql` | Recurring occurrence origin tracking on `schedules` |
+| 33 | `production-rls-hardening.sql` | RLS on `crews`, `bookable_services`, etc.; company-scoped storage reads |
+
+> **Security:** Run `production-rls-hardening.sql` before exposing the app to real customers. It replaces the global `company-logos` read policy with company-scoped storage policies.
 
 ### Quick checklist for common feature gaps
 
@@ -149,6 +156,9 @@ All SQL files live in `supabase/`. Run them in the **Supabase SQL editor** (or v
 | Zapier / integrations settings missing | `integrations-schema.sql` |
 | Visual invoice/estimate templates missing | `document-templates-schema.sql` |
 | Document template editor shows column error | `document-templates-schema.sql` |
+| Onboarding wizard missing columns | `onboarding-schema.sql` |
+| Company branding (background/accent) fails | `personalization-schema.sql` + `user-backgrounds-storage.sql` |
+| Cross-tenant data visible in browser | `production-rls-hardening.sql` |
 
 ## Storage buckets
 
@@ -160,8 +170,9 @@ Create these **private** buckets in Supabase Dashboard → Storage if not create
 | `client-documents` | No | Manual (see `estimates-schema.sql` comment) | Estimate/invoice PDFs, client file uploads |
 | `job-photos` | No | Manual (see `job-photos-schema.sql` comment) | Job site photos |
 | `user-avatars` | No | Manual | Profile avatar images |
+| `user-backgrounds` | No | `user-backgrounds-storage.sql` | Company background images (`{companyId}/background/...`) |
 
-For `client-documents`, `job-photos`, and `user-avatars`, configure storage policies so authenticated staff can read/write objects for their company. Server actions use the **service role** for uploads; browser clients use signed URLs where applicable.
+For `client-documents`, `job-photos`, and `user-avatars`, configure storage policies so authenticated staff can read/write objects for their company. After migration #33, authenticated reads are company-scoped (or user-scoped for avatars). Server actions use the **service role** for uploads; browser clients use signed URLs where applicable.
 
 ## Stripe webhooks
 
@@ -203,6 +214,65 @@ Set `CRON_SECRET` in Vercel environment variables. The route returns `{ sent, sk
 
 Recurring job generation runs when schedule statuses are synced (archived past jobs spawn the next occurrence). This is triggered from the client dashboard when viewing a client's jobs. No separate cron is required today, but you may add one later that calls the underlying sync for all active clients.
 
+## Phase 2: Staging / beta infrastructure
+
+Use this checklist after Phase 1 (security hardening) and before inviting real customers.
+
+### 1. Verify database migrations
+
+From the project root:
+
+```bash
+npm run verify:schema
+```
+
+Apply any **MISS** migrations in Supabase → SQL editor, in the order listed in the migration table above. For a greenfield staging project, run migrations **1–33** in sequence.
+
+After applying `production-rls-hardening.sql`, confirm cross-tenant isolation: two test companies should not see each other's `crews`, storage objects, or documents via the browser client.
+
+### 2. Configure Supabase Auth
+
+In Supabase Dashboard → **Authentication** → **URL configuration**:
+
+| Setting | Staging / production value |
+|---------|----------------------------|
+| Site URL | `{NEXT_PUBLIC_APP_URL}` |
+| Redirect URLs | `{NEXT_PUBLIC_APP_URL}/auth/callback` |
+
+### 3. Create Vercel project and env vars
+
+1. Import the Git repo into [Vercel](https://vercel.com).
+2. Set **Production** environment variables (copy from `.env.example`; use `npm run check:env:production` locally to audit).
+3. Generate dedicated secrets for production:
+   - `CRON_SECRET` — random 32+ character string
+   - `QUICKBOOKS_OAUTH_STATE_SECRET` — random 32+ character string
+   - `GOOGLE_CALENDAR_OAUTH_STATE_SECRET` — random 32+ character string
+4. Set `NEXT_PUBLIC_APP_URL` to your Vercel domain (e.g. `https://servport.pro` or `https://app.yourdomain.com`).
+
+`vercel.json` already configures the daily notifications cron. Ensure `CRON_SECRET` is set in Vercel before the first cron run.
+
+### 4. External service callbacks
+
+Register these URLs using your deployed `NEXT_PUBLIC_APP_URL`:
+
+| Service | URL |
+|---------|-----|
+| Stripe Connect webhook | `{APP_URL}/api/stripe/webhook` |
+| Stripe Billing webhook | `{APP_URL}/api/stripe/billing/webhook` |
+| QuickBooks OAuth | `{APP_URL}/api/integrations/quickbooks/callback` |
+| Google Calendar OAuth | `{APP_URL}/api/integrations/google-calendar/callback` |
+| Supabase Auth callback | `{APP_URL}/auth/callback` |
+
+Use **Stripe test mode** for beta unless you are ready for live charges.
+
+### 5. Post-deploy verification
+
+```bash
+curl https://your-app.example.com/api/health
+```
+
+Expect `{ "ok": true, "checks": { ... } }` with all checks `ok`. Then run the smoke-test checklist below.
+
 ## Deploy steps (summary)
 
 1. Create Supabase project; note URL and API keys.
@@ -214,7 +284,21 @@ Recurring job generation runs when schedule statuses are synced (archived past j
 7. Deploy Next.js app (`npm run build` must pass).
 8. Register Stripe webhooks pointing at production URLs.
 9. Add Vercel cron for `/api/cron/notifications`.
-10. Smoke-test: signup, create client, schedule job, send estimate, upload logo, Zapier test webhook.
+10. Smoke-test (see checklist below).
+
+### Production smoke-test checklist
+
+- [ ] Staff signup and company onboarding complete
+- [ ] Create client, schedule job, recurring job spawns next occurrence
+- [ ] Send estimate; client portal login and document download
+- [ ] Stripe Connect onboarding (company admin only)
+- [ ] Collect portal payment on a job with balance due
+- [ ] Upload company logo and background; accent color visible to team member
+- [ ] Team member cannot edit company branding (read-only)
+- [ ] QuickBooks / Google Calendar OAuth connect (Pro, admin only)
+- [ ] Zapier test webhook
+- [ ] Password reset email (Resend)
+- [ ] Cron notifications route with `CRON_SECRET`
 
 ## Local development
 

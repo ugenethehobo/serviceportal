@@ -52,7 +52,11 @@ import {
   type StructuredAddressErrors,
 } from '@/lib/address'
 import { parseAsCompanyTime } from '@/lib/timezone'
+import { getServicePackagesAction } from '@/app/service-package-actions'
 import { JobFormFields } from '@/components/dashboard/job-form-fields'
+import { ServicePackageTemplatePicker } from '@/components/dashboard/service-package-template-picker'
+import { applyServicePackageToJobForm, type ServicePackage } from '@/lib/service-packages'
+import { formatForDatetimeLocal } from '@/lib/timezone'
 import { JobStatusBadge } from '@/components/dashboard/job-status-badge'
 import { ClientBillingPanel } from '@/components/dashboard/client-billing-panel'
 import { ClientEstimatesPanel } from '@/components/dashboard/client-estimates-panel'
@@ -134,6 +138,9 @@ export function ClientDetailPageClient({
     recurrence: 'none',
     price: '',
   })
+  const [servicePackages, setServicePackages] = useState<ServicePackage[]>([])
+  const [selectedJobTemplateId, setSelectedJobTemplateId] = useState('')
+  const [companyTimezone, setCompanyTimezone] = useState('America/Chicago')
 
   const [schedules, setSchedules] = useState<any[]>(initialSchedules)
   const [convertingEstimate, setConvertingEstimate] = useState<Estimate | null>(null)
@@ -141,6 +148,38 @@ export function ClientDetailPageClient({
   const [photosRefreshKey, setPhotosRefreshKey] = useState(0)
   const [clientStatusConfirm, setClientStatusConfirm] = useState<'archive' | 'restore' | null>(null)
   const [isClientStatusLoading, setIsClientStatusLoading] = useState(false)
+
+  useEffect(() => {
+    const loadJobTemplates = async () => {
+      const [packagesResult, profileResult] = await Promise.all([
+        getServicePackagesAction({ activeOnly: true }),
+        supabase.auth.getUser().then(async ({ data: { user } }) => {
+          if (!user) return null
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('company_id')
+            .eq('id', user.id)
+            .single()
+          if (!profile?.company_id) return null
+          const { data: company } = await supabase
+            .from('companies')
+            .select('timezone')
+            .eq('id', profile.company_id)
+            .single()
+          return company
+        }),
+      ])
+
+      if (packagesResult.success) {
+        setServicePackages(packagesResult.packages)
+      }
+      if (profileResult?.timezone) {
+        setCompanyTimezone(profileResult.timezone)
+      }
+    }
+
+    void loadJobTemplates()
+  }, [supabase])
 
   const refreshClientData = async () => {
     const result = await getClientDetailAction(clientId)
@@ -276,12 +315,32 @@ export function ClientDetailPageClient({
   }
 
   const handleStartTimeChange = (startTime: string) => {
-    const newEndTime = new Date(new Date(startTime).getTime() + 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 16)
+    const template = servicePackages.find((pkg) => pkg.id === selectedJobTemplateId)
+    const nextJob = template
+      ? applyServicePackageToJobForm(template, { ...newJob, startTime }, companyTimezone)
+      : {
+          ...newJob,
+          startTime,
+          endTime: formatForDatetimeLocal(
+            new Date(new Date(startTime).getTime() + 60 * 60 * 1000).toISOString(),
+            companyTimezone
+          ),
+        }
 
-    setNewJob(prev => ({ ...prev, startTime, endTime: newEndTime }))
-    refreshAvailableCrews(startTime, newEndTime)
+    setNewJob(nextJob)
+    refreshAvailableCrews(nextJob.startTime, nextJob.endTime)
+    setConflictInfo(null)
+  }
+
+  const handleJobTemplateSelect = (packageId: string) => {
+    setSelectedJobTemplateId(packageId)
+    const template = servicePackages.find((pkg) => pkg.id === packageId)
+    if (!template) return
+    setNewJob((current) => applyServicePackageToJobForm(template, current, companyTimezone))
+    if (newJob.startTime && newJob.endTime) {
+      const next = applyServicePackageToJobForm(template, newJob, companyTimezone)
+      refreshAvailableCrews(next.startTime, next.endTime)
+    }
     setConflictInfo(null)
   }
 
@@ -396,6 +455,7 @@ export function ClientDetailPageClient({
         price: '',
       })
       setConvertingEstimate(null)
+      setSelectedJobTemplateId('')
       setIsAddJobModalOpen(false)
       setConflictInfo(null)
       await refreshClientData()
@@ -944,7 +1004,10 @@ export function ClientDetailPageClient({
         open={isAddJobModalOpen}
         onOpenChange={(open) => {
           setIsAddJobModalOpen(open)
-          if (!open) setConvertingEstimate(null)
+          if (!open) {
+            setConvertingEstimate(null)
+            setSelectedJobTemplateId('')
+          }
         }}
       >
         <DialogContent className="!max-w-lg">
@@ -954,7 +1017,14 @@ export function ClientDetailPageClient({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="py-2">
+          <div className="py-2 space-y-4">
+            {!convertingEstimate ? (
+              <ServicePackageTemplatePicker
+                packages={servicePackages}
+                value={selectedJobTemplateId}
+                onSelect={handleJobTemplateSelect}
+              />
+            ) : null}
             <JobFormFields
               values={newJob}
               onChange={setNewJob}

@@ -222,6 +222,7 @@ export async function completePlatformSignup(input: {
       stripe_platform_subscription_id: stripeSubscriptionId,
       promo_code: appliedPromoCode,
       status: 'Active',
+      onboarding_completed: false,
     })
     .select('id')
     .single()

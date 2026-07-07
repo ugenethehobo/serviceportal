@@ -12,6 +12,7 @@ import { CompanyProfileSettings } from '@/components/dashboard/company-profile-s
 import { JobPhotoCategoriesSettings } from '@/components/dashboard/job-photo-categories-settings'
 import { PhotoStorageMeter } from '@/components/dashboard/photo-storage-meter'
 import { ClientBookingSettings } from '@/components/dashboard/client-booking-settings'
+import { ServicePackagesSettings } from '@/components/dashboard/service-packages-settings'
 import { NotificationSettings } from '@/components/dashboard/notification-settings'
 import { IntegrationsSettings } from '@/components/dashboard/integrations-settings'
 import { PlatformSubscriptionSettings } from '@/components/dashboard/platform-subscription-settings'
@@ -39,6 +40,7 @@ import {
   CreditCard,
   FileText,
   KeyRound,
+  Layers3,
   Link2,
   Palette,
   Sparkles,
@@ -57,6 +59,7 @@ type SettingsSectionId =
   | 'subscription'
   | 'invoice-template'
   | 'job-photos'
+  | 'service-packages'
   | 'client-booking'
   | 'notifications'
   | 'integrations'
@@ -85,7 +88,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: 'appearance',
     label: 'Appearance',
-    description: 'Light or dark mode.',
+    description: 'Theme, background, and accent color.',
     icon: Palette,
   },
   {
@@ -121,6 +124,13 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Job photos',
     description: 'Photo upload categories.',
     icon: Camera,
+    adminOnly: true,
+  },
+  {
+    id: 'service-packages',
+    label: 'Service packages',
+    description: 'Reusable services for booking and jobs.',
+    icon: Layers3,
     adminOnly: true,
   },
   {
@@ -422,10 +432,11 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
                 <div>
                   <h2 className="text-xl font-semibold tracking-tight">Appearance</h2>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Choose light or dark mode for the dashboard and portal.
+                    Choose your theme preference. Company admins can also set a shared background
+                    photo and accent color for the whole team and client portal.
                   </p>
                 </div>
-                <AppearanceSettings embedded />
+                <AppearanceSettings embedded canEditCompanyBranding={isAdmin} />
               </div>
             )}
 
@@ -499,6 +510,19 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
                   />
                 )}
                 <JobPhotoCategoriesSettings embedded />
+              </div>
+            )}
+
+            {activeSection === 'service-packages' && isAdmin && (
+              <div className="space-y-6 max-w-3xl">
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight">Service packages</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Define the services you offer once, then reuse them across booking and job
+                    creation.
+                  </p>
+                </div>
+                <ServicePackagesSettings embedded />
               </div>
             )}
 

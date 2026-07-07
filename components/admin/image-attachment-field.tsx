@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { ImagePlus, Loader2, Trash2 } from 'lucide-react'
 import {
   Attachment,
@@ -13,9 +13,14 @@ import {
   AttachmentTrigger,
 } from '@/components/ui/attachment'
 import { Label } from '@/components/ui/label'
+import {
+  PROFILE_IMAGE_ACCEPT,
+  PROFILE_IMAGE_MAX_BYTES,
+  PROFILE_IMAGE_MAX_SIZE_LABEL,
+  profileImageIdleDescription,
+  validateProfileImageFile,
+} from '@/lib/profile-image-upload'
 import { cn } from '@/lib/utils'
-
-const DEFAULT_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif'
 
 type ImageAttachmentFieldProps = {
   label: string
@@ -27,12 +32,15 @@ type ImageAttachmentFieldProps = {
   onFileSelect: (file: File) => void
   onRemove: () => void
   accept?: string
+  maxFileSizeBytes?: number
+  maxFileSizeLabel?: string
   disabled?: boolean
   idleTitle?: string
   idleDescription?: string
   className?: string
   mediaClassName?: string
   imageAlt?: string
+  helperText?: string
 }
 
 export function ImageAttachmentField({
@@ -41,18 +49,28 @@ export function ImageAttachmentField({
   fileName,
   description,
   isUploading = false,
-  error,
+  error: externalError,
   onFileSelect,
   onRemove,
-  accept = DEFAULT_ACCEPT,
+  accept = PROFILE_IMAGE_ACCEPT,
+  maxFileSizeBytes = PROFILE_IMAGE_MAX_BYTES,
+  maxFileSizeLabel = PROFILE_IMAGE_MAX_SIZE_LABEL,
   disabled = false,
   idleTitle = 'Upload an image',
-  idleDescription = 'JPG, PNG, WebP, or GIF',
+  idleDescription,
   className,
   mediaClassName = '!w-14 !h-14 min-w-14',
   imageAlt = '',
+  helperText,
 }: ImageAttachmentFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [localError, setLocalError] = useState<string | null>(null)
+
+  const resolvedIdleDescription =
+    idleDescription ?? profileImageIdleDescription()
+  const resolvedHelperText =
+    helperText ?? `Accepted formats: JPG, PNG, WebP, GIF · max ${maxFileSizeLabel}`
+  const displayError = externalError || localError
 
   const openFilePicker = () => {
     if (disabled || isUploading) return
@@ -61,11 +79,32 @@ export function ImageAttachmentField({
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file) onFileSelect(file)
     event.target.value = ''
+    if (!file) return
+
+    setLocalError(null)
+
+    const validationError = validateProfileImageFile(file)
+    if (validationError) {
+      setLocalError(validationError)
+      return
+    }
+
+    if (file.size > maxFileSizeBytes) {
+      setLocalError(`Image must be ${maxFileSizeLabel} or smaller.`)
+      return
+    }
+
+    onFileSelect(file)
   }
 
-  const attachmentState = error ? 'error' : isUploading ? 'uploading' : imageSrc ? 'done' : 'idle'
+  const attachmentState = displayError
+    ? 'error'
+    : isUploading
+      ? 'uploading'
+      : imageSrc
+        ? 'done'
+        : 'idle'
 
   return (
     <div className={cn('space-y-2', className)}>
@@ -88,7 +127,7 @@ export function ImageAttachmentField({
           <AttachmentContent>
             <AttachmentTitle>{fileName || 'Current image'}</AttachmentTitle>
             <AttachmentDescription>
-              {error || description || 'Click replace or remove to update'}
+              {displayError || description || 'Click replace or remove to update'}
             </AttachmentDescription>
           </AttachmentContent>
           <AttachmentActions>
@@ -101,7 +140,10 @@ export function ImageAttachmentField({
             </AttachmentAction>
             <AttachmentAction
               aria-label={`Remove ${label.toLowerCase()}`}
-              onClick={onRemove}
+              onClick={() => {
+                setLocalError(null)
+                onRemove()
+              }}
               disabled={disabled || isUploading}
             >
               <Trash2 />
@@ -121,11 +163,13 @@ export function ImageAttachmentField({
           <AttachmentContent>
             <AttachmentTitle>{idleTitle}</AttachmentTitle>
             <AttachmentDescription>
-              {error || idleDescription}
+              {displayError || resolvedIdleDescription}
             </AttachmentDescription>
           </AttachmentContent>
         </Attachment>
       )}
+
+      <p className="text-xs text-muted-foreground">{resolvedHelperText}</p>
     </div>
   )
 }

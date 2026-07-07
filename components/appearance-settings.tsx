@@ -8,13 +8,23 @@ import { updateUserThemeAction } from '@/app/action'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { PersonalizationSettings } from '@/components/personalization-settings'
 import type { ThemePreference } from '@/lib/theme'
 
 interface AppearanceSettingsProps {
   embedded?: boolean
+  initialAccentColor?: string | null
+  initialBackgroundUrl?: string | null
+  /** Company admins can edit shared branding; others only change their theme. */
+  canEditCompanyBranding?: boolean
 }
 
-export function AppearanceSettings({ embedded = false }: AppearanceSettingsProps) {
+export function AppearanceSettings({
+  embedded = false,
+  initialAccentColor = null,
+  initialBackgroundUrl = null,
+  canEditCompanyBranding = true,
+}: AppearanceSettingsProps) {
   const { resolvedTheme, setTheme } = useTheme()
   const [isMounted, setIsMounted] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -54,26 +64,33 @@ export function AppearanceSettings({ embedded = false }: AppearanceSettingsProps
       )}
 
       <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className="mt-0.5 text-muted-foreground">
-              {isDark ? <Moon className="size-4" /> : <Sun className="size-4" />}
-            </div>
-            <div>
-              <Label htmlFor="dark-mode-toggle" className="text-sm font-medium">
-                Dark mode
-              </Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {isDark ? 'Dark theme is enabled' : 'Light theme is enabled'}
-              </p>
-            </div>
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="mt-0.5 text-muted-foreground">
+            {isDark ? <Moon className="size-4" /> : <Sun className="size-4" />}
           </div>
-          <Switch
-            id="dark-mode-toggle"
-            checked={isDark}
-            onCheckedChange={handleToggle}
-            disabled={!isMounted || isSaving}
-          />
+          <div>
+            <Label htmlFor="dark-mode-toggle" className="text-sm font-medium">
+              Dark mode
+            </Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isDark ? 'Dark theme is enabled' : 'Light theme is enabled'}
+            </p>
+          </div>
+        </div>
+        <Switch
+          id="dark-mode-toggle"
+          checked={isDark}
+          onCheckedChange={handleToggle}
+          disabled={!isMounted || isSaving}
+        />
       </div>
+
+      <PersonalizationSettings
+        embedded
+        initialAccentColor={initialAccentColor}
+        initialBackgroundUrl={initialBackgroundUrl}
+        canEdit={canEditCompanyBranding}
+      />
     </div>
   )
 

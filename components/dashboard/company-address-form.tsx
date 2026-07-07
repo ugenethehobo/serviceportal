@@ -86,7 +86,7 @@ export function StructuredAddressForm({
         <div>
           <Label htmlFor={`${idPrefix}-state`}>State{requiredMark}</Label>
           <Select
-            value={value.state || undefined}
+            value={value.state === '' ? null : value.state}
             onValueChange={(next) => update('state', next ?? '')}
             disabled={disabled}
           >

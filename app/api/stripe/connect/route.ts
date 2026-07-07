@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { createStripeConnectLink, getCompanyIdForUser } from '@/lib/stripe-connect'
+import { assertCompanyAdminForStripe, createStripeConnectLink } from '@/lib/stripe-connect'
 
 export async function POST(request: Request) {
   try {
@@ -23,13 +23,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const companyId = await getCompanyIdForUser(user.id)
-    if (!companyId) {
-      return NextResponse.json({ error: 'No company found' }, { status: 404 })
+    const adminCheck = await assertCompanyAdminForStripe(user.id)
+    if (!adminCheck.ok) {
+      return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status })
     }
 
+    const { companyId } = adminCheck
+
     const origin = new URL(request.url).origin
-    const { url } = await createStripeConnectLink(companyId, origin)
+    let returnTo: 'settings' | 'onboarding' = 'settings'
+    try {
+      const body = await request.json()
+      if (body?.returnTo === 'onboarding') {
+        returnTo = 'onboarding'
+      }
+    } catch {
+      // no body — default to settings
+    }
+
+    const { url } = await createStripeConnectLink(companyId, origin, returnTo)
 
     return NextResponse.json({ url })
   } catch (error: any) {

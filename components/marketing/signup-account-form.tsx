@@ -56,7 +56,7 @@ export function SignupAccountForm({ plan, checkoutSessionId, promoCode }: Signup
       return
     }
 
-    window.location.href = '/dashboard'
+    window.location.href = '/onboarding'
   }
 
   return (

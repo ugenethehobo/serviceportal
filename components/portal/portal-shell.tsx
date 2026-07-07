@@ -5,6 +5,9 @@ import { PortalShellProvider } from '@/components/portal/portal-shell-context'
 import type { PortalShellData } from '@/lib/portal-auth'
 import { PortalScrollMain } from '@/components/portal/portal-scroll-main'
 import { PortalSidebar } from '@/components/portal/portal-sidebar'
+import { usePersonalization } from '@/components/personalization-provider'
+import { shellBackgroundClass } from '@/lib/personalization'
+import { cn } from '@/lib/utils'
 
 interface PortalShellProps {
   shellData: PortalShellData
@@ -12,10 +15,19 @@ interface PortalShellProps {
 }
 
 export function PortalShell({ shellData, children }: PortalShellProps) {
+  const { backgroundImageUrl } = usePersonalization()
+  const hasAppBackground = Boolean(backgroundImageUrl)
+
   return (
     <NavigationProvider>
       <PortalShellProvider data={shellData}>
-      <div className="flex h-[100dvh] flex-col md:flex-row bg-background overflow-hidden">
+      <div
+        data-app-shell
+        className={cn(
+          'flex h-[100dvh] flex-col md:flex-row overflow-hidden',
+          shellBackgroundClass(hasAppBackground)
+        )}
+      >
         <PortalSidebar
           clientName={shellData.clientName}
           companyName={shellData.companyName}

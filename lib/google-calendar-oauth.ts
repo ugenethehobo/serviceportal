@@ -30,12 +30,22 @@ export type GoogleCalendarListEntry = {
 
 const SENSITIVE_CONFIG_KEYS = new Set(['access_token', 'refresh_token'])
 
-function getOAuthStateSecret(): string | null {
+function isProductionRuntime(): boolean {
   return (
-    process.env.GOOGLE_CALENDAR_OAUTH_STATE_SECRET?.trim() ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-    null
+    process.env.NODE_ENV === 'production' ||
+    process.env.VERCEL_ENV === 'production'
   )
+}
+
+function getOAuthStateSecret(): string | null {
+  const dedicated = process.env.GOOGLE_CALENDAR_OAUTH_STATE_SECRET?.trim()
+  if (dedicated) return dedicated
+
+  if (isProductionRuntime()) {
+    return null
+  }
+
+  return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || null
 }
 
 export function isGoogleCalendarOAuthConfigured(): boolean {

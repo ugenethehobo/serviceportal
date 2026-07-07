@@ -48,6 +48,35 @@ async function getProfileContext(userId: string) {
   return profile
 }
 
+async function getCompanyOnboardingCompleted(companyId: string): Promise<boolean | null> {
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  const { data, error } = await supabaseAdmin
+    .from('companies')
+    .select('onboarding_completed')
+    .eq('id', companyId)
+    .single()
+
+  if (error) {
+    if (error.code === '42703') return null
+    return null
+  }
+
+  return data?.onboarding_completed ?? true
+}
+
+function isOnboardingRoute(pathname: string) {
+  return pathname === '/onboarding' || pathname.startsWith('/onboarding/')
+}
+
+function isStripeApiRoute(pathname: string) {
+  return pathname.startsWith('/api/stripe/')
+}
+
 function isTrialGraceRoute(pathname: string, role: string | undefined) {
   if (pathname === '/dashboard/trial-expired') return true
   if (pathname === '/dashboard/settings' || pathname.startsWith('/dashboard/settings/')) {
@@ -96,6 +125,7 @@ export async function middleware(request: NextRequest) {
   const protectedStaffRoutes = ['/dashboard', '/admin']
   const isStaffRoute = protectedStaffRoutes.some((route) => pathname.startsWith(route))
   const isPortalRoute = pathname.startsWith('/portal')
+  const onboardingRoute = isOnboardingRoute(pathname)
 
   const {
     data: { user },
@@ -122,15 +152,54 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if ((isStaffRoute || isPortalRoute) && !user) {
+  if ((isStaffRoute || isPortalRoute || onboardingRoute) && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  if (user && (isStaffRoute || isPortalRoute || pathname === '/login' || isPublicMarketingRoute)) {
+  if (
+    user &&
+    (isStaffRoute || isPortalRoute || onboardingRoute || pathname === '/login' || isPublicMarketingRoute)
+  ) {
     const profile = await resolveProfile(user.id)
     const role = profile?.role
+
+    if (onboardingRoute) {
+      if (role !== 'company_admin') {
+        const url = request.nextUrl.clone()
+        url.pathname = getPostLoginPath(
+          role || '',
+          process.env.NEXT_PUBLIC_ADMIN_EMAIL,
+          user.email
+        )
+        return NextResponse.redirect(url)
+      }
+
+      if (profile?.company_id) {
+        const onboardingCompleted = await getCompanyOnboardingCompleted(profile.company_id)
+        if (onboardingCompleted === true) {
+          const url = request.nextUrl.clone()
+          url.pathname = '/dashboard'
+          return NextResponse.redirect(url)
+        }
+      }
+    }
+
+    if (
+      isStaffRoute &&
+      role === 'company_admin' &&
+      profile?.company_id &&
+      user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL &&
+      !isStripeApiRoute(pathname)
+    ) {
+      const onboardingCompleted = await getCompanyOnboardingCompleted(profile.company_id)
+      if (onboardingCompleted === false) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/onboarding'
+        return NextResponse.redirect(url)
+      }
+    }
 
     if (isPortalRoute && role !== 'client') {
       const url = request.nextUrl.clone()

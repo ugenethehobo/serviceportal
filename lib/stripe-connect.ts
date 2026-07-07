@@ -67,7 +67,11 @@ export async function syncCompanyStripeAccount(companyId: string) {
   return getCompanyStripeStatus(companyId)
 }
 
-export async function createStripeConnectLink(companyId: string, origin: string) {
+export async function createStripeConnectLink(
+  companyId: string,
+  origin: string,
+  returnTo: 'settings' | 'onboarding' = 'settings'
+) {
   const supabaseAdmin = createSupabaseAdmin()
 
   const { data: company } = await supabaseAdmin
@@ -96,8 +100,14 @@ export async function createStripeConnectLink(companyId: string, origin: string)
       .eq('id', companyId)
   }
 
-  const returnUrl = `${origin}/dashboard/settings?stripe=return`
-  const refreshUrl = `${origin}/dashboard/settings?stripe=refresh`
+  const returnUrl =
+    returnTo === 'onboarding'
+      ? `${origin}/onboarding?stripe=return&step=payments`
+      : `${origin}/dashboard/settings?stripe=return`
+  const refreshUrl =
+    returnTo === 'onboarding'
+      ? `${origin}/onboarding?stripe=refresh&step=payments`
+      : `${origin}/dashboard/settings?stripe=refresh`
 
   const accountLink = await stripe.accountLinks.create({
     account: accountId,
@@ -119,4 +129,31 @@ export async function getCompanyIdForUser(userId: string) {
     .single()
 
   return profile?.company_id ?? null
+}
+
+export async function assertCompanyAdminForStripe(userId: string) {
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('company_id, role')
+    .eq('id', userId)
+    .single()
+
+  if (!profile?.company_id) {
+    return { ok: false as const, error: 'No company found', status: 404 as const }
+  }
+
+  if (profile.role !== 'company_admin') {
+    return {
+      ok: false as const,
+      error: 'Only company admins can manage Stripe Connect',
+      status: 403 as const,
+    }
+  }
+
+  return {
+    ok: true as const,
+    companyId: profile.company_id,
+    userId,
+  }
 }

@@ -8,7 +8,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
@@ -17,10 +16,10 @@ import {
   DEFAULT_BOOKING_SETTINGS,
   type BookingMode,
   type BookingSettings,
-  type BookableService,
 } from '@/lib/booking'
 import { cn } from '@/lib/utils'
-import { CalendarClock, ClipboardList, Copy, Link2, Plus, Trash2 } from 'lucide-react'
+import { CalendarClock, ClipboardList, Copy, Link2 } from 'lucide-react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 
 const WEEKDAY_OPTIONS = [
@@ -33,27 +32,6 @@ const WEEKDAY_OPTIONS = [
   { value: 6, label: 'Sat' },
 ] as const
 
-type EditableService = {
-  id?: string
-  name: string
-  description: string
-  duration_minutes: number
-  price_estimate: string
-  active: boolean
-}
-
-function toEditableService(service?: BookableService): EditableService {
-  return {
-    id: service?.id,
-    name: service?.name || '',
-    description: service?.description || '',
-    duration_minutes: service?.duration_minutes || 60,
-    price_estimate:
-      service?.price_estimate != null ? String(service.price_estimate) : '',
-    active: service?.active ?? true,
-  }
-}
-
 interface ClientBookingSettingsProps {
   embedded?: boolean
 }
@@ -62,9 +40,9 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
   const [bookingMode, setBookingMode] = useState<BookingMode>('request_form')
   const [bookingSlug, setBookingSlug] = useState('')
   const [bookingUrl, setBookingUrl] = useState('')
+  const [activePackageCount, setActivePackageCount] = useState(0)
   const [bookingSettings, setBookingSettings] =
     useState<BookingSettings>(DEFAULT_BOOKING_SETTINGS)
-  const [services, setServices] = useState<EditableService[]>([toEditableService()])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -80,11 +58,7 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
     setBookingSlug(result.bookingSlug)
     setBookingUrl(result.bookingUrl)
     setBookingSettings(result.bookingSettings)
-    setServices(
-      result.services.length > 0
-        ? result.services.map((service) => toEditableService(service))
-        : [toEditableService()]
-    )
+    setActivePackageCount(result.activePackageCount)
     setIsLoading(false)
   }, [])
 
@@ -107,16 +81,6 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
       bookingMode,
       bookingSlug,
       bookingSettings,
-      services: services.map((service) => ({
-        id: service.id,
-        name: service.name,
-        description: service.description.trim() || null,
-        duration_minutes: service.duration_minutes,
-        price_estimate: service.price_estimate.trim()
-          ? Number(service.price_estimate)
-          : null,
-        active: service.active,
-      })),
     })
     setIsSaving(false)
 
@@ -128,14 +92,6 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
     setBookingUrl(result.bookingUrl)
     toast.success('Client booking settings saved')
     await loadSettings()
-  }
-
-  const updateService = (index: number, patch: Partial<EditableService>) => {
-    setServices((current) =>
-      current.map((service, serviceIndex) =>
-        serviceIndex === index ? { ...service, ...patch } : service
-      )
-    )
   }
 
   if (isLoading) {
@@ -152,9 +108,19 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
           <h3 className="font-semibold tracking-tight">Client booking</h3>
           <p className="text-sm text-muted-foreground mt-1">
             Share a public link so clients can either book themselves online or submit a service
-            request. Choose one mode — not both at once.
+            request. Service packages are managed separately and power both modes.
           </p>
         </div>
+      </div>
+
+      <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+        <p>
+          <strong className="text-foreground">{activePackageCount}</strong> active service{' '}
+          {activePackageCount === 1 ? 'package' : 'packages'} configured.{' '}
+          <Link href="/dashboard/settings?section=service-packages" className="text-primary hover:underline">
+            Manage packages
+          </Link>
+        </p>
       </div>
 
       <div className="space-y-3">
@@ -169,14 +135,14 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
           <BookingModeOption
             value="request_form"
             title="Request form"
-            description="Clients submit a lead. You follow up to schedule."
+            description="Clients pick services and submit a lead. You follow up to schedule."
             icon={ClipboardList}
             selected={bookingMode === 'request_form'}
           />
           <BookingModeOption
             value="online_booking"
             title="Online booking"
-            description="Clients pick a service and time. Crew is auto-assigned."
+            description="Clients pick a package and time. Crew is auto-assigned."
             icon={CalendarClock}
             selected={bookingMode === 'online_booking'}
           />
@@ -250,7 +216,6 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
       </div>
 
       {bookingMode === 'online_booking' ? (
-        <>
         <div className="space-y-4 rounded-lg border p-4">
           <div>
             <Label>Slot availability</Label>
@@ -364,111 +329,11 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
             </div>
           </div>
         </div>
-
-        <div className="space-y-4 rounded-lg border p-4">
-          <div>
-            <Label>Bookable services</Label>
-            <p className="text-xs text-muted-foreground mt-1">
-              At least one active service is required for online booking.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {services.map((service, index) => (
-              <div key={service.id || `new-${index}`} className="rounded-lg border p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={service.active}
-                      onCheckedChange={(checked) => updateService(index, { active: checked })}
-                    />
-                    <span className="text-sm">{service.active ? 'Active' : 'Hidden'}</span>
-                  </div>
-                  {services.length > 1 ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() =>
-                        setServices((current) =>
-                          current.filter((_, serviceIndex) => serviceIndex !== index)
-                        )
-                      }
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  ) : null}
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <Label>Service name</Label>
-                    <Input
-                      value={service.name}
-                      onChange={(event) => updateService(index, { name: event.target.value })}
-                      className="mt-1"
-                      placeholder="Standard cleaning"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <Label>Description (optional)</Label>
-                    <Input
-                      value={service.description}
-                      onChange={(event) =>
-                        updateService(index, { description: event.target.value })
-                      }
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label>Duration (minutes)</Label>
-                    <Input
-                      type="number"
-                      min={15}
-                      max={480}
-                      step={15}
-                      value={service.duration_minutes}
-                      onChange={(event) =>
-                        updateService(index, {
-                          duration_minutes: Number(event.target.value) || 60,
-                        })
-                      }
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label>Price estimate (optional)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={service.price_estimate}
-                      onChange={(event) =>
-                        updateService(index, { price_estimate: event.target.value })
-                      }
-                      className="mt-1"
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setServices((current) => [...current, toEditableService()])}
-          >
-            <Plus className="size-4 mr-2" />
-            Add service
-          </Button>
-        </div>
-        </>
       ) : (
         <div className="rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
-          Request form mode creates a new lead when a client submits the public page. Switch to
-          online booking to configure services and time slots.
+          Request form mode lets clients choose service packages and creates a new lead for your
+          team to follow up. Add packages in Settings → Service packages so clients have options to
+          pick from.
         </div>
       )}
 

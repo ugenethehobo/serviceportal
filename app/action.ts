@@ -426,6 +426,136 @@ export async function adminUpsertCompanyAction(data: {
   }
 }
 
+function storageObjectPath(reference: string | null | undefined, bucket: string): string | null {
+  if (!reference?.trim()) return null
+  const trimmed = reference.trim()
+  if (trimmed.includes(`/${bucket}/`)) {
+    return trimmed.split(`/${bucket}/`)[1]?.split('?')[0] || null
+  }
+  return trimmed.split('?')[0] || null
+}
+
+export async function adminDeleteCompanyAction(companyId: string) {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false as const, error: adminCheck.error }
+  }
+
+  if (!companyId?.trim()) {
+    return { success: false as const, error: 'Company id is required' }
+  }
+
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select('id, name, logo_url')
+      .eq('id', companyId)
+      .single()
+
+    if (companyError || !company) {
+      return { success: false as const, error: 'Company not found' }
+    }
+
+    const [{ data: staffProfiles }, { data: clientRows }] = await Promise.all([
+      supabaseAdmin
+        .from('profiles')
+        .select('id, avatar_url')
+        .eq('company_id', companyId),
+      supabaseAdmin
+        .from('clients')
+        .select('id, auth_user_id')
+        .eq('company_id', companyId),
+    ])
+
+    const clientIds = (clientRows || []).map((row) => row.id)
+    let portalProfiles: Array<{ id: string; avatar_url: string | null }> = []
+
+    if (clientIds.length > 0) {
+      const { data } = await supabaseAdmin
+        .from('profiles')
+        .select('id, avatar_url')
+        .in('client_id', clientIds)
+      portalProfiles = data || []
+    }
+
+    const usersToDelete = new Map<string, string | null>()
+    for (const profile of staffProfiles || []) {
+      usersToDelete.set(profile.id, profile.avatar_url)
+    }
+    for (const profile of portalProfiles) {
+      usersToDelete.set(profile.id, profile.avatar_url)
+    }
+    for (const client of clientRows || []) {
+      if (client.auth_user_id && !usersToDelete.has(client.auth_user_id)) {
+        usersToDelete.set(client.auth_user_id, null)
+      }
+    }
+
+    const userIds = [...usersToDelete.keys()]
+
+    if (userIds.length > 0) {
+      await supabaseAdmin.from('crews').update({ crew_lead_id: null }).in('crew_lead_id', userIds)
+      await supabaseAdmin.from('profiles').update({ crew_id: null }).in('id', userIds)
+    }
+
+    const avatarPaths = [...usersToDelete.values()]
+      .map((ref) => storageObjectPath(ref, 'user-avatars'))
+      .filter((path): path is string => Boolean(path))
+
+    if (avatarPaths.length > 0) {
+      await supabaseAdmin.storage.from('user-avatars').remove(avatarPaths)
+    }
+
+    const logoPath = storageObjectPath(company.logo_url, 'company-logos')
+    if (logoPath) {
+      await supabaseAdmin.storage.from('company-logos').remove([logoPath])
+    }
+
+    const { data: jobPhotos, error: jobPhotosError } = await supabaseAdmin
+      .from('job_photos')
+      .select('storage_path')
+      .eq('company_id', companyId)
+
+    if (!jobPhotosError) {
+      const photoPaths = (jobPhotos || [])
+        .map((photo) => photo.storage_path)
+        .filter((path): path is string => Boolean(path))
+
+      if (photoPaths.length > 0) {
+        await supabaseAdmin.storage.from('job-photos').remove(photoPaths)
+      }
+    }
+
+    for (const userId of userIds) {
+      await supabaseAdmin.from('profiles').delete().eq('id', userId)
+      const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
+      if (authDeleteError) {
+        throw new Error(authDeleteError.message || `Failed to delete user ${userId}`)
+      }
+    }
+
+    const { error: deleteCompanyError } = await supabaseAdmin
+      .from('companies')
+      .delete()
+      .eq('id', companyId)
+
+    if (deleteCompanyError) {
+      throw new Error(deleteCompanyError.message || 'Failed to delete company')
+    }
+
+    revalidatePath('/admin')
+    revalidatePath(`/admin/companies/${companyId}`)
+
+    return { success: true as const, deletedName: company.name }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to delete company'
+    console.error('adminDeleteCompanyAction error:', error)
+    return { success: false as const, error: message }
+  }
+}
+
 export async function updateCompanyUser(data: {
   userId: string
   displayName: string
@@ -4830,8 +4960,11 @@ export async function uploadAccountAvatarAction(
       return { success: false, error: 'Use a JPG, PNG, WebP, or GIF image' }
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      return { success: false, error: 'Image must be 5 MB or smaller' }
+    const { PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_MAX_SIZE_LABEL } = await import(
+      '@/lib/profile-image-upload'
+    )
+    if (file.size > PROFILE_IMAGE_MAX_BYTES) {
+      return { success: false, error: `Image must be ${PROFILE_IMAGE_MAX_SIZE_LABEL} or smaller` }
     }
 
     const supabaseAdmin = createSupabaseAdmin()
@@ -5787,6 +5920,244 @@ export async function updateUserThemeAction(theme: ThemePreference) {
   }
 }
 
+async function verifyCompanyPersonalizationEditor() {
+  const session = await getSessionProfile()
+  if (!session) {
+    return { ok: false as const, error: 'Not authenticated' }
+  }
+  if (session.profile.role !== 'company_admin' || !session.profile.company_id) {
+    return {
+      ok: false as const,
+      error: 'Only company admins can update company appearance settings',
+    }
+  }
+  return { ok: true as const, companyId: session.profile.company_id, session }
+}
+
+function revalidateCompanyPersonalizationPaths() {
+  revalidatePath('/dashboard', 'layout')
+  revalidatePath('/portal', 'layout')
+  revalidatePath('/onboarding')
+  revalidatePath('/dashboard/settings')
+  revalidatePath('/portal/settings')
+}
+
+export async function refreshBackgroundImageUrlAction(): Promise<
+  { success: true; backgroundUrl: string } | { success: false; error: string }
+> {
+  try {
+    const session = await getSessionProfile()
+    if (!session) return { success: false, error: 'Not authenticated' }
+
+    const { getPersonalizationCompanyId, resolveBackgroundDisplayUrl } = await import(
+      '@/lib/personalization-server'
+    )
+    const companyId = await getPersonalizationCompanyId(session)
+    if (!companyId) {
+      return { success: false, error: 'No company appearance settings found' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select('background_image_url')
+      .eq('id', companyId)
+      .single()
+
+    if (companyError) {
+      return { success: false, error: companyError.message }
+    }
+
+    const reference = company?.background_image_url
+    if (!reference?.trim()) {
+      return { success: false, error: 'No background image saved' }
+    }
+
+    const backgroundUrl = await resolveBackgroundDisplayUrl(reference)
+    if (!backgroundUrl) {
+      return { success: false, error: 'Could not load background image' }
+    }
+
+    return { success: true, backgroundUrl }
+  } catch (error: any) {
+    console.error('refreshBackgroundImageUrlAction error:', error)
+    return { success: false, error: error.message || 'Failed to refresh background image' }
+  }
+}
+
+export async function updateAccentColorAction(accentColor: string | null) {
+  try {
+    const check = await verifyCompanyPersonalizationEditor()
+    if (!check.ok) return { success: false as const, error: check.error }
+
+    const { normalizeAccentColor } = await import('@/lib/personalization')
+    const normalized = accentColor ? normalizeAccentColor(accentColor) : null
+    if (accentColor && !normalized) {
+      return { success: false as const, error: 'Enter a valid hex color like #2563eb' }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .update({ accent_color: normalized })
+      .eq('id', check.companyId)
+
+    if (error) {
+      if (error.code === '42703') {
+        return { success: false as const, error: 'Run supabase/personalization-schema.sql first.' }
+      }
+      return { success: false as const, error: error.message }
+    }
+
+    revalidateCompanyPersonalizationPaths()
+
+    return { success: true as const, accentColor: normalized }
+  } catch (error: any) {
+    console.error('updateAccentColorAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to save accent color' }
+  }
+}
+
+export async function uploadBackgroundImageAction(
+  formData: FormData
+): Promise<
+  { success: true; backgroundUrl: string } | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyPersonalizationEditor()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const file = formData.get('file') as File | null
+    if (!file || typeof file.size !== 'number' || file.size === 0) {
+      return { success: false, error: 'No image file provided' }
+    }
+
+    const { PROFILE_IMAGE_ACCEPTED_TYPES, PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_MAX_SIZE_LABEL } =
+      await import('@/lib/profile-image-upload')
+    const { PERSONALIZATION_BACKGROUND_BUCKET } = await import('@/lib/personalization-server')
+
+    if (!PROFILE_IMAGE_ACCEPTED_TYPES.includes(file.type as (typeof PROFILE_IMAGE_ACCEPTED_TYPES)[number])) {
+      return { success: false, error: 'Use a JPG, PNG, WebP, or GIF image' }
+    }
+
+    if (file.size > PROFILE_IMAGE_MAX_BYTES) {
+      return { success: false, error: `Image must be ${PROFILE_IMAGE_MAX_SIZE_LABEL} or smaller` }
+    }
+
+    const supabaseAdmin = createSupabaseAdmin()
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const storagePath = `${check.companyId}/background/${Date.now()}.${fileExt}`
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from(PERSONALIZATION_BACKGROUND_BUCKET)
+      .upload(storagePath, fileBuffer, {
+        contentType: file.type,
+        upsert: true,
+      })
+
+    if (uploadError) {
+      return { success: false, error: uploadError.message }
+    }
+
+    const { data: company } = await supabaseAdmin
+      .from('companies')
+      .select('background_image_url')
+      .eq('id', check.companyId)
+      .single()
+
+    const previousPath = company?.background_image_url?.includes(`/${PERSONALIZATION_BACKGROUND_BUCKET}/`)
+      ? company.background_image_url.split(`/${PERSONALIZATION_BACKGROUND_BUCKET}/`)[1]?.split('?')[0]
+      : company?.background_image_url?.startsWith('http')
+        ? null
+        : company?.background_image_url
+
+    if (previousPath && previousPath !== uploadData.path) {
+      await supabaseAdmin.storage.from(PERSONALIZATION_BACKGROUND_BUCKET).remove([previousPath])
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from('companies')
+      .update({ background_image_url: uploadData.path })
+      .eq('id', check.companyId)
+
+    if (updateError) {
+      if (updateError.code === '42703') {
+        return { success: false, error: 'Run supabase/personalization-schema.sql first.' }
+      }
+      return { success: false, error: updateError.message }
+    }
+
+    const { data: signed, error: signedError } = await supabaseAdmin.storage
+      .from(PERSONALIZATION_BACKGROUND_BUCKET)
+      .createSignedUrl(uploadData.path, 60 * 60 * 24 * 7)
+
+    if (signedError || !signed?.signedUrl) {
+      return { success: false, error: signedError?.message || 'Uploaded but could not be displayed' }
+    }
+
+    revalidateCompanyPersonalizationPaths()
+
+    return { success: true, backgroundUrl: signed.signedUrl }
+  } catch (error: any) {
+    console.error('uploadBackgroundImageAction error:', error)
+    return { success: false, error: error.message || 'Failed to upload background image' }
+  }
+}
+
+export async function removeBackgroundImageAction(): Promise<
+  { success: true } | { success: false; error: string }
+> {
+  try {
+    const check = await verifyCompanyPersonalizationEditor()
+    if (!check.ok) return { success: false, error: check.error }
+
+    const { PERSONALIZATION_BACKGROUND_BUCKET } = await import('@/lib/personalization-server')
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: company, error: companyError } = await supabaseAdmin
+      .from('companies')
+      .select('background_image_url')
+      .eq('id', check.companyId)
+      .single()
+
+    if (companyError) {
+      return { success: false, error: companyError.message }
+    }
+
+    const reference = company?.background_image_url
+    if (reference) {
+      const storagePath = reference.includes(`/${PERSONALIZATION_BACKGROUND_BUCKET}/`)
+        ? reference.split(`/${PERSONALIZATION_BACKGROUND_BUCKET}/`)[1]?.split('?')[0]
+        : reference.startsWith('http')
+          ? null
+          : reference
+
+      if (storagePath) {
+        await supabaseAdmin.storage.from(PERSONALIZATION_BACKGROUND_BUCKET).remove([storagePath])
+      }
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from('companies')
+      .update({ background_image_url: null })
+      .eq('id', check.companyId)
+
+    if (updateError) {
+      if (updateError.code === '42703') {
+        return { success: false, error: 'Run supabase/personalization-schema.sql first.' }
+      }
+      return { success: false, error: updateError.message }
+    }
+
+    revalidateCompanyPersonalizationPaths()
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('removeBackgroundImageAction error:', error)
+    return { success: false, error: error.message || 'Failed to remove background image' }
+  }
+}
+
 export async function getCompanyLogoDisplayUrlAction(
   logoRef: string | null | undefined
 ): Promise<{ success: true; url: string | null } | { success: false; error: string }> {
@@ -5854,8 +6225,11 @@ export async function uploadCompanyLogoAction(
       return { success: false, error: 'Use a JPG, PNG, WebP, or GIF image' }
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      return { success: false, error: 'Image must be 5 MB or smaller' }
+    const { PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_MAX_SIZE_LABEL } = await import(
+      '@/lib/profile-image-upload'
+    )
+    if (file.size > PROFILE_IMAGE_MAX_BYTES) {
+      return { success: false, error: `Image must be ${PROFILE_IMAGE_MAX_SIZE_LABEL} or smaller` }
     }
 
     const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png'

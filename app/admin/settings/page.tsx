@@ -41,7 +41,7 @@ export default function AdminSettingsPage() {
       </div>
 
       <Card className="p-6">
-        <AppearanceSettings embedded />
+        <AppearanceSettings embedded canEditCompanyBranding={false} />
       </Card>
     </div>
   )

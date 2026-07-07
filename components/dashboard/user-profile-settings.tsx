@@ -1,18 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   removeAccountAvatarAction,
   updateAccountSettingsAction,
   uploadAccountAvatarAction,
 } from '@/app/action'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ImageAttachmentField } from '@/components/admin/image-attachment-field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Camera, Loader2, Trash2, User } from 'lucide-react'
 
 type UserProfileSettingsProps = {
   fullName: string
@@ -33,17 +32,16 @@ export function UserProfileSettings({
   const [isSavingName, setIsSavingName] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(avatarUrl)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   useEffect(() => {
     setAvatarPreview(avatarUrl)
   }, [avatarUrl])
 
-  const handleAvatarSelected = async (fileList: FileList | null) => {
-    const file = fileList?.[0]
-    if (!file) return
-
-    setAvatarPreview(URL.createObjectURL(file))
+  const handleAvatarSelected = async (file: File) => {
+    const localPreview = URL.createObjectURL(file)
+    setAvatarPreview(localPreview)
+    setUploadError(null)
     setIsUploadingAvatar(true)
 
     const formData = new FormData()
@@ -51,17 +49,19 @@ export function UserProfileSettings({
 
     const result = await uploadAccountAvatarAction(formData)
     if (result.success) {
+      URL.revokeObjectURL(localPreview)
       setAvatarPreview(result.avatarUrl)
       toast.success('Profile photo updated')
       window.dispatchEvent(new CustomEvent('dashboard-profile-updated'))
       router.refresh()
     } else {
-      toast.error(result.error || 'Failed to upload profile photo')
+      URL.revokeObjectURL(localPreview)
       setAvatarPreview(avatarUrl)
+      setUploadError(result.error || 'Failed to upload profile photo')
+      toast.error(result.error || 'Failed to upload profile photo')
     }
 
     setIsUploadingAvatar(false)
-    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleSaveName = async () => {
@@ -83,6 +83,7 @@ export function UserProfileSettings({
 
   const handleRemoveAvatar = async () => {
     setIsUploadingAvatar(true)
+    setUploadError(null)
     const result = await removeAccountAvatarAction()
     if (result.success) {
       setAvatarPreview(null)
@@ -90,6 +91,7 @@ export function UserProfileSettings({
       window.dispatchEvent(new CustomEvent('dashboard-profile-updated'))
       router.refresh()
     } else {
+      setUploadError(result.error || 'Failed to remove profile photo')
       toast.error(result.error || 'Failed to remove profile photo')
     }
     setIsUploadingAvatar(false)
@@ -104,50 +106,17 @@ export function UserProfileSettings({
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-        <Avatar size="lg" className="size-20">
-          {avatarPreview ? (
-            <AvatarImage src={avatarPreview} alt={fullName || 'Profile photo'} />
-          ) : null}
-          <AvatarFallback className="text-lg">
-            {fullName ? fullName.slice(0, 2).toUpperCase() : <User className="size-6" />}
-          </AvatarFallback>
-        </Avatar>
-
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            className="hidden"
-            onChange={(event) => handleAvatarSelected(event.target.files)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploadingAvatar}
-          >
-            {isUploadingAvatar ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Camera className="size-4" />
-            )}
-            {isUploadingAvatar ? 'Uploading…' : 'Change photo'}
-          </Button>
-          {avatarPreview && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={handleRemoveAvatar}
-              disabled={isUploadingAvatar}
-            >
-              <Trash2 className="size-4" />
-              Remove
-            </Button>
-          )}
-        </div>
-      </div>
+      <ImageAttachmentField
+        label="Profile photo"
+        imageSrc={avatarPreview}
+        imageAlt={fullName || 'Profile photo'}
+        fileName={avatarPreview ? 'Profile photo' : null}
+        isUploading={isUploadingAvatar}
+        error={uploadError}
+        onFileSelect={(file) => void handleAvatarSelected(file)}
+        onRemove={() => void handleRemoveAvatar()}
+        idleTitle="Upload profile photo"
+      />
 
       <div className="space-y-3">
         <div className="space-y-2">
