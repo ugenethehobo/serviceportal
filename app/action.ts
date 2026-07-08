@@ -1298,9 +1298,6 @@ async function generateNextRecurringInstance(currentSchedule: any, supabaseAdmin
     }
   }
 
-  revalidatePath(`/dashboard/clients/${currentSchedule.client_id}`)
-  revalidatePath(`/dashboard/clients/${currentSchedule.client_id}/jobs/${newSchedule.id}`)
-
   if (hasConflict) {
     console.log(`Created next recurring schedule for ${currentSchedule.id} but crew has conflict`)
   }
@@ -4539,8 +4536,6 @@ export async function getClientDetailAction(clientId: string) {
       return { success: false as const, error: 'Client not found' }
     }
 
-    await syncScheduleStatusesForClient(supabaseAdmin, clientId)
-
     const { data: schedules, error: schedulesError } = await supabaseAdmin
       .from('schedules')
       .select(`
@@ -4599,8 +4594,6 @@ export async function getJobDetailPageAction(jobId: string, clientId: string) {
     if (!ownedClient) {
       return { success: false as const, error: 'Client not found' }
     }
-
-    await syncScheduleStatusesForClient(supabaseAdmin, clientId)
 
     const [jobResult, companyResult] = await Promise.all([
       getJobAction(jobId, clientId),

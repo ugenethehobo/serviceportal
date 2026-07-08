@@ -530,6 +530,8 @@ export function ClientDetailPageClient({
   useEffect(() => {
     if (!clientId) return
 
+    void updateScheduleStatuses()
+
     const interval = setInterval(() => {
       void updateScheduleStatuses()
     }, 60 * 1000)

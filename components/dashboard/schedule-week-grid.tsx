@@ -409,8 +409,8 @@ export function ScheduleWeekGrid({
   const timelineHeightPx = timelineHours * pixelsPerHour
 
   return (
-    <div className="relative flex flex-col min-h-0 h-full max-md:min-h-[420px]">
-      <div className="max-md:overflow-x-auto max-md:overscroll-x-contain">
+    <div className="relative flex min-h-0 flex-1 flex-col h-full max-md:min-h-[420px]">
+      <div className="flex min-h-0 flex-1 flex-col max-md:overflow-x-auto max-md:overscroll-x-contain">
       <div
         className={cn(
           'grid grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b bg-muted/30 shrink-0 transition-opacity max-md:min-w-[640px]',
@@ -452,7 +452,7 @@ export function ScheduleWeekGrid({
         )}
 
         <div
-          className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] relative h-full max-md:min-w-[640px]"
+          className="relative grid h-full min-h-full grid-cols-[56px_repeat(7,minmax(0,1fr))] max-md:min-w-[640px]"
           style={{ minHeight: timelineHeightPx }}
         >
           <div className="relative border-r bg-muted/20 h-full">

@@ -89,7 +89,7 @@ export function ScheduleCalendarPageClient({
         </div>
       </div>
 
-      <MainPageCard className="gap-0 overflow-hidden p-0 shadow-sm">
+      <MainPageCard className="min-h-0 flex-1 gap-0 overflow-hidden p-0 shadow-sm">
         <ScheduleWeekGrid
           data={data}
           isLoadingWeek={isLoadingWeek}
