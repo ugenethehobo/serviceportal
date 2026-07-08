@@ -178,7 +178,8 @@ export type PortalShellData = {
   clientId: string
   clientName: string
   companyName: string
-  companyLogo: string | null
+  /** Storage path or legacy URL from companies.logo_url — resolve before display. */
+  companyLogoRef: string | null
 }
 
 export const getPortalShellDataAction = cache(async (): Promise<
@@ -225,7 +226,7 @@ export const getPortalShellDataAction = cache(async (): Promise<
       clientId: session.profile.client_id,
       clientName: client.name,
       companyName: company?.name || 'Your service provider',
-      companyLogo: company?.logo_url ?? null,
+      companyLogoRef: company?.logo_url ?? null,
     },
   }
 })

@@ -22,6 +22,7 @@ import {
   chromeSheetClass,
 } from '@/lib/personalization'
 import { cn } from '@/lib/utils'
+import { CompanyLogoImage } from '@/components/dashboard/company-logo-image'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -43,34 +44,29 @@ const navItems = [
 interface PortalSidebarProps {
   clientName: string
   companyName: string
-  companyLogo?: string | null
+  companyLogoRef?: string | null
 }
 
 function CompanyMark({
   companyName,
-  companyLogo,
+  companyLogoRef,
   className,
 }: {
   companyName: string
-  companyLogo?: string | null
+  companyLogoRef?: string | null
   className?: string
 }) {
-  if (companyLogo) {
-    return (
-      <img
-        src={companyLogo}
-        alt={companyName}
-        className={`rounded-lg object-cover ring-1 ring-border shrink-0 ${className}`}
-      />
-    )
-  }
-
   return (
-    <div
-      className={`flex items-center justify-center rounded-lg bg-muted text-muted-foreground shrink-0 ${className}`}
-    >
-      <span className="text-sm font-bold">{companyName.slice(0, 2).toUpperCase()}</span>
-    </div>
+    <CompanyLogoImage
+      logoRef={companyLogoRef}
+      companyName={companyName}
+      className={className}
+      imageClassName={cn('h-full w-full rounded-lg object-cover ring-1 ring-border', className)}
+      fallbackClassName={cn(
+        'h-full w-full rounded-lg bg-muted text-muted-foreground text-sm',
+        className
+      )}
+    />
   )
 }
 
@@ -111,7 +107,7 @@ function PortalNavLinks({
 function MobilePortalHeader({
   clientName,
   companyName,
-  companyLogo,
+  companyLogoRef,
   pathname,
   isLoggingOut,
   onLogout,
@@ -157,7 +153,11 @@ function MobilePortalHeader({
         >
           <SheetHeader className="border-b p-4 text-left">
             <div className="flex items-center gap-3 pr-8">
-              <CompanyMark companyName={companyName} companyLogo={companyLogo} className="h-9 w-9" />
+              <CompanyMark
+                companyName={companyName}
+                companyLogoRef={companyLogoRef}
+                className="h-9 w-9"
+              />
               <div className="min-w-0">
                 <SheetTitle className="truncate text-base">{companyName}</SheetTitle>
                 <p className="text-xs text-muted-foreground truncate">{clientName}</p>
@@ -184,7 +184,11 @@ function MobilePortalHeader({
         </SheetContent>
       </Sheet>
 
-      <CompanyMark companyName={companyName} companyLogo={companyLogo} className="h-8 w-8" />
+      <CompanyMark
+        companyName={companyName}
+        companyLogoRef={companyLogoRef}
+        className="h-8 w-8"
+      />
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold tracking-tight">{companyName}</p>
@@ -197,7 +201,7 @@ function MobilePortalHeader({
 function DesktopPortalSidebar({
   clientName,
   companyName,
-  companyLogo,
+  companyLogoRef,
   pathname,
   isLoggingOut,
   onLogout,
@@ -222,7 +226,11 @@ function DesktopPortalSidebar({
     >
       <div className="flex h-16 shrink-0 items-center px-4">
         <div className="flex min-w-0 items-center gap-3">
-          <CompanyMark companyName={companyName} companyLogo={companyLogo} className="h-8 w-8" />
+          <CompanyMark
+            companyName={companyName}
+            companyLogoRef={companyLogoRef}
+            className="h-8 w-8"
+          />
           <span
             className={`overflow-hidden whitespace-nowrap text-lg font-semibold tracking-tight text-muted-foreground transition-all duration-150 ${
               isExpanded ? 'max-w-[180px] opacity-100' : 'max-w-0 opacity-0'

@@ -31,7 +31,7 @@ export function PortalShell({ shellData, children }: PortalShellProps) {
         <PortalSidebar
           clientName={shellData.clientName}
           companyName={shellData.companyName}
-          companyLogo={shellData.companyLogo}
+          companyLogoRef={shellData.companyLogoRef}
         />
         <PortalScrollMain className="flex-1 min-h-0 min-w-0">
           <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]">
