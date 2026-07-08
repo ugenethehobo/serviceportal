@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" role="img" aria-label="Routes and field logistics">
+  <defs>
+    <linearGradient id="horizon" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#172554"/>
+      <stop offset="45%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#horizon)"/>
+  <path d="M120 640 C420 560 700 700 980 620 C1260 540 1540 660 1800 580" fill="none" stroke="#f59e0b" stroke-width="10" stroke-linecap="round" opacity="0.85"/>
+  <path d="M180 720 C500 660 760 780 1040 700 C1320 620 1580 740 1760 680" fill="none" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" opacity="0.55"/>
+  <circle cx="980" cy="620" r="16" fill="#fbbf24"/>
+  <circle cx="1040" cy="700" r="12" fill="#38bdf8"/>
+  <path d="M0 820 C360 760 720 900 1080 820 C1440 740 1680 860 1920 780 L1920 1080 L0 1080 Z" fill="#020617" opacity="0.75"/>
+</svg>

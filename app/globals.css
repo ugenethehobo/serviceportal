@@ -156,3 +156,16 @@ html[data-app-background],
 body.has-app-background {
   background: transparent !important;
 }
+
+@keyframes landing-ken-burns {
+  from {
+    transform: scale(1.04);
+  }
+  to {
+    transform: scale(1.1);
+  }
+}
+
+@theme inline {
+  --animate-landing-ken-burns: landing-ken-burns 18s ease-in-out infinite alternate;
+}

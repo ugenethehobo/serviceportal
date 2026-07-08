@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" role="img" aria-label="Business operations and billing">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="50%" stop-color="#312e81"/>
+      <stop offset="100%" stop-color="#0f766e"/>
+    </linearGradient>
+    <radialGradient id="spot" cx="30%" cy="35%" r="55%">
+      <stop offset="0%" stop-color="#a5b4fc" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#a5b4fc" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <rect width="1920" height="1080" fill="url(#spot)"/>
+  <rect x="280" y="260" width="520" height="360" rx="24" fill="#ffffff" opacity="0.08"/>
+  <rect x="340" y="320" width="280" height="18" rx="9" fill="#ffffff" opacity="0.35"/>
+  <rect x="340" y="360" width="380" height="12" rx="6" fill="#ffffff" opacity="0.2"/>
+  <rect x="340" y="390" width="340" height="12" rx="6" fill="#ffffff" opacity="0.2"/>
+  <rect x="340" y="500" width="160" height="44" rx="12" fill="#34d399" opacity="0.75"/>
+  <path d="M0 860 C480 780 960 920 1440 840 C1680 800 1800 820 1920 800 L1920 1080 L0 1080 Z" fill="#042f2e" opacity="0.65"/>
+</svg>
