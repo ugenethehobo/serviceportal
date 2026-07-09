@@ -80,8 +80,8 @@ export function LandingNav({ photoBackground = false }: LandingNavProps) {
               className={cn(
                 'h-5 border-0 px-1.5 text-[10px] font-bold sm:text-xs',
                 photoBackground
-                  ? 'bg-amber-400 text-amber-950 hover:bg-amber-400'
-                  : 'bg-[#FF4F00] text-white hover:bg-[#FF4F00]'
+                  ? 'bg-[#FF4F00] text-amber-950'
+                  : 'bg-[#FF4F00] text-white'
               )}
             >
               Beta

@@ -6,7 +6,7 @@
  * Product screenshots use `productImage` / feature `image.src` separately.
  */
 
-export const SERVICE_PORTAL_VERSION = '0.0.27'
+export const SERVICE_PORTAL_VERSION = '0.0.28'
 
 /** Full-bleed photo slideshow behind hero (and upper scroll). Product tour stays on solid paper. */
 export const LANDING_BACKGROUND_PHOTOS_ENABLED = true
@@ -55,9 +55,9 @@ export const LANDING_SLIDESHOW_SLIDES: LandingSlide[] = [
 
 export const LANDING_HERO = {
   eyebrow: 'Now in Beta',
-  headline: ['Your service business.', 'One operating system.'],
+  headline: ['Your service business.', 'One management system.'],
   subheadline:
-    'Schedule crews, bill clients, and run a branded portal — built for landscaping, cleaning, HVAC, and every appointment-based trade.',
+    'Run your entire small business with one solution, built for effective client interation that makes you money.',
 }
 
 export const LANDING_MARQUEE_ITEMS = [
@@ -67,7 +67,7 @@ export const LANDING_MARQUEE_ITEMS = [
   'Plumbing',
   'Pest control',
   'Pool service',
-  'Property maintenance',
+  'Handy Work',
   'Electrical',
 ]
 
@@ -82,13 +82,12 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
   {
     id: 'schedule',
     eyebrow: 'Scheduling',
-    title: 'Week calendar, crews, and recurring visits',
+    title: 'Simple Yet Powerful Client & Customer Scheduling',
     description:
-      'Drag jobs on a visual week view, assign crews, and let recurring work spawn automatically when visits complete.',
+      'Drag jobs on a visual week view, assign crews, and let recurring work populate automatically when visits complete.',
     bullets: [
-      'Interactive week calendar with drag-to-reschedule',
+      'Interactive calendar with drag-to-reschedule',
       'Crew conflict detection and solo-business mode',
-      'Recurring rules for daily, weekly, and monthly jobs',
       'Business-hours timeline that matches how you operate',
     ],
     image: {
@@ -99,7 +98,7 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
   },
   {
     id: 'clients',
-    eyebrow: 'Clients & jobs',
+    eyebrow: 'Clients & Jobs',
     title: 'CRM, estimates, documents, and job photos',
     description:
       'Every client gets a full workspace — jobs, estimates, billing, files, photos, and messaging in one place.',
@@ -110,7 +109,7 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
       'Document folders and branded invoice templates',
     ],
     image: {
-      src: '/landing/product-portal.png',
+      src: '/landing/product-clients.png',
       alt: 'ServicePortal client job workspace',
     },
     imagePosition: 'left',
@@ -128,7 +127,7 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
       'Two-way messaging with your office',
     ],
     image: {
-      src: '/landing/product-portal.png',
+      src: '/landing/product-portal-2.png',
       alt: 'ServicePortal client-facing portal',
     },
     imagePosition: 'right',

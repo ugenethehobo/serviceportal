@@ -35,14 +35,14 @@ export function LandingHero({ photoBackground = false }: LandingHeroProps) {
           className={cn(
             'inline-flex items-center gap-2 rounded-full px-3 py-1 font-mono text-[11px] font-semibold tracking-[0.2em] uppercase backdrop-blur-sm',
             photoBackground
-              ? 'border border-white/25 bg-white/10 text-amber-200'
+              ? 'border border-white/25 bg-white/10 text-[#FF4F00]'
               : 'border border-black/10 bg-white/70 text-[#FF4F00]'
           )}
         >
           <span
             className={cn(
               'size-1.5 rounded-full motion-safe:animate-pulse',
-              photoBackground ? 'bg-amber-300' : 'bg-[#FF4F00]'
+              photoBackground ? 'bg-[#FF4F00]' : 'bg-[#FF4F00]'
             )}
           />
           {LANDING_HERO.eyebrow}
