@@ -11,6 +11,7 @@ export const LANDING_PRODUCT_IMAGE_ASPECT = '5 / 3'
 /** Default mobile screenshot dimensions (override per asset in config). */
 export const LANDING_PRODUCT_MOBILE_IMAGE_WIDTH = 1170
 export const LANDING_PRODUCT_MOBILE_IMAGE_HEIGHT = 2532
+export const LANDING_PRODUCT_MOBILE_IMAGE_ASPECT = '1170 / 2532'
 
 export const LANDING_PRODUCT_IMAGE_SIZES =
   '(max-width: 1024px) 100vw, (max-width: 1536px) 92vw, 1088px'
@@ -46,5 +47,6 @@ export const LANDING_CHAPTER_PANEL_CLASS = 'relative w-64 shrink-0 sm:w-72 lg:w-
 export const LANDING_CHAPTER_PANEL_CARD_CLASS =
   'flex h-full flex-col overflow-hidden p-0 bg-card shadow-lg ring-1 ring-foreground/10'
 
-/** Each desktop chapter gets one full scroll step in the sticky stage. */
-export const LANDING_CHAPTER_SCROLL_STEP_CLASS = 'min-h-[70dvh] lg:min-h-[75dvh]'
+/** Scroll spacers that drive chapter transitions in the sticky stage. */
+export const LANDING_CHAPTER_SCROLL_STEP_DESKTOP_CLASS = 'min-h-[75dvh]'
+export const LANDING_CHAPTER_SCROLL_STEP_MOBILE_CLASS = 'min-h-[55dvh]'
