@@ -7,7 +7,7 @@
  * Mobile product tour uses optional `mobileImage` per chapter (portrait PNGs in `public/landing/`).
  */
 
-export const SERVICE_PORTAL_VERSION = '0.0.28'
+export const SERVICE_PORTAL_VERSION = '0.0.31'
 
 export type LandingProductScreenshot = {
   src: string
@@ -112,7 +112,7 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
   {
     id: 'clients',
     eyebrow: 'Clients & Jobs',
-    title: 'CRM, estimates, documents, and job photos',
+    title: 'Client Management that Gives You Everything You Need',
     description:
       'Every client gets a full workspace — jobs, estimates, billing, files, photos, and messaging in one place.',
     bullets: [
@@ -134,7 +134,7 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
   {
     id: 'portal',
     eyebrow: 'Client portal',
-    title: 'A portal your customers will actually use',
+    title: 'Interact with Your Customers Using Powerful Features',
     description:
       'Give clients a branded login to view jobs, approve estimates, pay invoices, and message your team.',
     bullets: [
@@ -148,7 +148,7 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
       alt: 'ServicePortal client-facing portal',
     },
     mobileImage: {
-      src: '/landing/product-portal-2-mobile.png',
+      src: '/landing/product-portal-mobile.png',
       alt: 'ServicePortal client portal on mobile',
     },
     imagePosition: 'right',
@@ -156,13 +156,13 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
   {
     id: 'billing',
     eyebrow: 'Billing',
-    title: 'Invoices, payments, and AR without spreadsheets',
+    title: 'Full Billing System for Invoices, Payments, and Advanced Reports',
     description:
-      'Bill from jobs, collect through Stripe Connect, and track what is outstanding from a single payments hub.',
+      'Bill from jobs, collect through Stripe Connect, and track outstanding payments from a single payments hub.',
     bullets: [
       'Job-level billing and invoice PDF generation',
       'Stripe Connect for client payments',
-      'Payments dashboard and AR aging visibility',
+      'Payments dashboard and in-depth reporting',
       'Reports for revenue and outstanding balances',
     ],
     image: {
@@ -170,7 +170,7 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
       alt: 'ServicePortal billing and payments',
     },
     mobileImage: {
-      src: '/landing/product-portal-mobile.png',
+      src: '/landing/product-billing-mobile.png',
       alt: 'ServicePortal billing on mobile',
     },
     imagePosition: 'left',
@@ -178,11 +178,11 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
   {
     id: 'field',
     eyebrow: 'Field operations',
-    title: 'Routes, team day view, and live coordination',
+    title: 'Crew Coordination Built to Scale with Your Company',
     description:
-      'Plan driving routes from your depot, give crews a focused day view, and keep field work moving.',
+      'Plan driving routes from your business location, give crews a focused day view, and keep field work moving.',
     bullets: [
-      'Route planner with map visualization (Pro)',
+      'Route planner with map visualization (Pro Tier Only)',
       'Team member “My Day” schedule view',
       'Job status automation — scheduled, in progress, archived',
       'Public booking page and lead capture pipeline',

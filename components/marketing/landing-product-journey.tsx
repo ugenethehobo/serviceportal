@@ -48,7 +48,7 @@ function ChapterCopy({
     >
       <CardContent className="flex flex-1 flex-col overflow-y-auto py-4">
         <p className="font-mono text-xs tracking-[0.2em] text-[#FF4F00] uppercase">
-          Chapter {String(index + 1).padStart(2, '0')}
+          {String(index + 1).padStart(2, '0')}
         </p>
         <h3 className="mt-2 text-lg font-bold tracking-tight text-foreground sm:text-xl lg:text-2xl">
           {section.title}
