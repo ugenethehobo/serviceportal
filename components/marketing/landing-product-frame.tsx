@@ -8,6 +8,7 @@ import {
   LANDING_PRODUCT_IMAGE_HEIGHT,
   LANDING_PRODUCT_IMAGE_SIZES,
   LANDING_PRODUCT_IMAGE_WIDTH,
+  LANDING_PRODUCT_MOBILE_IMAGE_SIZES,
   LANDING_PRODUCT_STAGE_SIZE_CLASS,
 } from '@/lib/landing-product-display'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,8 @@ type LandingProductStageProps = {
   activeIndex: number
   className?: string
   priority?: boolean
+  aspectRatio?: string
+  sizes?: string
 }
 
 export function LandingProductStage({
@@ -27,6 +30,8 @@ export function LandingProductStage({
   activeIndex,
   className,
   priority = false,
+  aspectRatio = LANDING_PRODUCT_IMAGE_ASPECT,
+  sizes = LANDING_PRODUCT_IMAGE_SIZES,
 }: LandingProductStageProps) {
   if (items.length === 0) return null
 
@@ -34,7 +39,7 @@ export function LandingProductStage({
     <Card className={cn('overflow-hidden p-0', className)}>
       <div
         className="relative h-full w-full bg-card"
-        style={{ aspectRatio: LANDING_PRODUCT_IMAGE_ASPECT }}
+        style={{ aspectRatio }}
       >
         {items.map((item, index) => {
           const isRaster = /\.(png|jpe?g|webp)$/i.test(item.src)
@@ -55,7 +60,7 @@ export function LandingProductStage({
                 priority={priority || index === 0}
                 quality={100}
                 unoptimized={isRaster}
-                sizes={LANDING_PRODUCT_IMAGE_SIZES}
+                sizes={sizes}
                 className="object-contain object-center"
               />
             </div>
@@ -69,24 +74,39 @@ export function LandingProductStage({
 type LandingProductFrameProps = {
   src: string
   alt: string
+  width?: number
+  height?: number
   className?: string
   priority?: boolean
+  sizes?: string
 }
 
-/** Single-image stage. */
+/** Single-image card — uses intrinsic dimensions (ideal for mobile portrait assets). */
 export function LandingProductFrame({
   src,
   alt,
+  width = LANDING_PRODUCT_IMAGE_WIDTH,
+  height = LANDING_PRODUCT_IMAGE_HEIGHT,
   className,
   priority = false,
+  sizes = LANDING_PRODUCT_MOBILE_IMAGE_SIZES,
 }: LandingProductFrameProps) {
+  const isRaster = /\.(png|jpe?g|webp)$/i.test(src)
+
   return (
-    <LandingProductStage
-      items={[{ src, alt }]}
-      activeIndex={0}
-      className={className}
-      priority={priority}
-    />
+    <Card className={cn('overflow-hidden p-0', className)}>
+      <Image
+        src={src}
+        alt={alt}
+        width={width}
+        height={height}
+        priority={priority}
+        quality={100}
+        unoptimized={isRaster}
+        sizes={sizes}
+        className={LANDING_PRODUCT_IMAGE_CLASS}
+      />
+    </Card>
   )
 }
 

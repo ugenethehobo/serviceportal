@@ -14,9 +14,11 @@ import {
   LANDING_CHAPTER_SCROLL_STEP_CLASS,
   LANDING_PRODUCT_IMAGE_COLUMN_CLASS,
   LANDING_PRODUCT_MOBILE_CONTAINER_CLASS,
+  LANDING_PRODUCT_MOBILE_STAGE_CLASS,
   LANDING_PRODUCT_TOUR_DESKTOP_CLASS,
   LANDING_PRODUCT_TOUR_PAIR_CLASS,
 } from '@/lib/landing-product-display'
+import { resolveLandingProductImage } from '@/lib/landing-product-images'
 import type { LandingFeatureSection } from '@/lib/landing-page-config'
 import { cn } from '@/lib/utils'
 import { ArrowRight } from 'lucide-react'
@@ -156,22 +158,24 @@ function ProductTourPair({
   )
 }
 
-function MobileChapterPair({
+function MobileChapterBlock({
   section,
   index,
 }: {
   section: LandingFeatureSection
   index: number
 }) {
+  const productImage = resolveLandingProductImage(section, 'mobile')
+
   return (
-    <div className={LANDING_PRODUCT_TOUR_PAIR_CLASS}>
-      <aside className={cn(LANDING_CHAPTER_PANEL_CLASS, 'w-36 sm:w-44')}>
-        <ChapterCopy section={section} index={index} className="h-full" />
-      </aside>
+    <div className="flex w-full flex-col gap-4">
+      <ChapterCopy section={section} index={index} />
       <LandingProductFrame
-        src={section.image.src}
-        alt={section.image.alt}
-        className={LANDING_PRODUCT_IMAGE_COLUMN_CLASS}
+        src={productImage.src}
+        alt={productImage.alt}
+        width={productImage.width}
+        height={productImage.height}
+        className={LANDING_PRODUCT_MOBILE_STAGE_CLASS}
       />
     </div>
   )
@@ -182,7 +186,10 @@ export function LandingProductJourney({ sections }: LandingProductJourneyProps) 
   const sectionIds = sections.map((section) => section.id)
   const activeIndex = useLandingChapterScroll({ sectionIds })
 
-  const productItems = sections.map((s) => ({ src: s.image.src, alt: s.image.alt }))
+  const productItems = sections.map((section) => {
+    const image = resolveLandingProductImage(section, 'desktop')
+    return { src: image.src, alt: image.alt }
+  })
 
   const scrollToChapter = (index: number) => {
     const section = sections[index]
@@ -240,7 +247,7 @@ export function LandingProductJourney({ sections }: LandingProductJourneyProps) 
         </div>
       </div>
 
-      {/* Mobile: centered side-by-side pair per chapter */}
+      {/* Mobile: stacked chapter card + full-width mobile screenshot per chapter */}
       <div className="space-y-16 px-4 pb-16 sm:space-y-20 sm:px-6 sm:pb-24 lg:hidden">
         <ChapterNav
           sections={sections}
@@ -256,7 +263,7 @@ export function LandingProductJourney({ sections }: LandingProductJourneyProps) 
             className={cn('scroll-mt-28', LANDING_CHAPTER_SCROLL_STEP_CLASS)}
           >
             <div className={LANDING_PRODUCT_MOBILE_CONTAINER_CLASS}>
-              <MobileChapterPair section={section} index={index} />
+              <MobileChapterBlock section={section} index={index} />
             </div>
           </article>
         ))}

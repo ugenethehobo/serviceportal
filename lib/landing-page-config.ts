@@ -4,9 +4,19 @@
  * Background photos: set `LANDING_BACKGROUND_PHOTOS_ENABLED` to true and update
  * `LANDING_SLIDESHOW_SLIDES[].src` (full-bleed JPGs in `public/landing/`).
  * Product screenshots use `productImage` / feature `image.src` separately.
+ * Mobile product tour uses optional `mobileImage` per chapter (portrait PNGs in `public/landing/`).
  */
 
 export const SERVICE_PORTAL_VERSION = '0.0.28'
+
+export type LandingProductScreenshot = {
+  src: string
+  alt: string
+  /** Intrinsic pixel width (desktop default 2000, mobile default 1170). */
+  width?: number
+  /** Intrinsic pixel height (desktop default 1200, mobile default 2532). */
+  height?: number
+}
 
 /** Full-bleed photo slideshow behind hero (and upper scroll). Product tour stays on solid paper. */
 export const LANDING_BACKGROUND_PHOTOS_ENABLED = true
@@ -32,10 +42,9 @@ export type LandingFeatureSection = {
   title: string
   description: string
   bullets: string[]
-  image: {
-    src: string
-    alt: string
-  }
+  image: LandingProductScreenshot
+  /** Portrait mobile screenshot for the product tour (`lg` hidden). Falls back to `image`. */
+  mobileImage?: LandingProductScreenshot
   imagePosition: 'left' | 'right'
 }
 
@@ -94,6 +103,10 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
       src: '/landing/product-schedule.png',
       alt: 'ServicePortal schedule week view',
     },
+    mobileImage: {
+      src: '/landing/product-schedule-mobile.png',
+      alt: 'ServicePortal schedule on mobile',
+    },
     imagePosition: 'right',
   },
   {
@@ -111,6 +124,10 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
     image: {
       src: '/landing/product-clients.png',
       alt: 'ServicePortal client job workspace',
+    },
+    mobileImage: {
+      src: '/landing/product-clients-mobile.png',
+      alt: 'ServicePortal clients on mobile',
     },
     imagePosition: 'left',
   },
@@ -130,6 +147,10 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
       src: '/landing/product-portal-2.png',
       alt: 'ServicePortal client-facing portal',
     },
+    mobileImage: {
+      src: '/landing/product-portal-2-mobile.png',
+      alt: 'ServicePortal client portal on mobile',
+    },
     imagePosition: 'right',
   },
   {
@@ -147,6 +168,10 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
     image: {
       src: '/landing/product-portal.png',
       alt: 'ServicePortal billing and payments',
+    },
+    mobileImage: {
+      src: '/landing/product-portal-mobile.png',
+      alt: 'ServicePortal billing on mobile',
     },
     imagePosition: 'left',
   },
@@ -166,6 +191,10 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
       src: '/landing/product-routes.png',
       alt: 'ServicePortal route planner map',
     },
+    mobileImage: {
+      src: '/landing/product-routes-mobile.png',
+      alt: 'ServicePortal routes on mobile',
+    },
     imagePosition: 'right',
   },
   {
@@ -183,6 +212,10 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
     image: {
       src: '/landing/product-schedule.png',
       alt: 'ServicePortal integrations settings',
+    },
+    mobileImage: {
+      src: '/landing/product-integrations-mobile.png',
+      alt: 'ServicePortal integrations on mobile',
     },
     imagePosition: 'left',
   },
