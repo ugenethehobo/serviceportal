@@ -5,10 +5,12 @@ import {
   getPlatformPriceId,
   PLATFORM_PLANS,
   PLATFORM_SEAT_LIMITS,
+  type BillingInterval,
   type PlatformPlanId,
 } from '@/lib/platform-billing'
 import {
   buildTrialPlanPricing,
+  type PlatformPlanPriceOption,
   type PlatformPlanPricing,
 } from '@/lib/platform-pricing'
 
@@ -57,24 +59,12 @@ function intervalSuffix(
   return `/${count} ${interval}${count === 1 ? '' : 's'}`
 }
 
-async function fetchStripePlanPricing(planId: 'basic' | 'pro'): Promise<PlatformPlanPricing> {
-  const meta = PLATFORM_PLANS[planId]
-  const priceId = getPlatformPriceId(planId)
-
-  if (!priceId) {
-    return {
-      planId,
-      label: meta.label,
-      description: meta.description,
-      monthlyPrice: 0,
-      priceAmount: 0,
-      priceDisplay: '—',
-      intervalLabel: '',
-      currency: 'usd',
-      seatLimit: PLATFORM_SEAT_LIMITS[planId],
-      stripePriceId: null,
-    }
-  }
+async function fetchStripePriceOption(
+  planId: 'basic' | 'pro',
+  billingInterval: BillingInterval
+): Promise<PlatformPlanPriceOption | null> {
+  const priceId = getPlatformPriceId(planId, billingInterval)
+  if (!priceId) return null
 
   try {
     const price = await stripe.prices.retrieve(priceId)
@@ -89,31 +79,65 @@ async function fetchStripePlanPricing(planId: 'basic' | 'pro'): Promise<Platform
     )
 
     return {
-      planId,
-      label: meta.label,
-      description: meta.description,
+      interval: billingInterval,
       monthlyPrice,
       priceAmount,
       priceDisplay: formatCurrencyAmount(priceAmount, currency),
       intervalLabel: intervalSuffix(recurring?.interval, recurring?.interval_count),
       currency,
-      seatLimit: PLATFORM_SEAT_LIMITS[planId],
       stripePriceId: priceId,
     }
   } catch (error) {
-    console.error(`Failed to load Stripe price for ${planId}:`, error)
+    console.error(`Failed to load Stripe ${billingInterval} price for ${planId}:`, error)
+    return {
+      interval: billingInterval,
+      monthlyPrice: 0,
+      priceAmount: 0,
+      priceDisplay: '—',
+      intervalLabel: billingInterval === 'year' ? '/year' : '/month',
+      currency: 'usd',
+      stripePriceId: priceId,
+    }
+  }
+}
+
+async function fetchStripePlanPricing(planId: 'basic' | 'pro'): Promise<PlatformPlanPricing> {
+  const meta = PLATFORM_PLANS[planId]
+  const [monthly, annual] = await Promise.all([
+    fetchStripePriceOption(planId, 'month'),
+    fetchStripePriceOption(planId, 'year'),
+  ])
+
+  const priceOptions = [monthly, annual].filter(
+    (option): option is PlatformPlanPriceOption => option !== null
+  )
+
+  if (priceOptions.length === 0) {
     return {
       planId,
       label: meta.label,
       description: meta.description,
-      monthlyPrice: 0,
-      priceAmount: 0,
-      priceDisplay: '—',
-      intervalLabel: '',
-      currency: 'usd',
       seatLimit: PLATFORM_SEAT_LIMITS[planId],
-      stripePriceId: priceId,
+      priceOptions: [
+        {
+          interval: 'month',
+          monthlyPrice: 0,
+          priceAmount: 0,
+          priceDisplay: '—',
+          intervalLabel: '',
+          currency: 'usd',
+          stripePriceId: null,
+        },
+      ],
     }
+  }
+
+  return {
+    planId,
+    label: meta.label,
+    description: meta.description,
+    seatLimit: PLATFORM_SEAT_LIMITS[planId],
+    priceOptions,
   }
 }
 
@@ -128,7 +152,7 @@ async function fetchPlatformPlanPricingUncached(): Promise<PlatformPlanPricing[]
 
 const getCachedPlatformPlanPricing = unstable_cache(
   fetchPlatformPlanPricingUncached,
-  ['platform-plan-pricing'],
+  ['platform-plan-pricing-v2'],
   { revalidate: 300 }
 )
 
@@ -142,8 +166,10 @@ export async function getPlatformMonthlyPriceMap(): Promise<
   const plans = await getPlatformPlanPricing()
   const basic = plans.find((p) => p.planId === 'basic')
   const pro = plans.find((p) => p.planId === 'pro')
+  const basicMonthly = basic?.priceOptions.find((option) => option.interval === 'month')
+  const proMonthly = pro?.priceOptions.find((option) => option.interval === 'month')
   return {
-    basic: basic?.monthlyPrice || 0,
-    pro: pro?.monthlyPrice || 0,
+    basic: basicMonthly?.monthlyPrice || 0,
+    pro: proMonthly?.monthlyPrice || 0,
   }
 }

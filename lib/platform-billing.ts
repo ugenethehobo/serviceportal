@@ -1,5 +1,7 @@
 export type PlatformPlanId = 'trial' | 'basic' | 'pro'
 
+export type BillingInterval = 'month' | 'year'
+
 export const PLATFORM_TRIAL_DAYS = 14
 
 export const PLATFORM_SEAT_LIMITS: Record<PlatformPlanId, number> = {
@@ -48,9 +50,36 @@ export function getTrialEndsAt(from = new Date()): string {
   return end.toISOString()
 }
 
-export function getPlatformPriceId(plan: Exclude<PlatformPlanId, 'trial'>): string | null {
-  if (plan === 'basic') return process.env.STRIPE_PLATFORM_PRICE_BASIC || null
+export function getPlatformPriceId(
+  plan: Exclude<PlatformPlanId, 'trial'>,
+  interval: BillingInterval = 'month'
+): string | null {
+  if (plan === 'basic') {
+    if (interval === 'year') {
+      return process.env.STRIPE_PLATFORM_PRICE_BASIC_ANNUAL || null
+    }
+    return process.env.STRIPE_PLATFORM_PRICE_BASIC || null
+  }
+
+  if (interval === 'year') {
+    return process.env.STRIPE_PLATFORM_PRICE_PRO_ANNUAL || null
+  }
   return process.env.STRIPE_PLATFORM_PRICE_PRO || null
+}
+
+export function resolvePlatformPlanFromPriceId(
+  priceId: string | null | undefined
+): PlatformPlanId | null {
+  if (!priceId) return null
+
+  const basicMonthly = process.env.STRIPE_PLATFORM_PRICE_BASIC
+  const basicAnnual = process.env.STRIPE_PLATFORM_PRICE_BASIC_ANNUAL
+  const proMonthly = process.env.STRIPE_PLATFORM_PRICE_PRO
+  const proAnnual = process.env.STRIPE_PLATFORM_PRICE_PRO_ANNUAL
+
+  if (priceId === basicMonthly || priceId === basicAnnual) return 'basic'
+  if (priceId === proMonthly || priceId === proAnnual) return 'pro'
+  return null
 }
 
 export function normalizePlatformPlan(value: string | null | undefined): PlatformPlanId {
@@ -118,11 +147,7 @@ export function mapStripeSubscriptionToPlatform(
   stripeStatus: string,
   priceId: string | null | undefined
 ): { plan: PlatformPlanId; status: PlatformSubscriptionStatus } {
-  let plan: PlatformPlanId = 'trial'
-  if (priceId) {
-    if (priceId === process.env.STRIPE_PLATFORM_PRICE_BASIC) plan = 'basic'
-    if (priceId === process.env.STRIPE_PLATFORM_PRICE_PRO) plan = 'pro'
-  }
+  const plan = resolvePlatformPlanFromPriceId(priceId) ?? 'trial'
 
   const status = normalizeSubscriptionStatus(
     stripeStatus === 'trialing'

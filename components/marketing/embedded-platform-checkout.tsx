@@ -3,14 +3,19 @@
 import { useCallback, useMemo, useRef } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js'
-import type { PlatformPlanId } from '@/lib/platform-billing'
+import type { BillingInterval, PlatformPlanId } from '@/lib/platform-billing'
 
 interface EmbeddedPlatformCheckoutProps {
   plan: Exclude<PlatformPlanId, 'trial'>
+  billingInterval?: BillingInterval
   onComplete: (sessionId: string) => void
 }
 
-export function EmbeddedPlatformCheckout({ plan, onComplete }: EmbeddedPlatformCheckoutProps) {
+export function EmbeddedPlatformCheckout({
+  plan,
+  billingInterval = 'month',
+  onComplete,
+}: EmbeddedPlatformCheckoutProps) {
   const sessionIdRef = useRef<string | null>(null)
   const stripePromise = useMemo(
     () => loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!),
@@ -21,7 +26,7 @@ export function EmbeddedPlatformCheckout({ plan, onComplete }: EmbeddedPlatformC
     const response = await fetch('/api/stripe/billing/signup-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan }),
+      body: JSON.stringify({ plan, billingInterval }),
     })
     const data = await response.json()
     if (!response.ok) {
@@ -29,10 +34,10 @@ export function EmbeddedPlatformCheckout({ plan, onComplete }: EmbeddedPlatformC
     }
     sessionIdRef.current = data.sessionId as string
     return data.clientSecret as string
-  }, [plan])
+  }, [plan, billingInterval])
 
   return (
-    <div className="rounded-xl border bg-card overflow-hidden min-h-[480px]">
+    <div className="min-h-[480px] overflow-hidden rounded-xl border bg-card">
       <EmbeddedCheckoutProvider
         stripe={stripePromise}
         options={{

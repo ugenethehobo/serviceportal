@@ -168,4 +168,103 @@ body.has-app-background {
 
 @theme inline {
   --animate-landing-ken-burns: landing-ken-burns 18s ease-in-out infinite alternate;
+  --animate-landing-gradient: landing-gradient 8s ease infinite;
+  --animate-landing-float: landing-float 6s ease-in-out infinite;
+  --animate-landing-marquee: landing-marquee 40s linear infinite;
+  --animate-landing-shimmer: landing-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes landing-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes landing-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes landing-shimmer {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.85; }
+}
+
+.landing-grain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.landing-text-gradient {
+  background: linear-gradient(135deg, #ffffff 0%, #fde68a 45%, #ffffff 70%, #a5f3fc 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: landing-gradient 8s ease infinite;
+}
+
+.landing-glow-ring {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 80px rgba(251, 191, 36, 0.12),
+    0 0 120px rgba(56, 189, 248, 0.08);
+}
+
+/* Editorial landing — light paper canvas, no photo backgrounds */
+.landing-editorial {
+  --landing-paper: #f2ede4;
+  --landing-ink: #0a0a0a;
+  --landing-accent: #ff4f00;
+}
+
+.landing-product-frame {
+  position: relative;
+  z-index: 1;
+}
+
+.landing-product-frame-chrome {
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 24px 80px rgba(0, 0, 0, 0.12);
+}
+
+.landing-product-frame-tilt {
+  transform: perspective(1400px) rotateY(-8deg) rotateX(4deg);
+  transform-origin: center center;
+}
+
+.landing-product-shadow {
+  position: absolute;
+  inset: 12% 8% -8%;
+  z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.14), transparent 70%);
+  filter: blur(24px);
+}
+
+.landing-marquee-track {
+  animation: landing-marquee 35s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-product-frame-tilt {
+    transform: none;
+  }
+
+  .landing-marquee-track {
+    animation: none;
+  }
 }

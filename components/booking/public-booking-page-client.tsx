@@ -31,6 +31,7 @@ import {
 import type { BookableService } from '@/lib/booking'
 import { cn } from '@/lib/utils'
 import { ServicePackageRequestSelector } from '@/components/booking/service-package-request-selector'
+import { CompanyLogoImage } from '@/components/dashboard/company-logo-image'
 import { CalendarDays, CheckCircle2, ClipboardList, Loader2, Users } from 'lucide-react'
 
 type BookingDateOption = {
@@ -270,14 +271,13 @@ export function PublicBookingPageClient({
     <div className="min-h-screen bg-muted/30 py-8 px-4">
       <div className="mx-auto w-full max-w-2xl space-y-6">
         <div className="text-center space-y-3">
-          {data.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={data.logoUrl}
-              alt={`${data.companyName} logo`}
-              className="mx-auto h-14 w-auto object-contain"
-            />
-          ) : null}
+          <CompanyLogoImage
+            logoRef={data.logoRef}
+            companyName={data.companyName}
+            className="mx-auto"
+            imageClassName="h-14 w-auto max-w-[200px] rounded-md object-contain"
+            fallbackClassName="mx-auto size-14 rounded-md text-sm"
+          />
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{data.companyName}</h1>
             <p className="text-muted-foreground mt-1">{heading}</p>

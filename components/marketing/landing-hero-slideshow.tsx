@@ -13,6 +13,8 @@ interface LandingHeroSlideshowProps {
   activeIndex: number
   onActiveIndexChange: (index: number) => void
   className?: string
+  /** Dot indicators; off by default when slideshow is a fixed full-page background */
+  showIndicators?: boolean
 }
 
 export function LandingHeroSlideshow({
@@ -20,6 +22,7 @@ export function LandingHeroSlideshow({
   activeIndex,
   onActiveIndexChange,
   className,
+  showIndicators = false,
 }: LandingHeroSlideshowProps) {
   const [paused, setPaused] = useState(false)
 
@@ -45,14 +48,17 @@ export function LandingHeroSlideshow({
   if (slides.length === 0) {
     return (
       <div
-        className={cn('absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950', className)}
+        className={cn(
+          'size-full bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950',
+          className
+        )}
       />
     )
   }
 
   return (
     <div
-      className={cn('absolute inset-0 overflow-hidden', className)}
+      className={cn('relative size-full overflow-hidden', className)}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={() => setPaused(true)}
@@ -87,8 +93,8 @@ export function LandingHeroSlideshow({
       <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/50 to-black/80 md:from-black/55 md:via-black/45 md:to-black/75" />
       <div className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/20 to-black/45 md:from-black/35 md:via-transparent md:to-black/25" />
 
-      {slides.length > 1 && (
-        <div className="absolute bottom-6 left-1/2 z-10 hidden -translate-x-1/2 items-center gap-2 lg:flex lg:bottom-32">
+      {showIndicators && slides.length > 1 && (
+        <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
           {slides.map((slide, index) => (
             <button
               key={`dot-${slide.src}-${index}`}

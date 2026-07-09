@@ -55,10 +55,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
     }
 
-    const priceId = getPlatformPriceId(plan)
+    const billingInterval = body.billingInterval === 'year' ? 'year' : 'month'
+    const priceId = getPlatformPriceId(plan, billingInterval)
     if (!priceId) {
       return NextResponse.json(
-        { error: 'Platform billing is not configured. Set STRIPE_PLATFORM_PRICE_BASIC/PRO.' },
+        {
+          error:
+            billingInterval === 'year'
+              ? 'Annual platform billing is not configured.'
+              : 'Platform billing is not configured. Set STRIPE_PLATFORM_PRICE_BASIC/PRO.',
+        },
         { status: 503 }
       )
     }

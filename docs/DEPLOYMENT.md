@@ -35,8 +35,10 @@ Copy `.env.example` to `.env.local` for local development. Set the same values i
 
 | Variable | Purpose |
 |----------|---------|
-| `STRIPE_PLATFORM_PRICE_BASIC` | Stripe Price ID for Basic plan |
-| `STRIPE_PLATFORM_PRICE_PRO` | Stripe Price ID for Pro plan |
+| `STRIPE_PLATFORM_PRICE_BASIC` | Stripe monthly Price ID for Basic plan |
+| `STRIPE_PLATFORM_PRICE_PRO` | Stripe monthly Price ID for Pro plan |
+| `STRIPE_PLATFORM_PRICE_BASIC_ANNUAL` | Stripe annual Price ID for Basic (optional; enables annual toggle) |
+| `STRIPE_PLATFORM_PRICE_PRO_ANNUAL` | Stripe annual Price ID for Pro (optional; enables annual toggle) |
 | `STRIPE_BILLING_WEBHOOK_SECRET` | Platform billing webhook secret (`/api/stripe/billing/webhook`). Falls back to `STRIPE_WEBHOOK_SECRET` if unset. |
 
 ### QuickBooks Online (Pro integrations)

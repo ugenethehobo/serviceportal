@@ -10,8 +10,14 @@ import { SignupPromoCode } from '@/components/marketing/signup-promo-code'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { PLATFORM_TRIAL_DAYS, type PlatformPlanId } from '@/lib/platform-billing'
-import { formatPlanPriceLine, pricingByPlanId, type PlatformPlanPricing } from '@/lib/platform-pricing'
+import { type PlatformPlanId } from '@/lib/platform-billing'
+import {
+  formatPlanPriceLine,
+  pricingByPlanId,
+  type BillingInterval,
+  type PlatformPlanPricing,
+  PLATFORM_TRIAL_DAYS,
+} from '@/lib/platform-pricing'
 import { promoAppliedLabel } from '@/lib/platform-promo'
 import { ArrowLeft } from 'lucide-react'
 
@@ -21,6 +27,10 @@ function isValidPlan(value: string | null): value is PlatformPlanId {
   return value === 'trial' || value === 'basic' || value === 'pro'
 }
 
+function isValidBillingInterval(value: string | null): value is BillingInterval {
+  return value === 'month' || value === 'year'
+}
+
 interface SignupPageClientProps {
   plans: PlatformPlanPricing[]
 }
@@ -28,7 +38,9 @@ interface SignupPageClientProps {
 export function SignupPageClient({ plans }: SignupPageClientProps) {
   const searchParams = useSearchParams()
   const planParam = searchParams.get('plan')
+  const billingParam = searchParams.get('billing')
   const initialPlan = isValidPlan(planParam) ? planParam : null
+  const initialBillingInterval = isValidBillingInterval(billingParam) ? billingParam : 'month'
   const initialSessionId = searchParams.get('session_id')
 
   const pricingMap = useMemo(() => pricingByPlanId(plans), [plans])
@@ -37,6 +49,8 @@ export function SignupPageClient({ plans }: SignupPageClientProps) {
   const [checkoutSessionId, setCheckoutSessionId] = useState<string | undefined>(
     initialSessionId || undefined
   )
+  const [billingInterval, setBillingInterval] =
+    useState<BillingInterval>(initialBillingInterval)
   const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null)
   const [step, setStep] = useState<SignupStep>(() => {
     if (initialSessionId && (initialPlan === 'basic' || initialPlan === 'pro')) return 'account'
@@ -47,12 +61,13 @@ export function SignupPageClient({ plans }: SignupPageClientProps) {
 
   const planMeta = selectedPlan ? pricingMap[selectedPlan] : null
 
-  const choosePlan = (plan: PlatformPlanId) => {
+  const choosePlan = (plan: PlatformPlanId, interval: BillingInterval = 'month') => {
     setSelectedPlan(plan)
     if (plan === 'trial') {
       setStep('account')
       return
     }
+    setBillingInterval(interval)
     setCheckoutSessionId(undefined)
     setAppliedPromoCode(null)
     setStep('payment')
@@ -122,7 +137,7 @@ export function SignupPageClient({ plans }: SignupPageClientProps) {
                   {planMeta && (
                     <span className="text-muted-foreground font-normal">
                       {' '}
-                      · {formatPlanPriceLine(planMeta)}
+                      · {formatPlanPriceLine(planMeta, billingInterval)}
                     </span>
                   )}
                 </h2>
@@ -148,7 +163,11 @@ export function SignupPageClient({ plans }: SignupPageClientProps) {
             />
 
             {!appliedPromoCode && (
-              <EmbeddedPlatformCheckout plan={selectedPlan} onComplete={handlePaymentComplete} />
+              <EmbeddedPlatformCheckout
+                plan={selectedPlan}
+                billingInterval={billingInterval}
+                onComplete={handlePaymentComplete}
+              />
             )}
           </div>
         )}

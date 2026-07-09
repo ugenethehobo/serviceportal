@@ -5,6 +5,7 @@ import {
   getSeatLimitForPlan,
   getTrialEndsAt,
   mapStripeSubscriptionToPlatform,
+  type BillingInterval,
   type PlatformPlanId,
 } from '@/lib/platform-billing'
 import { validatePlatformDevPromoCode } from '@/lib/platform-promo'
@@ -17,20 +18,28 @@ function createSupabaseAdmin() {
   )
 }
 
-export async function createEmbeddedSignupCheckout(plan: 'basic' | 'pro', origin: string) {
-  const priceId = getPlatformPriceId(plan)
+export async function createEmbeddedSignupCheckout(
+  plan: 'basic' | 'pro',
+  origin: string,
+  billingInterval: BillingInterval = 'month'
+) {
+  const priceId = getPlatformPriceId(plan, billingInterval)
   if (!priceId) {
-    throw new Error('Platform billing is not configured. Set STRIPE_PLATFORM_PRICE_BASIC/PRO.')
+    throw new Error(
+      billingInterval === 'year'
+        ? 'Annual platform billing is not configured. Set STRIPE_PLATFORM_PRICE_*_ANNUAL.'
+        : 'Platform billing is not configured. Set STRIPE_PLATFORM_PRICE_BASIC/PRO.'
+    )
   }
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     ui_mode: 'embedded',
     line_items: [{ price: priceId, quantity: 1 }],
-    return_url: `${origin}/signup?plan=${plan}&session_id={CHECKOUT_SESSION_ID}`,
-    metadata: { signup: 'true', plan },
+    return_url: `${origin}/signup?plan=${plan}&billing=${billingInterval}&session_id={CHECKOUT_SESSION_ID}`,
+    metadata: { signup: 'true', plan, billing_interval: billingInterval },
     subscription_data: {
-      metadata: { signup: 'true', plan },
+      metadata: { signup: 'true', plan, billing_interval: billingInterval },
     },
   })
 

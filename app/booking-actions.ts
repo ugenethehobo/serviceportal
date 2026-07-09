@@ -55,7 +55,7 @@ function createSupabaseAdmin() {
 export type PublicBookingPageData = {
   companyId: string
   companyName: string
-  logoUrl: string | null
+  logoRef: string | null
   bookingMode: BookingMode
   bookingSettings: BookingSettings
   timezone: string
@@ -116,7 +116,7 @@ export async function getPublicBookingPageAction(
     data: {
       companyId: company.id,
       companyName: company.name,
-      logoUrl: company.logo_url,
+      logoRef: company.logo_url,
       bookingMode: normalizeBookingMode(company.booking_mode),
       bookingSettings: normalizeBookingSettings(company.booking_settings),
       timezone: company.timezone || 'America/Chicago',
