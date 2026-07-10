@@ -7,7 +7,7 @@
  * Mobile product tour uses optional `mobileImage` per chapter (portrait PNGs in `public/landing/`).
  */
 
-export const SERVICE_PORTAL_VERSION = '0.0.31'
+export const SERVICE_PORTAL_VERSION = '0.0.34'
 
 export type LandingProductScreenshot = {
   src: string
@@ -166,7 +166,7 @@ export const LANDING_FEATURE_SECTIONS: LandingFeatureSection[] = [
       'Reports for revenue and outstanding balances',
     ],
     image: {
-      src: '/landing/product-portal.png',
+      src: '/landing/product-billing.png',
       alt: 'ServicePortal billing and payments',
     },
     mobileImage: {
