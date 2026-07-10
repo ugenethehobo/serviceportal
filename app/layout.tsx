@@ -16,6 +16,7 @@ import { THEME_STORAGE_KEY } from "@/lib/theme";
 import { getThemeScriptDefault } from "@/lib/theme-server";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Analytics } from "@vercel/analytics/next"
+import { BetaFeedbackWidget } from "@/components/beta-feedback/beta-feedback-widget"
 
 const inter = Inter({subsets:['latin'],variable:'--font-sans'});
 
@@ -77,6 +78,7 @@ export default async function RootLayout({
               <AppBackground />
               <div className="relative z-10 flex min-h-full flex-1 flex-col">
                 {children}
+                <BetaFeedbackWidget />
                 <Toaster />
               </div>
             </div>

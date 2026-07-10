@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAppBaseUrl } from '@/lib/app-url'
+import { buildNotificationTemplateVars } from '@/lib/email/resend-templates'
 import { sendResendEmail, isResendConfigured } from '@/lib/email/resend'
+import type { ResendTemplateKey, ResendTemplateVariables } from '@/lib/email/resend-templates'
 import { sendTextbeltSms } from '@/lib/sms/textbelt'
 import {
   isChannelEnabledForEvent,
@@ -18,6 +20,10 @@ type NotificationPayload = {
     subject: string
     html: string
     text?: string
+    resendTemplate?: {
+      key: ResendTemplateKey
+      variables: ResendTemplateVariables
+    }
   }
   sms?: {
     phone: string
@@ -34,12 +40,17 @@ function escapeHtml(value: string) {
     .replace(/"/g, '&quot;')
 }
 
-function buildEmailShell(companyName: string, title: string, bodyHtml: string, cta?: { label: string; href: string }) {
+function buildNotificationEmail(
+  companyName: string,
+  title: string,
+  bodyHtml: string,
+  cta?: { label: string; href: string }
+) {
   const ctaHtml = cta
     ? `<p style="margin:24px 0 0;"><a href="${cta.href}" style="display:inline-block;background:#111827;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;">${escapeHtml(cta.label)}</a></p>`
     : ''
 
-  return `
+  const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111827;max-width:560px;">
       <p style="margin:0 0 8px;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(companyName)}</p>
       <h1 style="margin:0 0 16px;font-size:20px;">${escapeHtml(title)}</h1>
@@ -48,6 +59,14 @@ function buildEmailShell(companyName: string, title: string, bodyHtml: string, c
       <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;">Sent by Service Portal</p>
     </div>
   `
+
+  return {
+    html,
+    resendTemplate: {
+      key: 'notification' as const,
+      variables: buildNotificationTemplateVars({ companyName, title, bodyHtml, cta }),
+    },
+  }
 }
 
 async function logNotification(
@@ -152,6 +171,7 @@ export async function dispatchNotification(
         html: payload.email.html,
         text: payload.email.text,
         replyTo: preferences.reply_to_email,
+        resendTemplate: payload.email.resendTemplate,
       })
 
       await logNotification(supabaseAdmin, {
@@ -222,7 +242,7 @@ export async function notifyClientMessageFromStaff(
       ? {
           to: input.clientEmail,
           subject: `New message from ${companyName}`,
-          html: buildEmailShell(
+          ...buildNotificationEmail(
             companyName,
             'You have a new message',
             `<p>Hi ${escapeHtml(clientLabel)},</p><p>${escapeHtml(companyName)} sent you a message:</p><blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid #d1d5db;background:#f9fafb;">${escapeHtml(preview)}</blockquote>`,
@@ -270,7 +290,7 @@ export async function notifyStaffMessageFromClient(
       email: {
         to: email,
         subject: `New message from ${clientLabel}`,
-        html: buildEmailShell(
+        ...buildNotificationEmail(
           companyName,
           'New client message',
           `<p>${escapeHtml(clientLabel)} sent a message:</p><blockquote style="margin:16px 0;padding:12px 16px;border-left:3px solid #d1d5db;background:#f9fafb;">${escapeHtml(preview)}</blockquote>`,
@@ -324,7 +344,7 @@ export async function notifyClientEstimateSent(
       ? {
           to: input.clientEmail,
           subject: `Estimate ready: ${input.estimateTitle}`,
-          html: buildEmailShell(
+          ...buildNotificationEmail(
             companyName,
             'Your estimate is ready',
             `<p>Hi ${escapeHtml(clientLabel)},</p><p><strong>${escapeHtml(input.estimateTitle)}</strong> is ready for review. Total: <strong>${escapeHtml(amount)}</strong>.</p>`,
@@ -384,7 +404,7 @@ export async function notifyClientInvoiceSent(
       ? {
           to: input.clientEmail,
           subject: `Invoice for ${input.jobTitle}`,
-          html: buildEmailShell(
+          ...buildNotificationEmail(
             companyName,
             'Your invoice is ready',
             `<p>Hi ${escapeHtml(clientLabel)},</p><p>Your invoice for <strong>${escapeHtml(input.jobTitle)}</strong> is ready.${input.balanceDue > 0 ? ` Balance due: <strong>${escapeHtml(amount)}</strong>.` : ' This job is paid in full.'}</p>`,
@@ -431,7 +451,7 @@ export async function notifyStaffEstimateResponse(
       email: {
         to: email,
         subject: `${clientLabel} ${responseLabel} estimate: ${input.estimateTitle}`,
-        html: buildEmailShell(
+        ...buildNotificationEmail(
           companyName,
           `Estimate ${responseLabel}`,
           `<p>${escapeHtml(clientLabel)} <strong>${responseLabel}</strong> the estimate <strong>${escapeHtml(input.estimateTitle)}</strong>.</p>`,
@@ -486,7 +506,7 @@ export async function notifyPaymentReceived(
       email: {
         to: input.clientEmail,
         subject: `Payment received for ${input.jobTitle}`,
-        html: buildEmailShell(
+        ...buildNotificationEmail(
           companyName,
           'Payment received',
           `<p>Hi ${escapeHtml(clientLabel)},</p><p>We received your payment of <strong>${escapeHtml(amountLabel)}</strong> for <strong>${escapeHtml(input.jobTitle)}</strong>. Thank you!</p>`
@@ -504,7 +524,7 @@ export async function notifyPaymentReceived(
       email: {
         to: email,
         subject: `Payment received: ${input.jobTitle}`,
-        html: buildEmailShell(
+        ...buildNotificationEmail(
           companyName,
           'Payment received',
           `<p>A payment of <strong>${escapeHtml(amountLabel)}</strong> was received for <strong>${escapeHtml(input.jobTitle)}</strong>.</p>`,
@@ -559,7 +579,7 @@ export async function notifyStaffOnlineBookingReceived(
       email: {
         to: email,
         subject: `New online booking: ${input.clientName}`,
-        html: buildEmailShell(
+        ...buildNotificationEmail(
           companyName,
           'New online booking',
           `<p><strong>${escapeHtml(input.clientName)}</strong> booked <strong>${escapeHtml(input.serviceName)}</strong> for <strong>${escapeHtml(when)}</strong>.</p>${crewLine}${contactBits.length ? `<p>${contactBits.map((line) => escapeHtml(line!)).join('<br/>')}</p>` : ''}`,
@@ -606,7 +626,7 @@ export async function notifyClientBookingConfirmed(
       ? {
           to: input.clientEmail,
           subject: `Visit confirmed with ${companyName}`,
-          html: buildEmailShell(
+          ...buildNotificationEmail(
             companyName,
             'Your visit is confirmed',
             `<p>Hi ${escapeHtml(clientLabel)},</p><p>Your booking for <strong>${escapeHtml(input.jobTitle)}</strong> is confirmed for <strong>${escapeHtml(when)}</strong>.</p>`,
@@ -661,7 +681,7 @@ export async function notifyClientVisitReminder(
       ? {
           to: input.clientEmail,
           subject: `Reminder: upcoming visit from ${companyName}`,
-          html: buildEmailShell(
+          ...buildNotificationEmail(
             companyName,
             'Upcoming visit reminder',
             `<p>Hi ${escapeHtml(clientLabel)},</p><p>This is a reminder that <strong>${escapeHtml(input.jobTitle)}</strong> is scheduled for <strong>${escapeHtml(when)}</strong>.</p>`,
@@ -713,7 +733,7 @@ export async function notifyClientInvoiceOverdueReminder(
       ? {
           to: input.clientEmail,
           subject: `Payment reminder: ${input.jobTitle}`,
-          html: buildEmailShell(
+          ...buildNotificationEmail(
             companyName,
             'Invoice payment reminder',
             `<p>Hi ${escapeHtml(clientLabel)},</p><p>Your invoice for <strong>${escapeHtml(input.jobTitle)}</strong> has an outstanding balance of <strong>${escapeHtml(amount)}</strong> (${input.overdueOffset} days past due).</p>`,
@@ -769,7 +789,7 @@ export async function notifyStaffLeadFollowUpDue(
       email: {
         to: email,
         subject: `Follow-up due: ${input.leadName}`,
-        html: buildEmailShell(
+        ...buildNotificationEmail(
           companyName,
           'Lead follow-up reminder',
           `<p>Follow up with <strong>${escapeHtml(input.leadName)}</strong> is due <strong>${escapeHtml(when)}</strong>.</p>${contactBits.length ? `<p>${contactBits.map((line) => escapeHtml(line!)).join('<br/>')}</p>` : ''}`,

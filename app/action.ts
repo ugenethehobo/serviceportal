@@ -7627,3 +7627,120 @@ export async function sendMessagingMessageAction(
     return { success: false, error: error.message || 'Failed to send message' }
   }
 }
+
+export async function submitBetaFeedbackAction(input: {
+  preview?: boolean
+  feedbackType?: 'bug' | 'feature' | 'other'
+  message?: string
+  pageUrl?: string | null
+  userAgent?: string | null
+  contactEmail?: string
+}) {
+  const session = await getSessionProfile()
+
+  if (input.preview) {
+    return {
+      success: true as const,
+      mode: 'preview' as const,
+      requiresEmail: !session,
+      submitterEmail: session?.profile.email ?? null,
+    }
+  }
+
+  const feedbackType = input.feedbackType
+  if (feedbackType !== 'bug' && feedbackType !== 'feature' && feedbackType !== 'other') {
+    return { success: false as const, error: 'Select a feedback type' }
+  }
+
+  let submitterEmail = input.contactEmail?.trim() || null
+  let submitterName: string | null = null
+  let submitterRole: string | null = null
+  let companyId: string | null = null
+  let companyName: string | null = null
+  let submitterUserId: string | null = null
+
+  if (session) {
+    submitterUserId = session.userId
+    submitterName = session.profile.full_name || null
+    submitterRole = session.profile.role || null
+    companyId = session.profile.company_id || null
+    submitterEmail = session.profile.email || submitterEmail
+
+    if (companyId) {
+      const { data: company } = await createSupabaseAdmin()
+        .from('companies')
+        .select('name')
+        .eq('id', companyId)
+        .maybeSingle()
+      companyName = company?.name || null
+    }
+  } else if (!submitterEmail) {
+    return { success: false as const, error: 'Please enter your email' }
+  }
+
+  const { createBetaFeedbackSubmission } = await import('@/lib/beta-feedback-server')
+  const result = await createBetaFeedbackSubmission({
+    feedbackType,
+    message: input.message || '',
+    pageUrl: input.pageUrl,
+    userAgent: input.userAgent,
+    submitterUserId,
+    submitterEmail,
+    submitterName,
+    submitterRole,
+    companyId,
+    companyName,
+    metadata: {
+      submitted_at_client: new Date().toISOString(),
+    },
+  })
+
+  if (!result.success) {
+    return { success: false as const, error: result.error }
+  }
+
+  return { success: true as const, mode: 'submit' as const }
+}
+
+export async function getAdminBetaFeedbackAction() {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false as const, error: adminCheck.error }
+  }
+
+  try {
+    const { listBetaFeedbackForAdmin } = await import('@/lib/beta-feedback-server')
+    const items = await listBetaFeedbackForAdmin()
+    return { success: true as const, items }
+  } catch (error: any) {
+    console.error('getAdminBetaFeedbackAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to load feedback' }
+  }
+}
+
+export async function updateBetaFeedbackStatusAction(
+  feedbackId: string,
+  status: 'new' | 'reviewed' | 'resolved'
+) {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false as const, error: adminCheck.error }
+  }
+
+  if (status !== 'new' && status !== 'reviewed' && status !== 'resolved') {
+    return { success: false as const, error: 'Invalid status' }
+  }
+
+  try {
+    const { updateBetaFeedbackStatus } = await import('@/lib/beta-feedback-server')
+    const item = await updateBetaFeedbackStatus(feedbackId, status)
+    if (!item) {
+      return { success: false as const, error: 'Feedback not found' }
+    }
+    revalidatePath('/admin')
+    return { success: true as const, item }
+  } catch (error: any) {
+    console.error('updateBetaFeedbackStatusAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to update feedback' }
+  }
+}

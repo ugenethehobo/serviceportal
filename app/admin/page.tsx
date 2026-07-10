@@ -41,6 +41,7 @@ import {
   getCompanyLogoDisplayUrlAction,
   getDashboardData,
 } from '@/app/action'
+import { BetaFeedbackPanel } from '@/components/admin/beta-feedback-panel'
 import { ImageAttachmentField } from '@/components/admin/image-attachment-field'
 import {
   PLATFORM_PLANS,
@@ -142,6 +143,7 @@ export default function AdminDashboard() {
     }
   }
 
+  const [adminTab, setAdminTab] = useState<'companies' | 'feedback'>('companies')
   const [companies, setCompanies] = useState<Company[]>([])
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
   const [searchTerm, setSearchTerm] = useState('')
@@ -393,10 +395,26 @@ export default function AdminDashboard() {
             <LogOut className="size-4" />
             {isLoggingOut ? 'Logging out...' : 'Logout'}
           </Button>
-          <Button onClick={openCreateCompanyModal}>+ Add Company</Button>
+          {adminTab === 'companies' && (
+            <Button onClick={openCreateCompanyModal}>+ Add Company</Button>
+          )}
         </div>
       </div>
 
+      <Tabs
+        value={adminTab}
+        onValueChange={(value) => setAdminTab(value as 'companies' | 'feedback')}
+      >
+        <TabsList>
+          <TabsTrigger value="companies">Companies</TabsTrigger>
+          <TabsTrigger value="feedback">Beta feedback</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {adminTab === 'feedback' ? (
+        <BetaFeedbackPanel />
+      ) : (
+        <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="text-sm text-muted-foreground">Total Companies</div>
@@ -564,6 +582,8 @@ export default function AdminDashboard() {
             </Card>
           ))}
         </div>
+      )}
+        </>
       )}
 
       <Dialog open={isCompanyModalOpen} onOpenChange={handleCompanyModalChange}>

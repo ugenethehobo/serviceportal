@@ -1,3 +1,4 @@
+import { PASSWORD_RESET_TEMPLATE_VARS } from '@/lib/email/resend-templates'
 import { sendResendEmail } from '@/lib/email/resend'
 
 function escapeHtml(value: string) {
@@ -46,5 +47,11 @@ export async function sendPasswordResetEmail(input: {
     subject: 'Reset your ServicePortal password',
     html: buildPasswordResetHtml(resetUrl),
     text: `Reset your ServicePortal password: ${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
+    resendTemplate: {
+      key: 'password-reset',
+      variables: {
+        [PASSWORD_RESET_TEMPLATE_VARS.resetUrl]: resetUrl,
+      },
+    },
   })
 }
