@@ -72,7 +72,9 @@ export async function ensureStripeConnectAccount(companyId: string) {
 
   const { data: company } = await supabaseAdmin
     .from('companies')
-    .select('id, name, stripe_account_id')
+    .select(
+      'id, name, stripe_account_id, address_street, address_city, address_state, address_zip, address'
+    )
     .eq('id', companyId)
     .single()
 
@@ -80,12 +82,40 @@ export async function ensureStripeConnectAccount(companyId: string) {
 
   let accountId = company.stripe_account_id
 
+  const businessProfile: {
+    name?: string
+    support_address?: {
+      line1?: string
+      city?: string
+      state?: string
+      postal_code?: string
+      country: string
+    }
+  } = {}
+
+  if (company.name) {
+    businessProfile.name = company.name
+  }
+
+  if (company.address_street || company.address_city || company.address_state || company.address_zip) {
+    businessProfile.support_address = {
+      line1: company.address_street || company.address || undefined,
+      city: company.address_city || undefined,
+      state: company.address_state || undefined,
+      postal_code: company.address_zip || undefined,
+      country: 'US',
+    }
+  }
+
   if (!accountId) {
     const account = await stripe.accounts.create({
       type: 'express',
+      country: 'US',
       metadata: { company_id: companyId },
-      business_profile: {
-        name: company.name,
+      business_profile: businessProfile,
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
       },
     })
     accountId = account.id
@@ -94,6 +124,10 @@ export async function ensureStripeConnectAccount(companyId: string) {
       .from('companies')
       .update({ stripe_account_id: accountId })
       .eq('id', companyId)
+  } else if (Object.keys(businessProfile).length > 0) {
+    await stripe.accounts.update(accountId, {
+      business_profile: businessProfile,
+    })
   }
 
   return accountId
@@ -107,6 +141,9 @@ export async function createStripeConnectAccountSession(companyId: string) {
     components: {
       account_onboarding: {
         enabled: true,
+        features: {
+          external_account_collection: true,
+        },
       },
     },
   })

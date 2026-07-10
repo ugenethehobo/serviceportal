@@ -162,6 +162,11 @@ export function StripeConnectSettings({ embedded = false }: StripeConnectSetting
           </div>
         )}
 
+        <p className="text-xs text-muted-foreground">
+          Setup runs inside ServicePortal. Stripe may ask you to sign in once in a
+          secure popup before the rest of the form appears here.
+        </p>
+
         <div className="flex flex-wrap gap-3">
           {!isConnected && (
             <Button type="button" onClick={() => setShowOnboarding(true)}>
