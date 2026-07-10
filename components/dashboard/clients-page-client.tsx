@@ -29,6 +29,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
+import {
+  MOBILE_LIST_STACK_CLASS,
+  MOBILE_PAGE_ROOT_CLASS,
+  MOBILE_TAB_LIST_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+  MOBILE_TOOLBAR_ROW_CLASS,
+} from '@/lib/mobile-layout'
 
 import {
   archiveClientAction,
@@ -239,7 +247,7 @@ const openEditClient = (client: Client) => {
   }, [clients, searchTerm, showArchived])
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
+    <div className={MOBILE_PAGE_ROOT_CLASS}>
       <div className="flex items-center justify-between mb-6 shrink-0 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">Clients</h1>
@@ -253,13 +261,13 @@ const openEditClient = (client: Client) => {
       {/* Main Content Card */}
       <MainPageCard className="p-6">
         {/* Controls */}
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-6">
-          <div className="flex gap-4 items-center w-full sm:w-auto">
+        <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+          <div className={MOBILE_TOOLBAR_ROW_CLASS}>
             <Input
               placeholder="Search clients..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-xs"
+              className="max-w-xs max-md:max-w-none max-md:flex-1"
             />
 
             <div className="flex items-center gap-2">
@@ -273,7 +281,7 @@ const openEditClient = (client: Client) => {
           </div>
 
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'list' | 'cards')}>
-            <TabsList>
+            <TabsList className={MOBILE_TAB_LIST_CLASS}>
               <TabsTrigger value="list">List</TabsTrigger>
               <TabsTrigger value="cards">Cards</TabsTrigger>
             </TabsList>
@@ -309,8 +317,8 @@ const openEditClient = (client: Client) => {
           ) : (
             // Actual Content (List or Cards)
             viewMode === 'list' ? (
-              // List View
-              <div className="rounded-lg border">
+              <>
+              <div className={`rounded-lg border ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}>
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -384,6 +392,70 @@ const openEditClient = (client: Client) => {
                   </TableBody>
                 </Table>
               </div>
+              <div className={MOBILE_LIST_STACK_CLASS}>
+                {filteredClients.length > 0 ? (
+                  filteredClients.map((client) => (
+                    <MobileListCard
+                      key={client.id}
+                      onClick={() => router.push(`/dashboard/clients/${client.id}`)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="font-semibold truncate">{client.name}</h3>
+                          <p className="text-sm text-muted-foreground">{client.phone || 'No phone'}</p>
+                        </div>
+                        <Badge variant={client.status === 'active' ? 'default' : 'secondary'}>
+                          {client.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        <MobileListCardRow
+                          label="Jobs"
+                          value={`${client.jobsInProgress ?? 0} active`}
+                        />
+                        <MobileListCardRow
+                          label="Next job"
+                          value={
+                            client.nextJobDate
+                              ? new Date(client.nextJobDate).toLocaleDateString()
+                              : '—'
+                          }
+                        />
+                        <MobileListCardRow
+                          label="Due"
+                          value={
+                            client.amountDue ? `$${client.amountDue.toFixed(2)}` : '—'
+                          }
+                        />
+                      </div>
+                      <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                        {client.status === 'active' ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="max-md:min-h-11"
+                            onClick={(event) => openStatusConfirm(client, 'archive', event)}
+                          >
+                            Archive
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="max-md:min-h-11"
+                            onClick={(event) => openStatusConfirm(client, 'restore', event)}
+                          >
+                            Restore
+                          </Button>
+                        )}
+                      </div>
+                    </MobileListCard>
+                  ))
+                ) : (
+                  <p className="py-8 text-center text-muted-foreground">No clients found.</p>
+                )}
+              </div>
+              </>
             ) : (
               // Card View
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -494,7 +566,7 @@ const openEditClient = (client: Client) => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 max-md:grid-cols-1 sm:grid-cols-2">
               <div>
                 <Label>Email</Label>
                 <Input

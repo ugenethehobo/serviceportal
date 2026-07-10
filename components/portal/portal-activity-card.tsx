@@ -60,7 +60,7 @@ export function PortalActivityCard({
           value={period}
           onValueChange={(value) => setPeriod((value ?? '30d') as PortalActivityPeriod)}
         >
-          <SelectTrigger className="w-[140px] shrink-0">
+          <SelectTrigger className="w-[140px] shrink-0 max-md:w-full max-md:min-w-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -86,7 +86,7 @@ export function PortalActivityCard({
                 <li key={item.id}>
                   <Link
                     href={item.href}
-                    className="flex items-start gap-3 px-5 py-4 hover:bg-muted/40 transition-colors"
+                    className="flex flex-col items-start gap-2 px-5 py-4 transition-colors hover:bg-muted/40 max-md:gap-3 sm:flex-row sm:items-start"
                   >
                     <div
                       className={`rounded-lg p-2 shrink-0 ${
@@ -110,7 +110,7 @@ export function PortalActivityCard({
                         {item.description}
                       </p>
                     </div>
-                    <span className="text-xs text-muted-foreground shrink-0 pt-0.5">
+                    <span className="shrink-0 pt-0.5 text-xs text-muted-foreground max-md:self-end sm:pt-0.5">
                       {formatPortalActivityWhen(item.occurredAt, timezone)}
                     </span>
                   </Link>

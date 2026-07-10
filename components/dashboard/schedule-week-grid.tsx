@@ -27,6 +27,7 @@ import {
   type ScheduleCalendarData,
   type ScheduleCalendarJob,
 } from '@/lib/schedule-calendar'
+import { ScheduleMobileWeekList } from '@/components/dashboard/schedule-mobile-week-list'
 import { Loader2, Repeat } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -409,11 +410,20 @@ export function ScheduleWeekGrid({
   const timelineHeightPx = timelineHours * pixelsPerHour
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col h-full max-md:min-h-[420px]">
-      <div className="flex min-h-0 flex-1 flex-col max-md:overflow-x-auto max-md:overscroll-x-contain">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col">
+      <ScheduleMobileWeekList
+        className="md:hidden"
+        data={data}
+        pendingHref={pendingHref}
+        isInteractionLocked={isInteractionLocked}
+        onJobClick={openJob}
+      />
+
+      <div className="relative hidden h-full min-h-0 flex-1 flex-col md:flex">
+      <div className="flex min-h-0 flex-1 flex-col">
       <div
         className={cn(
-          'grid grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b bg-muted/30 shrink-0 transition-opacity max-md:min-w-[640px]',
+          'grid shrink-0 grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b bg-muted/30 transition-opacity',
           isInteractionLocked && 'opacity-60'
         )}
       >
@@ -435,7 +445,7 @@ export function ScheduleWeekGrid({
       <div
         ref={gridRef}
         className={cn(
-          'relative flex-1 min-h-0 overflow-hidden transition-opacity max-md:overflow-x-auto max-md:overflow-y-auto',
+          'relative flex-1 min-h-0 overflow-hidden transition-opacity',
           isInteractionLocked && 'opacity-60 pointer-events-none'
         )}
       >
@@ -452,7 +462,7 @@ export function ScheduleWeekGrid({
         )}
 
         <div
-          className="relative grid h-full min-h-full grid-cols-[56px_repeat(7,minmax(0,1fr))] max-md:min-w-[640px]"
+          className="relative grid h-full min-h-full grid-cols-[56px_repeat(7,minmax(0,1fr))]"
           style={{ minHeight: timelineHeightPx }}
         >
           <div className="relative border-r bg-muted/20 h-full">
@@ -508,7 +518,7 @@ export function ScheduleWeekGrid({
 
       <div
         className={cn(
-          'flex flex-wrap items-center gap-3 px-3 py-2 border-t text-xs text-muted-foreground shrink-0 max-md:gap-2 max-md:px-2 max-md:text-[11px]',
+          'flex shrink-0 flex-wrap items-center gap-3 border-t px-3 py-2 text-xs text-muted-foreground',
           isInteractionLocked && 'opacity-70'
         )}
       >
@@ -559,6 +569,18 @@ export function ScheduleWeekGrid({
           </span>
         )}
       </div>
+      </div>
+
+      {isInteractionLocked && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-background/45 md:hidden">
+          <div className="flex items-center gap-2 rounded-lg border bg-card px-4 py-3 shadow-md">
+            <Loader2 className="size-4 animate-spin text-primary" />
+            <span className="text-sm font-medium">
+              {isRescheduling ? 'Saving…' : 'Loading week…'}
+            </span>
+          </div>
+        </div>
+      )}
 
       <Dialog
         open={pendingReschedule !== null}

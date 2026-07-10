@@ -23,6 +23,9 @@ type LandingProductStageProps = {
   priority?: boolean
   aspectRatio?: string
   sizes?: string
+  /** When set, the inner frame uses these classes instead of a fluid aspect-ratio box. */
+  stageFrameClassName?: string
+  imageClassName?: string
 }
 
 export function LandingProductStage({
@@ -32,14 +35,19 @@ export function LandingProductStage({
   priority = false,
   aspectRatio = LANDING_PRODUCT_IMAGE_ASPECT,
   sizes = LANDING_PRODUCT_IMAGE_SIZES,
+  stageFrameClassName,
+  imageClassName,
 }: LandingProductStageProps) {
   if (items.length === 0) return null
 
   return (
     <Card className={cn('overflow-hidden p-0', className)}>
       <div
-        className="relative h-full w-full bg-card"
-        style={{ aspectRatio }}
+        className={cn(
+          'relative bg-card',
+          stageFrameClassName ?? 'h-full w-full',
+        )}
+        style={stageFrameClassName ? undefined : { aspectRatio }}
       >
         {items.map((item, index) => {
           const isRaster = /\.(png|jpe?g|webp)$/i.test(item.src)
@@ -61,7 +69,7 @@ export function LandingProductStage({
                 quality={100}
                 unoptimized={isRaster}
                 sizes={sizes}
-                className="object-contain object-center"
+                className={cn('object-contain object-center', imageClassName)}
               />
             </div>
           )

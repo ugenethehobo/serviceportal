@@ -26,6 +26,12 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
+import {
+  MOBILE_LG_TAB_LIST_CLASS,
+  MOBILE_SELECT_TRIGGER_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+  MOBILE_TOOLBAR_ROW_CLASS,
+} from '@/lib/mobile-layout'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
 import {
@@ -372,15 +378,15 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
+    <div className="space-y-6 overflow-x-hidden p-6 max-md:p-4">
+      <div className="flex flex-col items-stretch justify-between gap-4 max-md:flex-col sm:flex-row sm:items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
           <p className="text-muted-foreground">Company & User Management</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link href="/admin/settings">
+        <div className="flex flex-wrap items-center gap-2 max-md:w-full max-md:flex-col max-md:[&_a]:w-full max-md:[&_button]:w-full max-md:[&_button]:min-h-11">
+          <Link href="/admin/settings" className="max-md:w-full">
             <Button variant="outline" size="sm" className="inline-flex items-center gap-2">
               <Settings className="size-4" />
               Settings
@@ -405,7 +411,7 @@ export default function AdminDashboard() {
         value={adminTab}
         onValueChange={(value) => setAdminTab(value as 'companies' | 'feedback')}
       >
-        <TabsList>
+        <TabsList className={MOBILE_LG_TAB_LIST_CLASS}>
           <TabsTrigger value="companies">Companies</TabsTrigger>
           <TabsTrigger value="feedback">Beta feedback</TabsTrigger>
         </TabsList>
@@ -436,19 +442,19 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="flex gap-2 w-full sm:w-auto">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div className={MOBILE_TOOLBAR_ROW_CLASS}>
           <Input
             placeholder="Search companies..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-xs"
+            className="max-w-xs max-md:max-w-none max-md:flex-1"
           />
           <Select
             value={subscriptionFilter}
             onValueChange={(value) => setSubscriptionFilter(value ?? 'All')}
           >
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className={`w-[140px] ${MOBILE_SELECT_TRIGGER_CLASS}`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -470,7 +476,8 @@ export default function AdminDashboard() {
       </div>
 
       {viewMode === 'table' ? (
-        <Card className="p-6">
+        <>
+        <Card className={`p-6 ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -537,6 +544,46 @@ export default function AdminDashboard() {
             </TableBody>
           </Table>
         </Card>
+        <div className="grid grid-cols-1 gap-6 md:hidden">
+          {filteredCompanies.map((company) => (
+            <Card key={company.id} className="flex flex-col p-5">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">{company.name}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {company.users} users • {new Date(company.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                {getSubscriptionBadge(company.subscription)}
+              </div>
+              <div className="mb-4 flex-1 space-y-1 text-sm text-muted-foreground">
+                <p>
+                  Seats: {company.seats_used ?? company.users}/{company.seat_limit ?? 10}
+                </p>
+                <Badge variant={company.status === 'Active' ? 'default' : 'secondary'}>
+                  {company.status}
+                </Badge>
+              </div>
+              <div className="mt-auto flex flex-col gap-2 border-t pt-4 sm:flex-row">
+                <Button
+                  variant="outline"
+                  className="flex-1 max-md:min-h-11"
+                  onClick={() => router.push(`/admin/companies/${company.id}`)}
+                >
+                  Manage Users
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="flex-1 max-md:min-h-11"
+                  onClick={() => openEditCompanyModal(company)}
+                >
+                  Edit
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+        </>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredCompanies.map((company) => (

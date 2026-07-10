@@ -397,7 +397,7 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
   const activeMeta = visibleSections.find((section) => section.id === activeSection)
 
   return (
-    <div className="flex h-full min-h-0 flex-col p-6 max-md:p-4">
+    <div className="flex h-full min-h-0 flex-col overflow-x-hidden p-6 max-md:p-4">
       <PageHeader
         title="Settings"
         description={
@@ -410,7 +410,7 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
 
       <MainPageCard className="min-h-0 flex-1 overflow-hidden p-0">
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <aside className="shrink-0 border-b lg:flex lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r xl:w-80">
+          <aside className="max-md:max-w-full shrink-0 border-b lg:flex lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r xl:w-80">
             <ScrollArea
               className="w-full lg:min-h-0 lg:flex-1"
               viewportClassName="scroll-fade-x lg:scroll-fade"

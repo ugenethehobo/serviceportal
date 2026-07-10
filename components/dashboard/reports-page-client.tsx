@@ -28,6 +28,13 @@ import {
 } from '@/components/ui/table'
 import { AR_AGING_BUCKET_LABELS } from '@/lib/ar-aging'
 import { formatReportsCurrency, REPORTS_PERIOD_LABELS, type ReportsData, type ReportsPeriod } from '@/lib/reports'
+import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
+import {
+  MOBILE_LIST_STACK_CLASS,
+  MOBILE_PAGE_ROOT_CLASS,
+  MOBILE_SELECT_TRIGGER_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+} from '@/lib/mobile-layout'
 
 const ReportsRevenueChart = dynamic(
   () =>
@@ -93,7 +100,7 @@ export function ReportsPageClient({
   }, [period, fetchReports, initialPeriod])
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
+    <div className={MOBILE_PAGE_ROOT_CLASS}>
       <PageHeader
         title="Reports"
         description="Revenue, collections, job activity, and outstanding balances"
@@ -102,7 +109,7 @@ export function ReportsPageClient({
             value={period}
             onValueChange={(value) => setPeriod((value ?? '30d') as ReportsPeriod)}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className={`w-[180px] ${MOBILE_SELECT_TRIGGER_CLASS}`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -231,7 +238,7 @@ export function ReportsPageClient({
 
             {data.arAging.totalOutstanding > 0 ? (
               <>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                <div className="mb-5 grid grid-cols-1 gap-3 max-md:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                   {data.arAging.buckets.map((bucket) => (
                     <div
                       key={bucket.bucket}
@@ -248,7 +255,7 @@ export function ReportsPageClient({
                   ))}
                 </div>
 
-                <div className="rounded-lg border overflow-hidden">
+                <div className={`overflow-hidden rounded-lg border ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}>
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -298,6 +305,53 @@ export function ReportsPageClient({
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+                <div className={MOBILE_LIST_STACK_CLASS}>
+                  {data.arAging.invoices.slice(0, 25).map((row) => (
+                    <MobileListCard key={row.scheduleId}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <Link
+                            href={`/dashboard/clients/${row.clientId}`}
+                            className="font-semibold hover:underline"
+                          >
+                            {row.clientName}
+                          </Link>
+                          <p className="text-sm text-muted-foreground truncate">{row.jobTitle}</p>
+                        </div>
+                        <p className="shrink-0 font-medium text-orange-600">
+                          {formatReportsCurrency(row.balanceDue)}
+                        </p>
+                      </div>
+                      <div className="mt-3">
+                        <MobileListCardRow
+                          label="Age"
+                          value={
+                            <Badge
+                              variant="outline"
+                              className={
+                                row.bucket === 'over_90'
+                                  ? 'text-red-600 border-red-500/40'
+                                  : row.bucket === 'current'
+                                    ? 'text-emerald-600 border-emerald-500/40'
+                                    : 'text-orange-600 border-orange-500/40'
+                              }
+                            >
+                              {row.daysOutstanding}d
+                            </Badge>
+                          }
+                        />
+                      </div>
+                      <div className="mt-3">
+                        <Link
+                          href={`/dashboard/clients/${row.clientId}/jobs/${row.scheduleId}?tab=billing`}
+                          className="text-sm font-medium hover:underline"
+                        >
+                          View invoice
+                        </Link>
+                      </div>
+                    </MobileListCard>
+                  ))}
                 </div>
                 {data.arAging.invoices.length > 25 && (
                   <p className="text-xs text-muted-foreground mt-3">

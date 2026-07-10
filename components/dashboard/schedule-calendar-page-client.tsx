@@ -6,6 +6,7 @@ import { ScheduleWeekGrid } from '@/components/dashboard/schedule-week-grid'
 import { Button } from '@/components/ui/button'
 import { MainPageCard } from '@/components/ui/main-page-card'
 import type { ScheduleCalendarData } from '@/lib/schedule-calendar'
+import { MOBILE_PAGE_ROOT_CLASS } from '@/lib/mobile-layout'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 
 interface ScheduleCalendarPageClientProps {
@@ -37,12 +38,15 @@ export function ScheduleCalendarPageClient({
   }, [loadWeek, weekOffset])
 
   return (
-    <div className="p-4 md:p-6 flex flex-col h-full min-h-0 gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Schedule</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+    <div className={`${MOBILE_PAGE_ROOT_CLASS} gap-3 md:gap-4`}>
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Schedule</h1>
+          <p className="mt-1 text-sm text-muted-foreground max-md:hidden">
             Week view — color-coded by crew. Click a job for details.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground md:hidden">
+            Jobs grouped by day. Tap a job for details.
           </p>
         </div>
 

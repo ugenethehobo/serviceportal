@@ -377,7 +377,7 @@ export function IntegrationsSettings() {
                           onValueChange={(value) => setGoogleCalendarId(value || '')}
                           disabled={googleCalendars.length === 0}
                         >
-                          <SelectTrigger id="google-calendar-id" className="min-w-[240px]">
+                          <SelectTrigger id="google-calendar-id" className="min-w-[240px] max-md:w-full max-md:min-w-0">
                             <SelectValue placeholder="Choose a calendar" />
                           </SelectTrigger>
                           <SelectContent>
@@ -458,7 +458,7 @@ export function IntegrationsSettings() {
                       value={testEvent}
                       onValueChange={(value) => setTestEvent(value as ZapierEventType)}
                     >
-                      <SelectTrigger className="h-9 w-[200px]">
+                      <SelectTrigger className="h-9 w-[200px] max-md:w-full max-md:min-w-0">
                         <SelectValue placeholder="Test event" />
                       </SelectTrigger>
                       <SelectContent>

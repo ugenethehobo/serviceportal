@@ -37,7 +37,7 @@ export function PageHeader({
         ) : null}
       </div>
       {actions ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 max-md:w-full max-md:[&_button]:min-h-11">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 max-md:w-full max-md:flex-col max-md:items-stretch max-md:[&_[data-slot=select-trigger]]:w-full max-md:[&_button]:min-h-11 max-md:[&_button]:w-full">
           {actions}
         </div>
       ) : null}

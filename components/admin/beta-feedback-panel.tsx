@@ -34,6 +34,13 @@ import {
 import type { BetaFeedbackRecord } from '@/lib/beta-feedback-server'
 import { ExternalLink, Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
+import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
+import {
+  MOBILE_LIST_STACK_CLASS,
+  MOBILE_SELECT_TRIGGER_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+  MOBILE_TOOLBAR_ROW_CLASS,
+} from '@/lib/mobile-layout'
 
 function statusVariant(
   status: BetaFeedbackStatus
@@ -105,12 +112,12 @@ export function BetaFeedbackPanel() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className={MOBILE_TOOLBAR_ROW_CLASS}>
         <Select
           value={typeFilter}
           onValueChange={(value) => setTypeFilter((value as 'all' | BetaFeedbackType) || 'all')}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className={`w-[180px] ${MOBILE_SELECT_TRIGGER_CLASS}`}>
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
@@ -127,7 +134,7 @@ export function BetaFeedbackPanel() {
           value={statusFilter}
           onValueChange={(value) => setStatusFilter((value as 'all' | BetaFeedbackStatus) || 'all')}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className={`w-[180px] ${MOBILE_SELECT_TRIGGER_CLASS}`}>
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -152,6 +159,8 @@ export function BetaFeedbackPanel() {
             No feedback submissions yet.
           </div>
         ) : (
+          <>
+          <div className={MOBILE_TABLE_DESKTOP_ONLY_CLASS}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -224,6 +233,50 @@ export function BetaFeedbackPanel() {
               ))}
             </TableBody>
           </Table>
+          </div>
+          <div className={MOBILE_LIST_STACK_CLASS}>
+            {filteredItems.map((item) => (
+              <MobileListCard key={item.id}>
+                <div className="flex items-start justify-between gap-3">
+                  <Badge variant="outline">{getBetaFeedbackTypeLabel(item.feedback_type)}</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(item.created_at).toLocaleString()}
+                  </span>
+                </div>
+                <p className="mt-3 whitespace-pre-wrap text-sm">{item.message}</p>
+                <div className="mt-3 space-y-2">
+                  <MobileListCardRow
+                    label="From"
+                    value={item.submitter_name || item.submitter_email || 'Anonymous'}
+                  />
+                  {item.company_name && (
+                    <MobileListCardRow label="Company" value={item.company_name} />
+                  )}
+                </div>
+                <div className="mt-3">
+                  <Select
+                    value={item.status}
+                    onValueChange={(value) =>
+                      void updateStatus(item.id, value as BetaFeedbackStatus)
+                    }
+                    disabled={updatingId === item.id}
+                  >
+                    <SelectTrigger className={`w-full ${MOBILE_SELECT_TRIGGER_CLASS}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BETA_FEEDBACK_STATUSES.map((status) => (
+                        <SelectItem key={status.value} value={status.value}>
+                          {status.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </MobileListCard>
+            ))}
+          </div>
+          </>
         )}
       </Card>
     </div>

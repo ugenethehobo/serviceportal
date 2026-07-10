@@ -41,8 +41,8 @@ export function JobsTimeline({
   }
 
   return (
-    <div className="relative flex-1 min-h-0">
-      <div className="relative pt-8 pb-4 h-full min-h-[120px]">
+    <div className="relative min-h-0 flex-1 max-md:overflow-x-auto max-md:overscroll-x-contain">
+      <div className="relative h-full min-h-[120px] max-md:min-w-[520px] pb-4 pt-8">
         <div className="absolute top-6 left-0 right-0 h-px bg-border" />
 
         <div className="absolute top-6 bottom-0 left-0 right-0 flex justify-between px-1 pointer-events-none">

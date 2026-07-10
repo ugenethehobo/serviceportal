@@ -36,10 +36,14 @@ export const LANDING_PRODUCT_TOUR_DESKTOP_CLASS = 'mx-auto w-full max-w-[92rem]'
 export const LANDING_PRODUCT_IMAGE_CLASS =
   'h-auto w-full object-contain object-center'
 
-/** Centered mobile tour block — stacked chapter + full-width mobile screenshot. */
-export const LANDING_PRODUCT_MOBILE_CONTAINER_CLASS = 'mx-auto w-full max-w-md sm:max-w-lg'
+/** Centered mobile tour block — portrait screenshots read best slightly wider than `max-w-md`. */
+export const LANDING_PRODUCT_MOBILE_CONTAINER_CLASS = 'mx-auto w-full max-w-lg'
 
-export const LANDING_PRODUCT_MOBILE_STAGE_CLASS = 'w-full max-w-none'
+/** Fixed-height mobile stage so screenshots stay in the viewport above the fold. */
+export const LANDING_PRODUCT_MOBILE_STAGE_FRAME_CLASS =
+  'mx-auto h-[min(58dvh,36rem)] w-[min(72vw,18.75rem)] max-w-full shrink-0'
+
+export const LANDING_PRODUCT_MOBILE_STAGE_CLASS = 'h-full w-full max-w-none'
 
 /** Chapter text panel — matches product image height in the tour pair. */
 export const LANDING_CHAPTER_PANEL_CLASS = 'relative w-64 shrink-0 sm:w-72 lg:w-80'
@@ -49,4 +53,6 @@ export const LANDING_CHAPTER_PANEL_CARD_CLASS =
 
 /** Scroll spacers that drive chapter transitions in the sticky stage. */
 export const LANDING_CHAPTER_SCROLL_STEP_DESKTOP_CLASS = 'min-h-[75dvh]'
-export const LANDING_CHAPTER_SCROLL_STEP_MOBILE_CLASS = 'min-h-[55dvh]'
+/** One full viewport per chapter on mobile — keeps slide transitions aligned through the last slides. */
+export const LANDING_CHAPTER_SCROLL_STEP_MOBILE_CLASS = 'min-h-[100dvh]'
+export const LANDING_CHAPTER_SCROLL_TAIL_MOBILE_CLASS = 'min-h-[50dvh]'

@@ -29,7 +29,10 @@ export function MainPageCardScroll({
   contentClassName,
 }: MainPageCardScrollProps) {
   return (
-    <ScrollArea className={cn('min-h-0 flex-1', className)} viewportClassName="scroll-fade">
+    <ScrollArea
+      className={cn('min-h-0 min-w-0 flex-1', className)}
+      viewportClassName="scroll-fade max-md:overflow-x-hidden"
+    >
       <div className={cn('p-px', contentClassName)}>{children}</div>
     </ScrollArea>
   )

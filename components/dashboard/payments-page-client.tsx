@@ -26,6 +26,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatCurrency, type CompanyPaymentRow } from '@/lib/billing'
+import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
+import {
+  MOBILE_LIST_STACK_CLASS,
+  MOBILE_PAGE_ROOT_CLASS,
+  MOBILE_SELECT_TRIGGER_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+} from '@/lib/mobile-layout'
 import { REPORTS_PERIOD_LABELS, type ReportsPeriod } from '@/lib/reports'
 import { CreditCard, ExternalLink, Search } from 'lucide-react'
 
@@ -126,7 +133,7 @@ export function PaymentsPageClient({
   }, [fetchPayments, period, initialPeriod, source, debouncedSearch])
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
+    <div className={MOBILE_PAGE_ROOT_CLASS}>
       <PageHeader
         title="Payments"
         description="Every transaction across your company — portal card payments and in-person cash/check"
@@ -136,7 +143,7 @@ export function PaymentsPageClient({
               value={source}
               onValueChange={(value) => setSource((value ?? 'all') as PaymentsFilterSource)}
             >
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className={`w-[200px] ${MOBILE_SELECT_TRIGGER_CLASS}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -152,7 +159,7 @@ export function PaymentsPageClient({
               value={period}
               onValueChange={(value) => setPeriod((value ?? '30d') as ReportsPeriod)}
             >
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className={`w-[180px] ${MOBILE_SELECT_TRIGGER_CLASS}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -210,7 +217,8 @@ export function PaymentsPageClient({
               </div>
 
               {payments.length > 0 ? (
-                <div className="rounded-lg border overflow-hidden">
+                <>
+                <div className={`rounded-lg border overflow-hidden ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -250,6 +258,38 @@ export function PaymentsPageClient({
                     </TableBody>
                   </Table>
                 </div>
+                <div className={MOBILE_LIST_STACK_CLASS}>
+                  {payments.map((payment) => (
+                    <MobileListCard key={payment.id}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold">{payment.clientName}</p>
+                          <p className="text-sm text-muted-foreground truncate">{payment.jobTitle}</p>
+                        </div>
+                        <p className="shrink-0 font-semibold text-green-700">
+                          {formatCurrency(payment.amount)}
+                        </p>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        <MobileListCardRow
+                          label="Date"
+                          value={new Date(payment.paymentDate + 'T00:00:00').toLocaleDateString()}
+                        />
+                        <MobileListCardRow label="Source" value={<PaymentSourceBadge payment={payment} />} />
+                      </div>
+                      <div className="mt-3">
+                        <Link
+                          href={`/dashboard/clients/${payment.clientId}/jobs/${payment.scheduleId}?tab=billing`}
+                          className="inline-flex min-h-11 items-center gap-1 text-sm font-medium hover:underline"
+                        >
+                          View job billing
+                          <ExternalLink className="size-3.5" />
+                        </Link>
+                      </div>
+                    </MobileListCard>
+                  ))}
+                </div>
+                </>
               ) : (
                 <EmptyState
                   icon={CreditCard}

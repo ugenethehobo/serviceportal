@@ -11,6 +11,15 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
+import {
+  MOBILE_LIST_STACK_CLASS,
+  MOBILE_PAGE_ROOT_CLASS,
+  MOBILE_SELECT_TRIGGER_CLASS,
+  MOBILE_TAB_LIST_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+  MOBILE_TOOLBAR_ROW_CLASS,
+} from '@/lib/mobile-layout'
 import {
   addLeadActivityAction,
   archiveLeadAction,
@@ -409,7 +418,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
   }
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
+    <div className={MOBILE_PAGE_ROOT_CLASS}>
       <div className="flex items-center justify-between mb-6 shrink-0 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">Leads</h1>
@@ -425,19 +434,19 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
 
       <MainPageCard className="overflow-hidden p-6 max-md:p-4">
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-6 shrink-0">
-          <div className="flex flex-wrap gap-3 items-center w-full lg:w-auto">
+          <div className={MOBILE_TOOLBAR_ROW_CLASS}>
             <Input
               placeholder="Search leads..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-xs"
+              className="max-w-xs max-md:max-w-none max-md:flex-1"
             />
 
             <Select
               value={statusFilter}
               onValueChange={(value) => setStatusFilter((value ?? 'all') as 'all' | LeadStatus)}
             >
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className={`w-[160px] ${MOBILE_SELECT_TRIGGER_CLASS}`}>
                 <SelectValue placeholder="All stages" />
               </SelectTrigger>
               <SelectContent>
@@ -467,7 +476,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
             value={viewMode}
             onValueChange={(value) => setViewMode(value as 'list' | 'board')}
           >
-            <TabsList>
+            <TabsList className={MOBILE_TAB_LIST_CLASS}>
               <TabsTrigger value="list">
                 <List className="size-4" />
                 List
@@ -496,7 +505,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
           </div>
         ) : viewMode === 'list' ? (
           <MainPageCardScroll>
-            <div className="rounded-lg border overflow-hidden">
+            <div className={`rounded-lg border overflow-hidden ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}>
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -540,10 +549,38 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
                 </TableBody>
               </Table>
             </div>
+            <div className={MOBILE_LIST_STACK_CLASS}>
+              {filteredLeads.map((lead) => (
+                <MobileListCard key={lead.id} onClick={() => openEditSheet(lead)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold">{lead.name}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {[lead.contact_name, lead.email, lead.phone].filter(Boolean).join(' · ') ||
+                          'No contact details'}
+                      </p>
+                    </div>
+                    <Badge variant="outline">{LEAD_STATUS_LABELS[lead.status]}</Badge>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <MobileListCardRow label="Follow-up" value={<FollowUpBadge followUpAt={lead.follow_up_at} />} />
+                    <MobileListCardRow label="Source" value={LEAD_SOURCE_LABELS[lead.source]} />
+                    <MobileListCardRow
+                      label="Value"
+                      value={
+                        lead.estimated_value != null && lead.estimated_value > 0
+                          ? `$${lead.estimated_value.toLocaleString()}`
+                          : '—'
+                      }
+                    />
+                  </div>
+                </MobileListCard>
+              ))}
+            </div>
           </MainPageCardScroll>
         ) : (
           <MainPageCardScroll contentClassName="min-w-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 md:min-w-[960px] pb-2">
+            <div className="grid grid-cols-1 gap-4 pb-2 xl:grid-cols-5 xl:min-w-[960px]">
               {LEAD_PIPELINE_STATUSES.map((status) => (
                 <div
                   key={status}

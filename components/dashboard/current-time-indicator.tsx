@@ -37,7 +37,7 @@ export function CurrentTimeIndicator({ businessHours, timezone }: CurrentTimeInd
       style={{ left: `${position}%` }}
     >
       <div className="absolute -top-1 -left-[5px] w-3 h-3 bg-red-500 rounded-full ring-4 ring-red-500/20" />
-      <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-medium text-red-600 whitespace-nowrap">
+      <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-medium text-red-600 whitespace-nowrap max-md:hidden">
         Now
       </div>
     </div>

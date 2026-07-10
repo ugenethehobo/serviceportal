@@ -19,7 +19,7 @@ import { usePersonalization } from '@/components/personalization-provider'
 import {
   chromeBackgroundClass,
   chromeHeaderBackgroundClass,
-  chromeSheetClass,
+  chromeMobileSheetClass,
 } from '@/lib/personalization'
 import { cn } from '@/lib/utils'
 import { CompanyLogoImage } from '@/components/dashboard/company-logo-image'
@@ -148,7 +148,7 @@ function MobilePortalHeader({
           side="left"
           className={cn(
             'flex h-full max-h-[100dvh] w-[min(85vw,18rem)] flex-col gap-0 p-0',
-            chromeSheetClass(hasAppBackground)
+            chromeMobileSheetClass()
           )}
         >
           <SheetHeader className="border-b p-4 text-left">

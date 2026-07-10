@@ -68,6 +68,7 @@ import { StripeConnectGate } from '@/components/dashboard/stripe-connect-gate'
 import { SearchBar } from '@/components/search-bar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { matchesSearch } from '@/lib/search'
+import { MOBILE_LG_TAB_LIST_CLASS } from '@/lib/mobile-layout'
 import type { Estimate } from '@/lib/estimates'
 
 interface Client {
@@ -585,7 +586,7 @@ export function ClientDetailPageClient({
       className="flex flex-col h-full min-h-0 p-6 max-md:p-4"
     >
     {/* Header */}
-    <div className="flex items-center justify-between mb-6 shrink-0 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-4">
+    <div className="mb-6 flex shrink-0 items-center justify-between max-lg:flex-col max-lg:items-stretch max-lg:gap-4 max-md:mb-4">
       {/* Left side: Breadcrumbs + Client Name */}
       <div>
         <Breadcrumb>
@@ -608,7 +609,7 @@ export function ClientDetailPageClient({
       </div>
 
       {/* Center: Tab Navigation */}
-      <TabsList className="h-auto max-md:w-full max-md:justify-start max-md:overflow-x-auto">
+      <TabsList className={`h-auto ${MOBILE_LG_TAB_LIST_CLASS}`}>
         <TabsTrigger value="jobs" className="px-4 py-1.5 text-sm">
           Jobs
         </TabsTrigger>

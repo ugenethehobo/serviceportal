@@ -408,7 +408,7 @@ export function JobDetailPageClient({
     : 'No address on file'
 
   const jobTabSwitcher = (
-    <TabsList className="h-auto w-auto max-w-full flex-wrap justify-center gap-1 overflow-visible max-lg:justify-start">
+    <TabsList className="h-auto w-auto max-w-full flex-wrap justify-center gap-1 overflow-visible max-lg:w-full max-lg:justify-start max-lg:overflow-x-auto max-lg:flex-nowrap">
       {jobTabs.map((tab) => (
         <TabsTrigger
           key={tab.id}

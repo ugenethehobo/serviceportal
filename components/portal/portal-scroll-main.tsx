@@ -11,9 +11,12 @@ export function PortalScrollMain({
   className?: string
 }) {
   return (
-    <main className={`relative min-h-0 ${className || 'flex-1'}`}>
+    <main className={`relative min-h-0 min-w-0 max-md:overflow-x-hidden ${className || 'flex-1'}`}>
       <NavigationProgress />
-      <ScrollArea className="h-full scroll-fade" viewportClassName="scroll-fade">
+      <ScrollArea
+        className="h-full scroll-fade max-md:min-w-0"
+        viewportClassName="scroll-fade max-md:overflow-x-hidden"
+      >
         {children}
       </ScrollArea>
     </main>

@@ -147,6 +147,11 @@ export function chromeSheetClass(hasAppBackground: boolean) {
   return hasAppBackground ? 'bg-transparent!' : ''
 }
 
+/** Mobile slide-out nav — solid surface that follows light/dark theme (never wallpaper-transparent). */
+export function chromeMobileSheetClass() {
+  return 'border-border bg-background! text-foreground shadow-xl'
+}
+
 /** Inline script snippet to enable transparent shell surfaces before React hydrates. */
 export function buildBackgroundBootstrapSnippet(serverBackgroundUrl: string | null): string {
   if (!serverBackgroundUrl) return ''

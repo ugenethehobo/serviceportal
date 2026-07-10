@@ -249,13 +249,13 @@ export function CrewsPageClient({
         onValueChange={setActiveTab}
         className="flex flex-1 flex-col min-h-0 gap-4"
       >
-        <TabsList>
+        <TabsList className="max-md:w-full max-md:justify-start max-md:overflow-x-auto max-md:flex-nowrap">
           <TabsTrigger value="crews">Crews</TabsTrigger>
           <TabsTrigger value="team">Team Members</TabsTrigger>
         </TabsList>
 
         <TabsContent value="crews" className="flex flex-1 flex-col min-h-0 mt-0 gap-4">
-          <div className="flex items-center justify-between flex-shrink-0">
+          <div className="flex shrink-0 flex-col items-stretch gap-3 max-md:gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
               Organize team members into field crews
               {crewLimit !== null && (

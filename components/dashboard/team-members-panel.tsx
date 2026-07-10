@@ -301,7 +301,7 @@ export function TeamMembersPanel() {
                   return (
                     <div
                       key={member.id}
-                      className="flex items-center justify-between gap-4 rounded-lg border p-4 hover:bg-muted/30 transition-colors"
+                      className="flex flex-col items-stretch gap-4 rounded-lg border p-4 transition-colors hover:bg-muted/30 max-md:gap-3 sm:flex-row sm:items-center"
                     >
                       <div className="flex items-center gap-4 min-w-0">
                         <Avatar className="h-11 w-11 shrink-0">
@@ -334,7 +334,7 @@ export function TeamMembersPanel() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex shrink-0 flex-wrap items-center gap-2 max-md:w-full max-md:[&_button]:min-h-11">
                         <Badge variant="outline">{roleLabel(member.role)}</Badge>
                         <Badge variant={member.status === 'Active' ? 'default' : 'secondary'}>
                           {member.status}

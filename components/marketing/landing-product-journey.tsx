@@ -10,6 +10,8 @@ import {
   LANDING_CHAPTER_PANEL_CLASS,
   LANDING_CHAPTER_SCROLL_STEP_DESKTOP_CLASS,
   LANDING_CHAPTER_SCROLL_STEP_MOBILE_CLASS,
+  LANDING_CHAPTER_SCROLL_TAIL_MOBILE_CLASS,
+  LANDING_PRODUCT_MOBILE_STAGE_FRAME_CLASS,
   LANDING_PRODUCT_IMAGE_COLUMN_CLASS,
   LANDING_PRODUCT_MOBILE_CONTAINER_CLASS,
   LANDING_PRODUCT_MOBILE_IMAGE_ASPECT,
@@ -32,12 +34,16 @@ function ChapterCopy({
   index,
   className,
   fillHeight = false,
+  compact = false,
 }: {
   section: LandingFeatureSection
   index: number
   className?: string
   fillHeight?: boolean
+  compact?: boolean
 }) {
+  const bulletLimit = compact ? 2 : 3
+
   return (
     <Card
       className={cn(
@@ -46,18 +52,33 @@ function ChapterCopy({
         className
       )}
     >
-      <CardContent className="flex flex-1 flex-col overflow-y-auto py-4">
+      <CardContent
+        className={cn(
+          'flex flex-1 flex-col overflow-y-auto',
+          compact ? 'py-3' : 'py-4'
+        )}
+      >
         <p className="font-mono text-xs tracking-[0.2em] text-[#FF4F00] uppercase">
           {String(index + 1).padStart(2, '0')}
         </p>
-        <h3 className="mt-2 text-lg font-bold tracking-tight text-foreground sm:text-xl lg:text-2xl">
+        <h3
+          className={cn(
+            'mt-2 font-bold tracking-tight text-foreground',
+            compact ? 'text-base' : 'text-lg sm:text-xl lg:text-2xl'
+          )}
+        >
           {section.title}
         </h3>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:mt-3">
+        <p
+          className={cn(
+            'mt-2 text-sm leading-relaxed text-muted-foreground',
+            !compact && 'sm:mt-3'
+          )}
+        >
           {section.description}
         </p>
-        <ul className="mt-3 space-y-2 sm:mt-4">
-          {section.bullets.slice(0, 3).map((bullet) => (
+        <ul className={cn('mt-3 space-y-2', !compact && 'sm:mt-4')}>
+          {section.bullets.slice(0, bulletLimit).map((bullet) => (
             <li key={bullet} className="flex items-start gap-2 text-xs text-foreground/80 sm:gap-3 sm:text-sm">
               <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-[#FF4F00] sm:size-4" />
               {bullet}
@@ -74,11 +95,13 @@ function ChapterCopyStack({
   activeIndex,
   className,
   fillHeight = false,
+  compact = false,
 }: {
   sections: LandingFeatureSection[]
   activeIndex: number
   className?: string
   fillHeight?: boolean
+  compact?: boolean
 }) {
   return (
     <div className={cn('relative w-full', fillHeight && 'h-full min-h-0', className)}>
@@ -100,6 +123,7 @@ function ChapterCopyStack({
               section={section}
               index={index}
               fillHeight={fillHeight}
+              compact={compact}
               className={fillHeight ? 'h-full' : undefined}
             />
           </div>
@@ -188,14 +212,21 @@ function MobileTourStage({
   mobileProductItems: Array<{ src: string; alt: string }>
 }) {
   return (
-    <div className="flex w-full flex-col gap-4">
-      <ChapterCopyStack sections={sections} activeIndex={activeIndex} />
+    <div className="flex w-full min-h-0 flex-col gap-3">
       <LandingProductStage
         items={mobileProductItems}
         activeIndex={activeIndex}
         aspectRatio={LANDING_PRODUCT_MOBILE_IMAGE_ASPECT}
         sizes={LANDING_PRODUCT_MOBILE_IMAGE_SIZES}
+        stageFrameClassName={LANDING_PRODUCT_MOBILE_STAGE_FRAME_CLASS}
+        imageClassName="object-top"
         className={LANDING_PRODUCT_MOBILE_STAGE_CLASS}
+      />
+      <ChapterCopyStack
+        sections={sections}
+        activeIndex={activeIndex}
+        compact
+        className="max-h-[30dvh] min-h-0 shrink overflow-y-auto"
       />
     </div>
   )
@@ -272,15 +303,16 @@ export function LandingProductJourney({ sections }: LandingProductJourneyProps) 
         </div>
       </div>
 
-      {/* Mobile: sticky stage — one chapter + mobile screenshot at a time */}
+      {/* Mobile: sticky stage — screenshot first, one chapter per viewport scroll */}
       <div className="px-4 pb-16 sm:px-6 sm:pb-24 lg:hidden">
         <div className={LANDING_PRODUCT_MOBILE_CONTAINER_CLASS}>
           <div className="grid grid-cols-1">
-            <div className="sticky top-20 col-start-1 row-start-1 z-10 flex w-full flex-col items-center gap-4 self-start sm:top-24">
+            <div className="sticky top-20 col-start-1 row-start-1 z-10 flex w-full max-h-[calc(100dvh-5rem)] flex-col items-center gap-3 self-start overflow-hidden sm:top-24">
               <ChapterNav
                 sections={sections}
                 activeIndex={activeIndex}
                 onSelect={scrollToChapter}
+                className="hidden min-[480px]:block"
               />
               <MobileTourStage
                 sections={sections}
@@ -298,6 +330,7 @@ export function LandingProductJourney({ sections }: LandingProductJourneyProps) 
                   className={LANDING_CHAPTER_SCROLL_STEP_MOBILE_CLASS}
                 />
               ))}
+              <div aria-hidden className={LANDING_CHAPTER_SCROLL_TAIL_MOBILE_CLASS} />
             </div>
           </div>
         </div>
