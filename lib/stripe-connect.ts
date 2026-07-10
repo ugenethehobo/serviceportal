@@ -67,11 +67,7 @@ export async function syncCompanyStripeAccount(companyId: string) {
   return getCompanyStripeStatus(companyId)
 }
 
-export async function createStripeConnectLink(
-  companyId: string,
-  origin: string,
-  returnTo: 'settings' | 'onboarding' = 'settings'
-) {
+export async function ensureStripeConnectAccount(companyId: string) {
   const supabaseAdmin = createSupabaseAdmin()
 
   const { data: company } = await supabaseAdmin
@@ -99,6 +95,38 @@ export async function createStripeConnectLink(
       .update({ stripe_account_id: accountId })
       .eq('id', companyId)
   }
+
+  return accountId
+}
+
+export async function createStripeConnectAccountSession(companyId: string) {
+  const accountId = await ensureStripeConnectAccount(companyId)
+
+  const accountSession = await stripe.accountSessions.create({
+    account: accountId,
+    components: {
+      account_onboarding: {
+        enabled: true,
+      },
+    },
+  })
+
+  if (!accountSession.client_secret) {
+    throw new Error('Failed to create Stripe account session')
+  }
+
+  return {
+    clientSecret: accountSession.client_secret,
+    accountId,
+  }
+}
+
+export async function createStripeConnectLink(
+  companyId: string,
+  origin: string,
+  returnTo: 'settings' | 'onboarding' = 'settings'
+) {
+  const accountId = await ensureStripeConnectAccount(companyId)
 
   const returnUrl =
     returnTo === 'onboarding'

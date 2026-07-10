@@ -1,8 +1,8 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { getAccountSettingsAction, getCompanyPhotoStorageAction } from '@/app/action'
+import { useSearchParams } from 'next/navigation'
+import { getCompanyPhotoStorageAction } from '@/app/action'
 import {
   getPlatformFeatureUpgradeMessage,
   type PlanEntitlements,
@@ -21,6 +21,7 @@ import { DocumentTemplateEditor } from '@/components/dashboard/document-template
 import { UserProfileSettings } from '@/components/dashboard/user-profile-settings'
 import { UserSignInSettings } from '@/components/dashboard/user-sign-in-settings'
 import { SaveStatusBadge, type SaveStatus } from '@/components/dashboard/save-status-badge'
+import { SettingsSectionLoadingOverlay } from '@/components/dashboard/settings-section-loading'
 import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
 import { PageHeader } from '@/components/ui/page-header'
 import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
@@ -241,8 +242,17 @@ type SettingsPageInitialData = {
   hasPlatformCustomer: boolean
 }
 
+function resolveSettingsSection(
+  requestedSection: SettingsSectionId | null,
+  visibleSections: SettingsSection[]
+): SettingsSectionId {
+  if (requestedSection && visibleSections.some((section) => section.id === requestedSection)) {
+    return requestedSection
+  }
+  return visibleSections[0]?.id || 'profile'
+}
+
 function SettingsPageContent({ initialData }: { initialData: SettingsPageInitialData }) {
-  const router = useRouter()
   const searchParams = useSearchParams()
 
   const [company, setCompany] = useState<CompanySettings>(initialData.company)
@@ -250,7 +260,6 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
   const [fullName, setFullName] = useState(initialData.fullName)
   const [email, setEmail] = useState(initialData.email)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initialData.avatarUrl)
-  const [isLoading, setIsLoading] = useState(false)
   const [profileSaveStatus, setProfileSaveStatus] = useState<SaveStatus>('idle')
   const [profileSaveMessage, setProfileSaveMessage] = useState('')
   const [subscriptionPlan, setSubscriptionPlan] = useState<PlatformPlanId>(
@@ -287,18 +296,41 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
   const integrationsUpgradeMessage = getPlatformFeatureUpgradeMessage('integrations')
 
   const requestedSection = searchParams.get('section') as SettingsSectionId | null
-  const activeSection =
-    visibleSections.find((section) => section.id === requestedSection)?.id ||
-    visibleSections[0]?.id ||
-    'profile'
+  const initialSection = resolveSettingsSection(requestedSection, visibleSections)
+
+  const [activeSection, setActiveSectionState] =
+    useState<SettingsSectionId>(initialSection)
+  const [visitedSections, setVisitedSections] = useState<Set<SettingsSectionId>>(
+    () => new Set([initialSection])
+  )
+  const [isSectionTransitioning, setIsSectionTransitioning] = useState(false)
+
+  const syncSectionInUrl = useCallback((sectionId: SettingsSectionId) => {
+    const params = new URLSearchParams(window.location.search)
+    params.set('section', sectionId)
+    const nextUrl = `${window.location.pathname}?${params.toString()}`
+    window.history.replaceState(window.history.state, '', nextUrl)
+  }, [])
 
   const setActiveSection = useCallback(
     (sectionId: SettingsSectionId) => {
-      const params = new URLSearchParams(searchParams.toString())
-      params.set('section', sectionId)
-      router.replace(`/dashboard/settings?${params.toString()}`, { scroll: false })
+      if (sectionId === activeSection) return
+
+      const isFirstVisit = !visitedSections.has(sectionId)
+      if (isFirstVisit) {
+        setIsSectionTransitioning(true)
+        window.setTimeout(() => setIsSectionTransitioning(false), 350)
+      }
+
+      setVisitedSections((current) => {
+        const next = new Set(current)
+        next.add(sectionId)
+        return next
+      })
+      setActiveSectionState(sectionId)
+      syncSectionInUrl(sectionId)
     },
-    [router, searchParams]
+    [activeSection, syncSectionInUrl, visitedSections]
   )
 
   const handleProfileSaveStatusChange = useCallback(
@@ -325,10 +357,16 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
 
   useEffect(() => {
     if (requestedSection === 'integrations' && integrationsLocked) {
-      const params = new URLSearchParams(searchParams.toString())
+      const params = new URLSearchParams(window.location.search)
       params.set('section', 'subscription')
       params.set('upgrade', 'integrations')
-      router.replace(`/dashboard/settings?${params.toString()}`, { scroll: false })
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${window.location.pathname}?${params.toString()}`
+      )
+      setActiveSectionState('subscription')
+      setVisitedSections((current) => new Set(current).add('subscription'))
       return
     }
 
@@ -338,22 +376,20 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
     ) {
       setActiveSection(visibleSections[0]?.id || 'profile')
     }
-  }, [
-    integrationsLocked,
-    requestedSection,
-    router,
-    searchParams,
-    setActiveSection,
-    visibleSections,
-  ])
+  }, [integrationsLocked, requestedSection, setActiveSection, visibleSections])
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full min-h-0 flex-col p-6">
-        <PageLoadingSkeleton />
-      </div>
-    )
-  }
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      const section = params.get('section') as SettingsSectionId | null
+      const nextSection = resolveSettingsSection(section, visibleSections)
+      setVisitedSections((current) => new Set(current).add(nextSection))
+      setActiveSectionState(nextSection)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [visibleSections])
 
   const roleLabel =
     role === 'team_member' ? 'Team Member' : role === 'company_admin' ? 'Admin' : role || 'Member'
@@ -400,167 +436,187 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
             </ScrollArea>
           </aside>
 
-          {activeSection === 'invoice-template' && isAdmin ? (
-            <MainPageCardScroll contentClassName="max-w-none p-4 sm:p-6 lg:p-8">
-              <DocumentTemplateEditor />
-            </MainPageCardScroll>
-          ) : (
+          <div
+            className={cn(
+              'min-h-0 flex-1',
+              activeSection !== 'invoice-template' || !isAdmin ? 'hidden' : 'flex flex-col'
+            )}
+          >
+            {visitedSections.has('invoice-template') && isAdmin ? (
+              <MainPageCardScroll contentClassName="max-w-none p-4 sm:p-6 lg:p-8">
+                <DocumentTemplateEditor />
+              </MainPageCardScroll>
+            ) : null}
+          </div>
+
+          <div
+            className={cn(
+              'min-h-0 flex-1',
+              activeSection === 'invoice-template' && isAdmin ? 'hidden' : 'flex flex-col'
+            )}
+          >
             <MainPageCardScroll contentClassName={cn('max-w-4xl p-4 sm:p-6 lg:p-8')}>
-            {activeSection === 'profile' && (
-              <UserProfileSettings
-                fullName={fullName}
-                email={email}
-                avatarUrl={avatarUrl}
-                roleLabel={roleLabel}
-                onFullNameChange={setFullName}
-              />
-            )}
+              <div className="relative min-h-[280px]">
+                {isSectionTransitioning ? <SettingsSectionLoadingOverlay /> : null}
 
-            {activeSection === 'sign-in' && (
-              <UserSignInSettings
-                fullName={fullName}
-                email={email}
-                onSaved={({ fullName: savedName, email: savedEmail }) => {
-                  setFullName(savedName)
-                  setEmail(savedEmail)
-                }}
-              />
-            )}
-
-            {activeSection === 'appearance' && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Appearance</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Choose your theme preference. Company admins can also set a shared background
-                    photo and accent color for the whole team and client portal.
-                  </p>
-                </div>
-                <AppearanceSettings embedded canEditCompanyBranding={isAdmin} />
-              </div>
-            )}
-
-            {activeSection === 'company' && isAdmin && (
-              <div className="space-y-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-semibold tracking-tight">Company</h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Branding, office location, and scheduling defaults. Changes save
-                      automatically.
-                    </p>
+                {visitedSections.has('profile') ? (
+                  <div hidden={activeSection !== 'profile'}>
+                    <UserProfileSettings
+                      fullName={fullName}
+                      email={email}
+                      avatarUrl={avatarUrl}
+                      roleLabel={roleLabel}
+                      onFullNameChange={setFullName}
+                    />
                   </div>
-                  <SaveStatusBadge status={profileSaveStatus} message={profileSaveMessage} />
-                </div>
-                <CompanyProfileSettings
-                  company={company}
-                  onSaveStatusChange={handleProfileSaveStatusChange}
-                />
-              </div>
-            )}
+                ) : null}
 
-            {activeSection === 'billing' && isAdmin && (
-              <div className="space-y-6 max-w-3xl">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Client payments</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Connect Stripe to enable invoicing and client payments.
-                  </p>
-                </div>
-                <Suspense
-                  fallback={
-                    <p className="text-sm text-muted-foreground">Loading billing settings...</p>
-                  }
-                >
-                  <StripeConnectSettings embedded />
-                </Suspense>
-              </div>
-            )}
+                {visitedSections.has('sign-in') ? (
+                  <div hidden={activeSection !== 'sign-in'}>
+                    <UserSignInSettings
+                      fullName={fullName}
+                      email={email}
+                      onSaved={({ fullName: savedName, email: savedEmail }) => {
+                        setFullName(savedName)
+                        setEmail(savedEmail)
+                      }}
+                    />
+                  </div>
+                ) : null}
 
-            {activeSection === 'subscription' && isAdmin && (
-              <div className="space-y-6 max-w-3xl">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Platform subscription</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Manage your Service Portal plan and platform billing.
-                  </p>
-                </div>
-                <PlatformSubscriptionSettings
-                  plan={subscriptionPlan}
-                  status={subscriptionStatus}
-                  hasCustomer={hasPlatformCustomer}
-                />
-              </div>
-            )}
+                {visitedSections.has('appearance') ? (
+                  <div hidden={activeSection !== 'appearance'} className="space-y-6 max-w-2xl">
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight">Appearance</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Choose your theme preference. Company admins can also set a shared
+                        background photo and accent color for the whole team and client portal.
+                      </p>
+                    </div>
+                    <AppearanceSettings embedded canEditCompanyBranding={isAdmin} />
+                  </div>
+                ) : null}
 
-            {activeSection === 'job-photos' && isAdmin && (
-              <div className="space-y-6 max-w-3xl">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Job photo categories</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Custom categories and order for job site photo uploads.
-                  </p>
-                </div>
-                {photoStorage && (
-                  <PhotoStorageMeter
-                    usedLabel={photoStorage.usedLabel}
-                    limitLabel={photoStorage.limitLabel}
-                    usedBytes={photoStorage.usedBytes}
-                    limitBytes={photoStorage.limitBytes}
-                  />
-                )}
-                <JobPhotoCategoriesSettings embedded />
-              </div>
-            )}
+                {visitedSections.has('company') && isAdmin ? (
+                  <div hidden={activeSection !== 'company'} className="space-y-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h2 className="text-xl font-semibold tracking-tight">Company</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Branding, office location, and scheduling defaults. Changes save
+                          automatically.
+                        </p>
+                      </div>
+                      <SaveStatusBadge status={profileSaveStatus} message={profileSaveMessage} />
+                    </div>
+                    <CompanyProfileSettings
+                      company={company}
+                      onSaveStatusChange={handleProfileSaveStatusChange}
+                    />
+                  </div>
+                ) : null}
 
-            {activeSection === 'service-packages' && isAdmin && (
-              <div className="space-y-6 max-w-3xl">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Service packages</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Define the services you offer once, then reuse them across booking and job
-                    creation.
-                  </p>
-                </div>
-                <ServicePackagesSettings embedded />
-              </div>
-            )}
+                {visitedSections.has('billing') && isAdmin ? (
+                  <div hidden={activeSection !== 'billing'} className="space-y-6 max-w-3xl">
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight">Client payments</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Connect Stripe to enable invoicing and client payments.
+                      </p>
+                    </div>
+                    <Suspense fallback={<PageLoadingSkeleton />}>
+                      <StripeConnectSettings embedded />
+                    </Suspense>
+                  </div>
+                ) : null}
 
-            {activeSection === 'client-booking' && isAdmin && (
-              <div className="space-y-6 max-w-3xl">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Client booking</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Let clients book online or submit a request through your public link.
-                  </p>
-                </div>
-                <ClientBookingSettings embedded />
-              </div>
-            )}
+                {visitedSections.has('subscription') && isAdmin ? (
+                  <div hidden={activeSection !== 'subscription'} className="space-y-6 max-w-3xl">
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight">
+                        Platform subscription
+                      </h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Manage your Service Portal plan and platform billing.
+                      </p>
+                    </div>
+                    <PlatformSubscriptionSettings
+                      plan={subscriptionPlan}
+                      status={subscriptionStatus}
+                      hasCustomer={hasPlatformCustomer}
+                    />
+                  </div>
+                ) : null}
 
-            {activeSection === 'notifications' && isAdmin && (
-              <div className="space-y-6 max-w-3xl">
-                <NotificationSettings embedded />
-              </div>
-            )}
+                {visitedSections.has('job-photos') && isAdmin ? (
+                  <div hidden={activeSection !== 'job-photos'} className="space-y-6 max-w-3xl">
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight">Job photo categories</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Custom categories and order for job site photo uploads.
+                      </p>
+                    </div>
+                    {photoStorage && (
+                      <PhotoStorageMeter
+                        usedLabel={photoStorage.usedLabel}
+                        limitLabel={photoStorage.limitLabel}
+                        usedBytes={photoStorage.usedBytes}
+                        limitBytes={photoStorage.limitBytes}
+                      />
+                    )}
+                    <JobPhotoCategoriesSettings embedded />
+                  </div>
+                ) : null}
 
-            {activeSection === 'integrations' && isAdmin && (
-              <div className="space-y-6 max-w-3xl">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Integrations</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Connect accounting, calendar, and automation tools.
-                  </p>
-                </div>
-                <IntegrationsSettings />
-              </div>
-            )}
+                {visitedSections.has('service-packages') && isAdmin ? (
+                  <div hidden={activeSection !== 'service-packages'} className="space-y-6 max-w-3xl">
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight">Service packages</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Define the services you offer once, then reuse them across booking and job
+                        creation.
+                      </p>
+                    </div>
+                    <ServicePackagesSettings embedded />
+                  </div>
+                ) : null}
 
-            {activeMeta && (
-              <p className="sr-only">Viewing {activeMeta.label} settings</p>
-            )}
+                {visitedSections.has('client-booking') && isAdmin ? (
+                  <div hidden={activeSection !== 'client-booking'} className="space-y-6 max-w-3xl">
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight">Client booking</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Let clients book online or submit a request through your public link.
+                      </p>
+                    </div>
+                    <ClientBookingSettings embedded />
+                  </div>
+                ) : null}
+
+                {visitedSections.has('notifications') && isAdmin ? (
+                  <div hidden={activeSection !== 'notifications'} className="space-y-6 max-w-3xl">
+                    <NotificationSettings embedded />
+                  </div>
+                ) : null}
+
+                {visitedSections.has('integrations') && isAdmin ? (
+                  <div hidden={activeSection !== 'integrations'} className="space-y-6 max-w-3xl">
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight">Integrations</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Connect accounting, calendar, and automation tools.
+                      </p>
+                    </div>
+                    <IntegrationsSettings />
+                  </div>
+                ) : null}
+
+                {activeMeta ? (
+                  <p className="sr-only">Viewing {activeMeta.label} settings</p>
+                ) : null}
+              </div>
             </MainPageCardScroll>
-          )}
+          </div>
         </div>
       </MainPageCard>
     </div>

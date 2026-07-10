@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { StripeConnectEmbeddedOnboarding } from '@/components/dashboard/stripe-connect-embedded-onboarding'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CreditCard, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react'
+import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
+import { CreditCard, CheckCircle2, AlertCircle } from 'lucide-react'
 import type { CompanyStripeStatus } from '@/lib/stripe-connect'
 
 interface StripeConnectSettingsProps {
@@ -17,7 +19,7 @@ export function StripeConnectSettings({ embedded = false }: StripeConnectSetting
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<CompanyStripeStatus | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isConnecting, setIsConnecting] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const [message, setMessage] = useState('')
 
   const fetchStatus = useCallback(async () => {
@@ -40,26 +42,19 @@ export function StripeConnectSettings({ embedded = false }: StripeConnectSetting
     return false
   }, [])
 
-  const startConnect = useCallback(async () => {
-    setIsConnecting(true)
-    setMessage('')
-    try {
-      const res = await fetch('/api/stripe/connect', { method: 'POST' })
-      const data = await res.json()
-      if (res.ok && data.url) {
-        window.location.href = data.url
-        return
+  const handleOnboardingExit = useCallback(async () => {
+    setShowOnboarding(false)
+    const synced = await syncStatus()
+    if (synced) {
+      const updated = await fetch('/api/stripe/connect/status').then((r) => r.json())
+      if (updated.billingEnabled) {
+        setMessage('Stripe connected successfully! Billing is now enabled.')
       }
-      setMessage(data.error || 'Failed to start Stripe Connect')
-    } catch {
-      setMessage('Failed to start Stripe Connect')
-    } finally {
-      setIsConnecting(false)
     }
-  }, [])
+  }, [syncStatus])
 
   useEffect(() => {
-    fetchStatus()
+    void fetchStatus()
   }, [fetchStatus])
 
   useEffect(() => {
@@ -67,32 +62,37 @@ export function StripeConnectSettings({ embedded = false }: StripeConnectSetting
     if (!stripeParam) return
 
     const handleReturn = async () => {
-      if (stripeParam === 'return') {
+      if (stripeParam === 'return' || stripeParam === 'refresh') {
         const synced = await syncStatus()
         if (synced) {
           const updated = await fetch('/api/stripe/connect/status').then((r) => r.json())
           if (updated.billingEnabled) {
             setMessage('Stripe connected successfully! Billing is now enabled.')
-          } else {
-            setMessage('Stripe account saved. Complete any remaining steps to enable billing.')
+          } else if (stripeParam === 'refresh') {
+            setShowOnboarding(true)
           }
         }
-      } else if (stripeParam === 'refresh') {
-        await startConnect()
-        return
       }
 
-      router.replace('/dashboard/settings')
+      router.replace('/dashboard/settings?section=billing')
     }
 
-    handleReturn()
-  }, [searchParams, syncStatus, startConnect, router])
+    void handleReturn()
+  }, [searchParams, syncStatus, router])
 
   if (isLoading) {
-    const loading = (
-      <p className="text-sm text-muted-foreground">Loading billing settings...</p>
-    )
+    const loading = <PageLoadingSkeleton />
     return embedded ? loading : <Card className="p-6">{loading}</Card>
+  }
+
+  if (showOnboarding) {
+    const onboarding = (
+      <StripeConnectEmbeddedOnboarding
+        onExit={() => void handleOnboardingExit()}
+        onComplete={() => void handleOnboardingExit()}
+      />
+    )
+    return embedded ? onboarding : <div className="space-y-4">{onboarding}</div>
   }
 
   const isConnected = status?.billingEnabled
@@ -107,23 +107,23 @@ export function StripeConnectSettings({ embedded = false }: StripeConnectSetting
         <div>
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             {!embedded && <h2 className="text-lg font-semibold">Billing & Payments</h2>}
-              {isConnected && (
-                <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50">
-                  <CheckCircle2 className="size-3 mr-1" />
-                  Connected
-                </Badge>
-              )}
-              {isPending && (
-                <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
-                  <AlertCircle className="size-3 mr-1" />
-                  Setup incomplete
-                </Badge>
-              )}
-              {!status?.stripeAccountId && (
-                <Badge variant="outline" className="text-muted-foreground">
-                  Not connected
-                </Badge>
-              )}
+            {isConnected && (
+              <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50">
+                <CheckCircle2 className="size-3 mr-1" />
+                Connected
+              </Badge>
+            )}
+            {isPending && (
+              <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">
+                <AlertCircle className="size-3 mr-1" />
+                Setup incomplete
+              </Badge>
+            )}
+            {!status?.stripeAccountId && (
+              <Badge variant="outline" className="text-muted-foreground">
+                Not connected
+              </Badge>
+            )}
           </div>
           {!embedded && (
             <p className="text-sm text-muted-foreground">
@@ -133,58 +133,55 @@ export function StripeConnectSettings({ embedded = false }: StripeConnectSetting
           )}
         </div>
 
-          {isConnected && (
-            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-              <p className="font-medium">Billing is active</p>
-              <p className="text-green-700 mt-0.5">
-                You can create line items, record cash payments, and accept client payments via
-                the client portal.
-              </p>
-            </div>
-          )}
-
-          {isPending && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <p className="font-medium">Finish setting up your Stripe account</p>
-              <p className="text-amber-700 mt-0.5">
-                Your account is linked but Stripe still needs a few details before you can accept
-                payments. Billing stays disabled until setup is complete.
-              </p>
-            </div>
-          )}
-
-          {!status?.stripeAccountId && (
-            <div className="rounded-lg border px-4 py-3 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">Billing is disabled</p>
-              <p className="mt-0.5">
-                Connect Stripe to unlock invoicing, line items, and payment tracking on jobs.
-              </p>
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-3">
-            {!isConnected && (
-              <Button onClick={startConnect} disabled={isConnecting}>
-                <ExternalLink className="size-4 mr-2" />
-                {isConnecting
-                  ? 'Redirecting to Stripe...'
-                  : isPending
-                    ? 'Complete Stripe Setup'
-                    : 'Connect with Stripe'}
-              </Button>
-            )}
-            {status?.stripeAccountId && (
-              <Button variant="outline" onClick={syncStatus} disabled={isConnecting}>
-                Refresh status
-              </Button>
-            )}
-          </div>
-
-          {message && (
-            <p className={`text-sm ${message.includes('success') || message.includes('active') ? 'text-green-600' : 'text-muted-foreground'}`}>
-              {message}
+        {isConnected && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            <p className="font-medium">Billing is active</p>
+            <p className="text-green-700 mt-0.5">
+              You can create line items, record cash payments, and accept client payments via the
+              client portal.
             </p>
+          </div>
+        )}
+
+        {isPending && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <p className="font-medium">Finish setting up your Stripe account</p>
+            <p className="text-amber-700 mt-0.5">
+              Your account is linked but Stripe still needs a few details before you can accept
+              payments.
+            </p>
+          </div>
+        )}
+
+        {!status?.stripeAccountId && (
+          <div className="rounded-lg border px-4 py-3 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">Billing is disabled</p>
+            <p className="mt-0.5">
+              Connect Stripe to unlock invoicing, line items, and payment tracking on jobs.
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-3">
+          {!isConnected && (
+            <Button type="button" onClick={() => setShowOnboarding(true)}>
+              {isPending ? 'Complete Stripe Setup' : 'Connect with Stripe'}
+            </Button>
           )}
+          {status?.stripeAccountId && (
+            <Button type="button" variant="outline" onClick={() => void syncStatus()}>
+              Refresh status
+            </Button>
+          )}
+        </div>
+
+        {message && (
+          <p
+            className={`text-sm ${message.includes('success') || message.includes('active') ? 'text-green-600' : 'text-muted-foreground'}`}
+          >
+            {message}
+          </p>
+        )}
       </div>
     </div>
   )

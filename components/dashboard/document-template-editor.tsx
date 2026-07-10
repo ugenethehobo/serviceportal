@@ -53,7 +53,7 @@ export function DocumentTemplateEditor() {
   const [isToolbarBusy, setIsToolbarBusy] = useState(false)
   const previewUrlRef = useRef<string | null>(null)
   const hasLoadedRef = useRef(false)
-  const hasSyncedRef = useRef(false)
+
 
   const activeTemplate = templates?.[activeKind] ?? null
 
@@ -123,15 +123,6 @@ export function DocumentTemplateEditor() {
       }
     }
   }, [])
-
-  useEffect(() => {
-    if (!templates || !hasLoadedRef.current || hasSyncedRef.current) return
-    hasSyncedRef.current = true
-    void (async () => {
-      await updateDocumentTemplateAction('invoice', templates.invoice)
-      await updateDocumentTemplateAction('estimate', templates.estimate)
-    })()
-  }, [templates])
 
   useEffect(() => {
     if (!activeTemplate || !hasLoadedRef.current) return

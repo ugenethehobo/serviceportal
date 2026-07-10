@@ -66,7 +66,7 @@ export const LANDING_HERO = {
   eyebrow: 'Now in Beta',
   headline: ['Your service business.', 'One management system.'],
   subheadline:
-    'Run your entire small business with one solution, built for effective client interation that makes you money.',
+    'Run your entire small business with one solution, built for effective client interaction that makes you money.',
 }
 
 export const LANDING_MARQUEE_ITEMS = [

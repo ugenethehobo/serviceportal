@@ -2,16 +2,18 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react'
 import type { OnboardingStepHandle } from '@/components/dashboard/onboarding/onboarding-profile-step'
+import { StripeConnectEmbeddedOnboarding } from '@/components/dashboard/stripe-connect-embedded-onboarding'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
 import type { CompanyStripeStatus } from '@/lib/stripe-connect'
-import { AlertCircle, CheckCircle2, CreditCard, ExternalLink } from 'lucide-react'
+import { AlertCircle, CheckCircle2, CreditCard } from 'lucide-react'
 
 export const OnboardingPaymentsStep = forwardRef<OnboardingStepHandle, object>(
   function OnboardingPaymentsStep(_props, ref) {
     const [status, setStatus] = useState<CompanyStripeStatus | null>(null)
     const [isLoading, setIsLoading] = useState(true)
-    const [isConnecting, setIsConnecting] = useState(false)
+    const [showOnboarding, setShowOnboarding] = useState(false)
     const [message, setMessage] = useState('')
 
     const fetchStatus = useCallback(async () => {
@@ -34,27 +36,10 @@ export const OnboardingPaymentsStep = forwardRef<OnboardingStepHandle, object>(
       return false
     }, [])
 
-    const startConnect = useCallback(async () => {
-      setIsConnecting(true)
-      setMessage('')
-      try {
-        const res = await fetch('/api/stripe/connect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ returnTo: 'onboarding' }),
-        })
-        const data = await res.json()
-        if (res.ok && data.url) {
-          window.location.href = data.url
-          return
-        }
-        setMessage(data.error || 'Failed to start Stripe Connect')
-      } catch {
-        setMessage('Failed to start Stripe Connect')
-      } finally {
-        setIsConnecting(false)
-      }
-    }, [])
+    const handleOnboardingExit = useCallback(async () => {
+      setShowOnboarding(false)
+      await syncStatus()
+    }, [syncStatus])
 
     useEffect(() => {
       void fetchStatus()
@@ -65,7 +50,16 @@ export const OnboardingPaymentsStep = forwardRef<OnboardingStepHandle, object>(
     }))
 
     if (isLoading) {
-      return <p className="text-sm text-muted-foreground">Loading payment settings…</p>
+      return <PageLoadingSkeleton />
+    }
+
+    if (showOnboarding) {
+      return (
+        <StripeConnectEmbeddedOnboarding
+          onExit={() => void handleOnboardingExit()}
+          onComplete={() => void handleOnboardingExit()}
+        />
+      )
     }
 
     const isConnected = status?.billingEnabled
@@ -123,22 +117,12 @@ export const OnboardingPaymentsStep = forwardRef<OnboardingStepHandle, object>(
 
             <div className="flex flex-wrap gap-3">
               {!isConnected ? (
-                <Button type="button" onClick={() => void startConnect()} disabled={isConnecting}>
-                  <ExternalLink className="size-4 mr-2" />
-                  {isConnecting
-                    ? 'Redirecting to Stripe…'
-                    : isPending
-                      ? 'Complete Stripe setup'
-                      : 'Connect with Stripe'}
+                <Button type="button" onClick={() => setShowOnboarding(true)}>
+                  {isPending ? 'Complete Stripe setup' : 'Connect with Stripe'}
                 </Button>
               ) : null}
               {status?.stripeAccountId ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void syncStatus()}
-                  disabled={isConnecting}
-                >
+                <Button type="button" variant="outline" onClick={() => void syncStatus()}>
                   Refresh status
                 </Button>
               ) : null}
