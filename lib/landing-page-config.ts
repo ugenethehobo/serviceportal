@@ -63,7 +63,8 @@ export const LANDING_SLIDESHOW_SLIDES: LandingSlide[] = [
 ]
 
 export const LANDING_HERO = {
-  eyebrow: 'Now in Beta',
+  eyebrowBeta: 'Now in Beta',
+  eyebrowRelease: 'Built for field service teams',
   headline: ['Your service business.', 'One management system.'],
   subheadline:
     'Run your entire small business with one solution, built for effective client interaction that makes you money.',
