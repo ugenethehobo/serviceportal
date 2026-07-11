@@ -4385,11 +4385,11 @@ export const getDashboardShellDataAction = cache(async () => {
       companyId &&
       (profile.role === 'company_admin' || profile.role === 'team_member')
 
-    const [companyResult, access, soloContext] = await Promise.all([
+    const [companyResult, access, soloContext, platformSettings] = await Promise.all([
       companyId
         ? supabaseAdmin
             .from('companies')
-            .select('id, name, logo_url')
+            .select('id, name, logo_url, promo_code, stripe_platform_subscription_id')
             .eq('id', companyId)
             .single()
         : Promise.resolve({ data: null }),
@@ -4401,9 +4401,20 @@ export const getDashboardShellDataAction = cache(async () => {
             m.getCompanySoloContext(companyId)
           )
         : Promise.resolve(null),
+      import('@/lib/platform-settings-server').then((m) => m.getPlatformSettings()),
     ])
 
     const company = companyResult.data
+
+    let betaSunsetWarning = null
+    if (isStaffWithCompany && company) {
+      const { buildBetaSunsetWarning } = await import('@/lib/platform-release-schedule')
+      betaSunsetWarning = buildBetaSunsetWarning(
+        platformSettings.releaseMode,
+        platformSettings.scheduledReleaseAt,
+        company
+      )
+    }
 
     return {
       success: true as const,
@@ -4411,6 +4422,7 @@ export const getDashboardShellDataAction = cache(async () => {
         profile,
         company,
         subscriptionAccess: access,
+        betaSunsetWarning,
         isSoloBusiness: soloContext?.isSoloBusiness ?? false,
         soloCrewId: soloContext?.soloCrewId ?? null,
         role: profile.role,
@@ -7742,5 +7754,124 @@ export async function updateBetaFeedbackStatusAction(
   } catch (error: any) {
     console.error('updateBetaFeedbackStatusAction error:', error)
     return { success: false as const, error: error.message || 'Failed to update feedback' }
+  }
+}
+
+export async function getPlatformReleaseModeAction(): Promise<
+  | { success: true; mode: import('@/lib/platform-settings').PlatformReleaseMode }
+  | { success: false; error: string }
+> {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false, error: adminCheck.error }
+  }
+
+  try {
+    const { getPlatformReleaseMode } = await import('@/lib/platform-settings-server')
+    const mode = await getPlatformReleaseMode()
+    return { success: true, mode }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to load release mode'
+    return { success: false, error: message }
+  }
+}
+
+export async function updatePlatformReleaseModeAction(
+  mode: import('@/lib/platform-settings').PlatformReleaseMode
+): Promise<{ success: true } | { success: false; error: string }> {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false, error: adminCheck.error }
+  }
+
+  try {
+    const { setPlatformReleaseMode } = await import('@/lib/platform-settings-server')
+    const result = await setPlatformReleaseMode(mode)
+    if (!result.ok) {
+      return { success: false, error: result.error }
+    }
+    return { success: true }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to update release mode'
+    return { success: false, error: message }
+  }
+}
+
+export async function getPlatformReleaseSettingsAction(): Promise<
+  | {
+      success: true
+      releaseMode: import('@/lib/platform-settings').PlatformReleaseMode
+      scheduledReleaseAt: string | null
+    }
+  | { success: false; error: string }
+> {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false, error: adminCheck.error }
+  }
+
+  try {
+    const { getPlatformSettings } = await import('@/lib/platform-settings-server')
+    const settings = await getPlatformSettings()
+    return {
+      success: true,
+      releaseMode: settings.releaseMode,
+      scheduledReleaseAt: settings.scheduledReleaseAt,
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to load release settings'
+    return { success: false, error: message }
+  }
+}
+
+export async function updatePlatformReleaseScheduleAction(
+  scheduledReleaseAt: string | null
+): Promise<{ success: true } | { success: false; error: string }> {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false, error: adminCheck.error }
+  }
+
+  if (scheduledReleaseAt) {
+    const parsed = new Date(scheduledReleaseAt)
+    if (Number.isNaN(parsed.getTime())) {
+      return { success: false, error: 'Invalid launch date' }
+    }
+    if (parsed.getTime() <= Date.now()) {
+      return { success: false, error: 'Launch date must be in the future' }
+    }
+  }
+
+  try {
+    const { setPlatformReleaseSchedule } = await import('@/lib/platform-settings-server')
+    const result = await setPlatformReleaseSchedule(scheduledReleaseAt)
+    if (!result.ok) {
+      return { success: false, error: result.error }
+    }
+    return { success: true }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to update release schedule'
+    return { success: false, error: message }
+  }
+}
+
+export async function submitBetaAccessRequestAction(input: {
+  fullName: string
+  email: string
+  companyName: string
+  phone?: string
+  teamSize?: string
+  message?: string
+}): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const { createBetaAccessRequest } = await import('@/lib/beta-access-request-server')
+    const result = await createBetaAccessRequest(input)
+    if (!result.success) {
+      return { success: false, error: result.error }
+    }
+    return { success: true }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to submit request'
+    return { success: false, error: message }
   }
 }

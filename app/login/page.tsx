@@ -1,25 +1,35 @@
 import { Suspense } from 'react'
-import { LoginForm } from '@/app/login/login-form'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AuthSplitLayout } from '@/components/auth/auth-split-layout'
+import { LoginForm } from '@/components/login-form'
+import { Skeleton } from '@/components/ui/skeleton'
+import { isBetaReleaseMode } from '@/lib/platform-settings'
+import { getPlatformReleaseMode } from '@/lib/platform-settings-server'
+
+export const dynamic = 'force-dynamic'
 
 function LoginFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Sign in to ServicePortal</CardTitle>
-          <CardDescription>Loading…</CardDescription>
-        </CardHeader>
-        <CardContent />
-      </Card>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col items-center gap-2 text-center">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-4 w-64" />
+      </div>
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-10 w-full" />
     </div>
   )
 }
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const releaseMode = await getPlatformReleaseMode()
+  const isBeta = isBetaReleaseMode(releaseMode)
+
   return (
-    <Suspense fallback={<LoginFallback />}>
-      <LoginForm />
-    </Suspense>
+    <AuthSplitLayout>
+      <Suspense fallback={<LoginFallback />}>
+        <LoginForm isBeta={isBeta} />
+      </Suspense>
+    </AuthSplitLayout>
   )
 }

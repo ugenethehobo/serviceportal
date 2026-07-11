@@ -1,9 +1,13 @@
 import { Suspense } from 'react'
 import { SignupPageClient } from '@/components/marketing/signup-page-client'
 import { getPlatformPlanPricing } from '@/lib/platform-pricing-server'
+import { getPlatformReleaseMode } from '@/lib/platform-settings-server'
 
 export default async function SignupPage() {
-  const plans = await getPlatformPlanPricing()
+  const [plans, releaseMode] = await Promise.all([
+    getPlatformPlanPricing(),
+    getPlatformReleaseMode(),
+  ])
 
   return (
     <Suspense
@@ -13,7 +17,7 @@ export default async function SignupPage() {
         </div>
       }
     >
-      <SignupPageClient plans={plans} />
+      <SignupPageClient plans={plans} releaseMode={releaseMode} />
     </Suspense>
   )
 }

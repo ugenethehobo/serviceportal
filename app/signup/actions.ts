@@ -4,6 +4,7 @@ import { completePlatformSignup } from '@/lib/platform-signup-server'
 import type { PlatformPlanId } from '@/lib/platform-billing'
 import { getPlatformPlanPricing } from '@/lib/platform-pricing-server'
 import type { PlatformPlanPricing } from '@/lib/platform-pricing'
+import { validatePlatformBetaAccessCode } from '@/lib/platform-beta-access'
 import { validatePlatformDevPromoCode } from '@/lib/platform-promo'
 
 export async function getPlatformPricingAction(): Promise<
@@ -40,6 +41,20 @@ export async function validatePlatformPromoAction(
   }
 }
 
+export async function validatePlatformBetaAccessAction(
+  code: string
+): Promise<{ success: true; message: string } | { success: false; error: string }> {
+  const betaAccess = validatePlatformBetaAccessCode(code)
+  if (!betaAccess) {
+    return { success: false, error: 'Invalid beta access code' }
+  }
+
+  return {
+    success: true,
+    message: 'Beta access verified — Pro tier unlocked.',
+  }
+}
+
 export async function completePlatformSignupAction(input: {
   plan: PlatformPlanId
   companyName: string
@@ -48,6 +63,7 @@ export async function completePlatformSignupAction(input: {
   password: string
   checkoutSessionId?: string
   promoCode?: string
+  betaAccessCode?: string
 }): Promise<
   | { success: true; email: string }
   | { success: false; error: string }

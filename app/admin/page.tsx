@@ -48,6 +48,7 @@ import {
   getDashboardData,
 } from '@/app/action'
 import { BetaFeedbackPanel } from '@/components/admin/beta-feedback-panel'
+import { PlatformReleaseModePanel } from '@/components/admin/platform-release-mode-panel'
 import { ImageAttachmentField } from '@/components/admin/image-attachment-field'
 import {
   PLATFORM_PLANS,
@@ -406,6 +407,8 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+
+      <PlatformReleaseModePanel initialMode="beta" />
 
       <Tabs
         value={adminTab}

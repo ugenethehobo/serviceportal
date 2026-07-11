@@ -7,6 +7,7 @@ import { SidebarNavLink } from '@/components/navigation/sidebar-nav-link'
 import { LogOut, Menu } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useDashboardShell } from '@/components/dashboard/dashboard-shell-context'
+import { SidebarBetaSunsetNotice } from '@/components/dashboard/sidebar-beta-sunset-notice'
 import { SidebarSubscriptionIndicator } from '@/components/dashboard/sidebar-subscription-indicator'
 import type { CompanySubscriptionAccess } from '@/lib/platform-trial'
 
@@ -78,6 +79,12 @@ function useDashboardNav() {
       shellData.profile.role === 'team_member')
       ? shellData.subscriptionAccess
       : null
+  const betaSunsetWarning =
+    shellData &&
+    (shellData.profile.role === 'company_admin' ||
+      shellData.profile.role === 'team_member')
+      ? shellData.betaSunsetWarning
+      : null
   const isSoloBusiness = shellData?.isSoloBusiness ?? false
 
   useEffect(() => {
@@ -126,6 +133,7 @@ function useDashboardNav() {
     companyLogoRef,
     visibleNavItems,
     subscriptionAccess,
+    betaSunsetWarning,
     isLoggingOut,
     handleLogout,
   }
@@ -218,6 +226,7 @@ function MobileDashboardHeader({
   companyLogoRef,
   visibleNavItems,
   subscriptionAccess,
+  betaSunsetWarning,
   userProfile,
   isLoggingOut,
   handleLogout,
@@ -294,6 +303,7 @@ function MobileDashboardHeader({
               pathname={pathname}
               onNavigate={() => setMenuOpen(false)}
             />
+            <SidebarBetaSunsetNotice warning={betaSunsetWarning} expanded />
           </div>
 
           <div className="mt-auto border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
@@ -334,6 +344,7 @@ function DesktopSidebar({
   companyLogoRef,
   visibleNavItems,
   subscriptionAccess,
+  betaSunsetWarning,
   userProfile,
   isLoggingOut,
   handleLogout,
@@ -412,6 +423,7 @@ function DesktopSidebar({
           pathname={pathname}
           expanded={isExpanded}
         />
+        <SidebarBetaSunsetNotice warning={betaSunsetWarning} expanded={isExpanded} />
       </div>
 
       <div className="mt-auto p-2">

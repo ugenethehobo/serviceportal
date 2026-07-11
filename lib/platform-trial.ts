@@ -6,6 +6,10 @@ import {
   type PlatformPlanId,
   type PlatformSubscriptionStatus,
 } from '@/lib/platform-billing'
+import {
+  hasPaidPlatformSubscription,
+  isPastScheduledRelease,
+} from '@/lib/platform-release-schedule'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
@@ -14,7 +18,12 @@ export type CompanySubscriptionRecord = {
   subscription_status?: string | null
   trial_ends_at?: string | null
   promo_code?: string | null
+  stripe_platform_subscription_id?: string | null
   created_at?: string | null
+}
+
+export type CompanySubscriptionAccessContext = {
+  scheduledReleaseAt?: string | null
 }
 
 export type CompanySubscriptionAccess = {
@@ -51,13 +60,29 @@ export function formatTrialCountdown(daysRemaining: number): string {
 
 export function evaluateCompanySubscriptionAccess(
   company: CompanySubscriptionRecord,
-  now = new Date()
+  now = new Date(),
+  context: CompanySubscriptionAccessContext = {}
 ): CompanySubscriptionAccess {
   const plan = normalizePlatformPlan(company.subscription_plan)
   const status = normalizeSubscriptionStatus(company.subscription_status)
   const hasPromo = Boolean(company.promo_code?.trim())
+  const pastScheduledRelease = isPastScheduledRelease(context.scheduledReleaseAt, now)
+  const hasPaidSub = hasPaidPlatformSubscription(company)
 
   if (hasPromo) {
+    if (pastScheduledRelease && !hasPaidSub) {
+      return {
+        plan,
+        status: 'trial_expired',
+        hasAccess: false,
+        isOnTrial: false,
+        isTrialExpired: true,
+        trialEndsAt: null,
+        daysRemaining: 0,
+        trialLabel: 'Activate a subscription to restore access',
+      }
+    }
+
     return {
       plan,
       status,

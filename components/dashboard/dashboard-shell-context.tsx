@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { getDashboardShellDataAction } from '@/app/action'
+import type { BetaSunsetWarning } from '@/lib/platform-release-schedule'
 import type { CompanySubscriptionAccess } from '@/lib/platform-trial'
 
 export type DashboardShellProfile = {
@@ -30,6 +31,7 @@ export type DashboardShellData = {
   profile: DashboardShellProfile
   company: DashboardShellCompany | null
   subscriptionAccess: CompanySubscriptionAccess | null
+  betaSunsetWarning: BetaSunsetWarning | null
   isSoloBusiness: boolean
   soloCrewId: string | null
   role: string

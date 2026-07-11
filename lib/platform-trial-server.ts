@@ -22,7 +22,7 @@ export async function loadCompanySubscriptionRecord(
   const { data, error } = await supabaseAdmin
     .from('companies')
     .select(
-      'subscription_plan, subscription_status, trial_ends_at, promo_code, created_at'
+      'subscription_plan, subscription_status, trial_ends_at, promo_code, stripe_platform_subscription_id, created_at'
     )
     .eq('id', companyId)
     .maybeSingle()
@@ -79,11 +79,15 @@ export async function getCompanySubscriptionAccessForCompany(
   now = new Date()
 ): Promise<CompanySubscriptionAccess | null> {
   const supabaseAdmin = createSupabaseAdmin()
-  const company = await loadCompanySubscriptionRecord(supabaseAdmin, companyId)
+  const [{ getPlatformSettings }, company] = await Promise.all([
+    import('@/lib/platform-settings-server'),
+    loadCompanySubscriptionRecord(supabaseAdmin, companyId),
+  ])
   if (!company) return null
 
+  const { scheduledReleaseAt } = await getPlatformSettings()
   const withClock = await ensureCompanyTrialClock(supabaseAdmin, company, companyId)
-  const access = evaluateCompanySubscriptionAccess(withClock, now)
+  const access = evaluateCompanySubscriptionAccess(withClock, now, { scheduledReleaseAt })
   await syncTrialExpiredStatus(supabaseAdmin, companyId, access)
   return access
 }

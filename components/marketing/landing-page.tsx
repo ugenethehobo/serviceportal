@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { LandingBackToTop } from '@/components/marketing/landing-back-to-top'
 import { LandingHero } from '@/components/marketing/landing-hero'
 import { LandingHeroSlideshow } from '@/components/marketing/landing-hero-slideshow'
 import { LandingMarquee } from '@/components/marketing/landing-marquee'
@@ -15,15 +16,18 @@ import {
   SERVICE_PORTAL_VERSION,
 } from '@/lib/landing-page-config'
 import type { PlatformPlanPricing } from '@/lib/platform-pricing'
+import { isBetaReleaseMode, type PlatformReleaseMode } from '@/lib/platform-settings'
 import { cn } from '@/lib/utils'
 
 interface LandingPageProps {
   plans: PlatformPlanPricing[]
+  releaseMode: PlatformReleaseMode
 }
 
-export function LandingPage({ plans }: LandingPageProps) {
+export function LandingPage({ plans, releaseMode }: LandingPageProps) {
   const [activeSlideIndex, setActiveSlideIndex] = useState(0)
   const usePhotoBackground = LANDING_BACKGROUND_PHOTOS_ENABLED
+  const isBeta = isBetaReleaseMode(releaseMode)
 
   return (
     <div
@@ -42,19 +46,20 @@ export function LandingPage({ plans }: LandingPageProps) {
         </div>
       )}
 
-      <LandingNav photoBackground={usePhotoBackground} />
+      <LandingNav photoBackground={usePhotoBackground} releaseMode={releaseMode} />
 
       <LandingScrollRoot>
+        <LandingBackToTop />
         <div
           className={cn(
             'relative min-h-full',
             !usePhotoBackground && 'landing-grain'
           )}
         >
-          <LandingHero photoBackground={usePhotoBackground} />
+          <LandingHero photoBackground={usePhotoBackground} releaseMode={releaseMode} />
           <LandingMarquee />
           <LandingProductJourney sections={LANDING_FEATURE_SECTIONS} />
-          <LandingPricingBand plans={plans} />
+          <LandingPricingBand plans={plans} releaseMode={releaseMode} />
 
           <footer
             className={cn(
@@ -68,7 +73,8 @@ export function LandingPage({ plans }: LandingPageProps) {
               © {new Date().getFullYear()} ServicePortal · Built for field service operators
             </p>
             <p className="mt-1 font-mono text-xs text-black/30">
-              v{SERVICE_PORTAL_VERSION} · Beta
+              v{SERVICE_PORTAL_VERSION}
+              {isBeta ? ' · Beta' : ''}
             </p>
           </footer>
         </div>

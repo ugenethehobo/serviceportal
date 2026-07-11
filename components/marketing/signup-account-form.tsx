@@ -13,9 +13,15 @@ interface SignupAccountFormProps {
   plan: PlatformPlanId
   checkoutSessionId?: string
   promoCode?: string
+  betaAccessCode?: string
 }
 
-export function SignupAccountForm({ plan, checkoutSessionId, promoCode }: SignupAccountFormProps) {
+export function SignupAccountForm({
+  plan,
+  checkoutSessionId,
+  promoCode,
+  betaAccessCode,
+}: SignupAccountFormProps) {
   const supabase = createClient()
   const [companyName, setCompanyName] = useState('')
   const [fullName, setFullName] = useState('')
@@ -37,6 +43,7 @@ export function SignupAccountForm({ plan, checkoutSessionId, promoCode }: Signup
       password,
       checkoutSessionId,
       promoCode,
+      betaAccessCode,
     })
 
     if (!result.success) {

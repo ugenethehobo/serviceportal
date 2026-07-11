@@ -53,6 +53,13 @@ export function isDevCompedCompany(company: {
   return Boolean(company.promo_code?.trim())
 }
 
+/** Dev or beta invite codes that skip Stripe billing */
+export function isComplimentaryPlatformCompany(company: {
+  promo_code?: string | null
+}): boolean {
+  return Boolean(company.promo_code?.trim())
+}
+
 /** Never show raw dev codes in the UI */
 export function maskPromoCode(code: string | null | undefined): string {
   const trimmed = code?.trim()

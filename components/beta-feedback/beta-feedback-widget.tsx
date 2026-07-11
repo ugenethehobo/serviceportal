@@ -16,8 +16,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { BETA_FEEDBACK_TYPES, type BetaFeedbackType } from '@/lib/beta-feedback'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { Bug, Lightbulb, Loader2, MessageCircle, MessageSquarePlus } from 'lucide-react'
+import { Bug, Lightbulb, Loader2, MessageCircle, MessageSquareWarning } from 'lucide-react'
 import { toast } from 'sonner'
 
 const TYPE_ICONS = {
@@ -97,19 +103,28 @@ export function BetaFeedbackWidget() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Send beta feedback"
-        className={cn(
-          'fixed bottom-5 right-5 z-[250] flex size-14 items-center justify-center rounded-full',
-          'bg-primary text-primary-foreground shadow-lg ring-4 ring-background/80',
-          'transition-transform hover:scale-105 active:scale-95',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-        )}
-      >
-        <MessageSquarePlus className="size-6" />
-      </button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                aria-label="Beta Feedback"
+                className={cn(
+                  'fixed bottom-5 right-5 z-[250] flex size-14 items-center justify-center rounded-full border-0',
+                  'bg-primary text-primary-foreground shadow-lg',
+                  'transition-transform hover:scale-105 active:scale-95',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+                )}
+              >
+                <MessageSquareWarning className="size-6" />
+              </button>
+            }
+          />
+          <TooltipContent side="left">Beta Feedback</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       <Dialog
         open={open}

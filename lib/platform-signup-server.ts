@@ -8,6 +8,8 @@ import {
   type BillingInterval,
   type PlatformPlanId,
 } from '@/lib/platform-billing'
+import { validatePlatformBetaAccessCode } from '@/lib/platform-beta-access'
+import { getPlatformReleaseMode } from '@/lib/platform-settings-server'
 import { validatePlatformDevPromoCode } from '@/lib/platform-promo'
 
 function createSupabaseAdmin() {
@@ -168,6 +170,7 @@ export async function completePlatformSignup(input: {
   password: string
   checkoutSessionId?: string
   promoCode?: string
+  betaAccessCode?: string
 }) {
   const companyName = input.companyName.trim()
   const fullName = input.fullName.trim()
@@ -179,6 +182,11 @@ export async function completePlatformSignup(input: {
   if (!email || !email.includes('@')) throw new Error('Enter a valid email address')
   if (password.length < 8) throw new Error('Password must be at least 8 characters')
 
+  const releaseMode = await getPlatformReleaseMode()
+  if (releaseMode === 'beta' && input.plan === 'trial') {
+    throw new Error('Free trial signup is not available during the beta period')
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
 
   let stripeCustomerId: string | null = null
@@ -189,15 +197,26 @@ export async function completePlatformSignup(input: {
   let appliedPromoCode: string | null = null
 
   if (input.plan === 'basic' || input.plan === 'pro') {
-    const promo = input.promoCode
-      ? validatePlatformDevPromoCode(input.promoCode, input.plan)
+    const betaAccess = input.betaAccessCode
+      ? validatePlatformBetaAccessCode(input.betaAccessCode)
       : null
+    const promo =
+      !betaAccess && input.promoCode
+        ? validatePlatformDevPromoCode(input.promoCode, input.plan)
+        : null
 
-    if (promo) {
+    if (betaAccess) {
+      subscriptionPlan = betaAccess.grantsPlan
+      subscriptionStatus = 'active'
+      appliedPromoCode = `beta:${betaAccess.code}`
+    } else if (promo) {
       subscriptionPlan = input.plan
       subscriptionStatus = 'active'
       appliedPromoCode = promo.code
     } else {
+      if (releaseMode === 'beta') {
+        throw new Error('Enter your beta access code or complete payment to continue')
+      }
       if (!input.checkoutSessionId) {
         throw new Error('Complete payment or apply a valid promo code before creating your account')
       }

@@ -2,10 +2,12 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { BetaAccessRequestDialog } from '@/components/marketing/beta-access-request-dialog'
 import { useLandingScrollRoot } from '@/components/marketing/landing-scroll-root'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { SERVICE_PORTAL_VERSION } from '@/lib/landing-page-config'
+import { isBetaReleaseMode, type PlatformReleaseMode } from '@/lib/platform-settings'
 import { cn } from '@/lib/utils'
 
 const NAV_LINKS = [
@@ -15,12 +17,15 @@ const NAV_LINKS = [
 
 type LandingNavProps = {
   photoBackground?: boolean
+  releaseMode: PlatformReleaseMode
 }
 
-export function LandingNav({ photoBackground = false }: LandingNavProps) {
+export function LandingNav({ photoBackground = false, releaseMode }: LandingNavProps) {
+  const isBeta = isBetaReleaseMode(releaseMode)
   const scrollRoot = useLandingScrollRoot()
   const [progress, setProgress] = useState(0)
   const [scrolled, setScrolled] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
 
   useEffect(() => {
     const root = scrollRoot
@@ -76,16 +81,18 @@ export function LandingNav({ photoBackground = false }: LandingNavProps) {
             >
               ServicePortal
             </span>
-            <Badge
-              className={cn(
-                'h-5 border-0 px-1.5 text-[10px] font-bold sm:text-xs',
-                photoBackground
-                  ? 'bg-[#FF4F00] text-amber-950'
-                  : 'bg-[#FF4F00] text-white'
-              )}
-            >
-              Beta
-            </Badge>
+            {isBeta && (
+              <Badge
+                className={cn(
+                  'h-5 border-0 px-1.5 text-[10px] font-bold sm:text-xs',
+                  photoBackground
+                    ? 'bg-[#FF4F00] text-amber-950'
+                    : 'bg-[#FF4F00] text-white'
+                )}
+              >
+                Beta
+              </Badge>
+            )}
           </div>
 
           <nav className="hidden items-center gap-1 md:flex">
@@ -128,7 +135,24 @@ export function LandingNav({ photoBackground = false }: LandingNavProps) {
                 Sign in
               </Button>
             </Link>
-            <Link href="/signup?plan=trial">
+            {isBeta && (
+              <Link href="/signup">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    'h-8 rounded-full px-3',
+                    photoBackground
+                      ? 'border-white/35 bg-white/10 text-white hover:bg-white/20 hover:text-white'
+                      : 'border-black/15 bg-white/60 text-[#0A0A0A] hover:bg-white'
+                  )}
+                >
+                  <span className="hidden sm:inline">Enter beta code</span>
+                  <span className="sm:hidden">Beta code</span>
+                </Button>
+              </Link>
+            )}
+            {isBeta ? (
               <Button
                 size="sm"
                 className={cn(
@@ -137,13 +161,32 @@ export function LandingNav({ photoBackground = false }: LandingNavProps) {
                     ? 'bg-white text-slate-950 hover:bg-white/90'
                     : 'bg-[#0A0A0A] text-white hover:bg-black/85'
                 )}
+                onClick={() => setRequestOpen(true)}
               >
-                Start free
+                Request access
               </Button>
-            </Link>
+            ) : (
+              <Link href="/signup?plan=trial">
+                <Button
+                  size="sm"
+                  className={cn(
+                    'h-8 rounded-full px-3',
+                    photoBackground
+                      ? 'bg-white text-slate-950 hover:bg-white/90'
+                      : 'bg-[#0A0A0A] text-white hover:bg-black/85'
+                  )}
+                >
+                  Start free
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </header>
+
+      {isBeta && (
+        <BetaAccessRequestDialog open={requestOpen} onOpenChange={setRequestOpen} />
+      )}
     </>
   )
 }
