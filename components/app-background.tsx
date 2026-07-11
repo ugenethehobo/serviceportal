@@ -25,6 +25,9 @@ export function AppBackground() {
       <img
         src={backgroundImageUrl}
         alt=""
+        decoding="async"
+        loading="lazy"
+        fetchPriority="low"
         className="absolute inset-0 size-full object-cover object-center"
         onError={() => void refreshBackgroundUrl()}
       />

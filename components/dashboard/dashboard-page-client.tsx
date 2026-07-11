@@ -58,7 +58,13 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
   }, [refreshMap])
 
   useEffect(() => {
-    refreshMap()
+    const scheduleMapLoad = () => void refreshMap()
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(scheduleMapLoad, { timeout: 2500 })
+      return () => window.cancelIdleCallback(idleId)
+    }
+    const timeoutId = window.setTimeout(scheduleMapLoad, 0)
+    return () => window.clearTimeout(timeoutId)
   }, [refreshMap])
 
   useEffect(() => {

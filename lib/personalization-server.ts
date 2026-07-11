@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createSupabaseAdmin, getSessionProfile, isStaffRole } from '@/lib/portal-auth'
 import {
   normalizeAccentColor,
@@ -84,7 +85,7 @@ export async function getCompanyPersonalization(
   }
 }
 
-export async function getUserPersonalization(): Promise<PersonalizationState> {
+export const getUserPersonalization = cache(async (): Promise<PersonalizationState> => {
   const session = await getSessionProfile()
   if (!session) {
     return { accentColor: null, backgroundImageUrl: null }
@@ -96,4 +97,4 @@ export async function getUserPersonalization(): Promise<PersonalizationState> {
   }
 
   return getCompanyPersonalization(companyId)
-}
+})

@@ -16,18 +16,24 @@ import { THEME_STORAGE_KEY } from "@/lib/theme";
 import { getThemeScriptDefault } from "@/lib/theme-server";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Analytics } from "@vercel/analytics/next"
-import { BetaFeedbackWidget } from "@/components/beta-feedback/beta-feedback-widget"
+import { BetaFeedbackWidgetLazy } from "@/components/beta-feedback/beta-feedback-widget-lazy";
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -78,7 +84,7 @@ export default async function RootLayout({
               <AppBackground />
               <div className="relative z-10 flex min-h-full flex-1 flex-col">
                 {children}
-                <BetaFeedbackWidget />
+                <BetaFeedbackWidgetLazy />
                 <Toaster />
               </div>
             </div>

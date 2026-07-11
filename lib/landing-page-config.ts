@@ -7,7 +7,7 @@
  * Mobile product tour uses optional `mobileImage` per chapter (portrait PNGs in `public/landing/`).
  */
 
-export const SERVICE_PORTAL_VERSION = '0.0.37'
+export const SERVICE_PORTAL_VERSION = '0.0.38'
 
 export type LandingProductScreenshot = {
   src: string
@@ -63,8 +63,7 @@ export const LANDING_SLIDESHOW_SLIDES: LandingSlide[] = [
 ]
 
 export const LANDING_HERO = {
-  eyebrowBeta: 'Now in Beta',
-  eyebrowRelease: 'Built for field service teams',
+  eyebrow: 'Now in Beta',
   headline: ['Your service business.', 'One management system.'],
   subheadline:
     'Run your entire small business with one solution, built for effective client interaction that makes you money.',

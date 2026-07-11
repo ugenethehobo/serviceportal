@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { getCompanyPhotoStorageAction } from '@/app/action'
@@ -8,16 +9,6 @@ import {
   type PlanEntitlements,
 } from '@/lib/platform-entitlements'
 import { AppearanceSettings } from '@/components/appearance-settings'
-import { CompanyProfileSettings } from '@/components/dashboard/company-profile-settings'
-import { JobPhotoCategoriesSettings } from '@/components/dashboard/job-photo-categories-settings'
-import { PhotoStorageMeter } from '@/components/dashboard/photo-storage-meter'
-import { ClientBookingSettings } from '@/components/dashboard/client-booking-settings'
-import { ServicePackagesSettings } from '@/components/dashboard/service-packages-settings'
-import { NotificationSettings } from '@/components/dashboard/notification-settings'
-import { IntegrationsSettings } from '@/components/dashboard/integrations-settings'
-import { PlatformSubscriptionSettings } from '@/components/dashboard/platform-subscription-settings'
-import { StripeConnectSettings } from '@/components/dashboard/stripe-connect-settings'
-import { DocumentTemplateEditor } from '@/components/dashboard/document-template-editor'
 import { UserProfileSettings } from '@/components/dashboard/user-profile-settings'
 import { UserSignInSettings } from '@/components/dashboard/user-sign-in-settings'
 import { SaveStatusBadge, type SaveStatus } from '@/components/dashboard/save-status-badge'
@@ -50,6 +41,88 @@ import {
 } from 'lucide-react'
 import type { PlatformPlanId, PlatformSubscriptionStatus } from '@/lib/platform-billing'
 import { toast } from 'sonner'
+
+const sectionLoading = () => <PageLoadingSkeleton />
+
+const CompanyProfileSettings = dynamic(
+  () =>
+    import('@/components/dashboard/company-profile-settings').then((m) => ({
+      default: m.CompanyProfileSettings,
+    })),
+  { loading: sectionLoading }
+)
+
+const StripeConnectSettings = dynamic(
+  () =>
+    import('@/components/dashboard/stripe-connect-settings').then((m) => ({
+      default: m.StripeConnectSettings,
+    })),
+  { loading: sectionLoading }
+)
+
+const PlatformSubscriptionSettings = dynamic(
+  () =>
+    import('@/components/dashboard/platform-subscription-settings').then((m) => ({
+      default: m.PlatformSubscriptionSettings,
+    })),
+  { loading: sectionLoading }
+)
+
+const DocumentTemplateEditor = dynamic(
+  () =>
+    import('@/components/dashboard/document-template-editor').then((m) => ({
+      default: m.DocumentTemplateEditor,
+    })),
+  { loading: sectionLoading }
+)
+
+const JobPhotoCategoriesSettings = dynamic(
+  () =>
+    import('@/components/dashboard/job-photo-categories-settings').then((m) => ({
+      default: m.JobPhotoCategoriesSettings,
+    })),
+  { loading: sectionLoading }
+)
+
+const PhotoStorageMeter = dynamic(
+  () =>
+    import('@/components/dashboard/photo-storage-meter').then((m) => ({
+      default: m.PhotoStorageMeter,
+    })),
+  { loading: sectionLoading }
+)
+
+const ClientBookingSettings = dynamic(
+  () =>
+    import('@/components/dashboard/client-booking-settings').then((m) => ({
+      default: m.ClientBookingSettings,
+    })),
+  { loading: sectionLoading }
+)
+
+const ServicePackagesSettings = dynamic(
+  () =>
+    import('@/components/dashboard/service-packages-settings').then((m) => ({
+      default: m.ServicePackagesSettings,
+    })),
+  { loading: sectionLoading }
+)
+
+const NotificationSettings = dynamic(
+  () =>
+    import('@/components/dashboard/notification-settings').then((m) => ({
+      default: m.NotificationSettings,
+    })),
+  { loading: sectionLoading }
+)
+
+const IntegrationsSettings = dynamic(
+  () =>
+    import('@/components/dashboard/integrations-settings').then((m) => ({
+      default: m.IntegrationsSettings,
+    })),
+  { loading: sectionLoading }
+)
 
 type SettingsSectionId =
   | 'profile'

@@ -1,13 +1,24 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useCallback, useState } from 'react'
 import { getScheduleCalendarAction } from '@/app/action'
-import { ScheduleWeekGrid } from '@/components/dashboard/schedule-week-grid'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { MainPageCard } from '@/components/ui/main-page-card'
 import type { ScheduleCalendarData } from '@/lib/schedule-calendar'
 import { MOBILE_PAGE_ROOT_CLASS } from '@/lib/mobile-layout'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+
+const ScheduleWeekGrid = dynamic(
+  () =>
+    import('@/components/dashboard/schedule-week-grid').then((m) => ({
+      default: m.ScheduleWeekGrid,
+    })),
+  {
+    loading: () => <Skeleton className="h-full min-h-[420px] w-full rounded-lg" />,
+  }
+)
 
 interface ScheduleCalendarPageClientProps {
   initialData: ScheduleCalendarData

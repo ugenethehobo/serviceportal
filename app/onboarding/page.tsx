@@ -1,9 +1,18 @@
+import nextDynamic from 'next/dynamic'
 import { redirect } from 'next/navigation'
 import {
   getOnboardingInitialDataAction,
   getOnboardingStatusAction,
 } from '@/app/onboarding-actions'
-import { OnboardingWizard } from '@/components/dashboard/onboarding/onboarding-wizard'
+import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
+
+const OnboardingWizard = nextDynamic(
+  () =>
+    import('@/components/dashboard/onboarding/onboarding-wizard').then((m) => ({
+      default: m.OnboardingWizard,
+    })),
+  { loading: () => <PageLoadingSkeleton /> }
+)
 
 export const dynamic = 'force-dynamic'
 
