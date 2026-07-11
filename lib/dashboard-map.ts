@@ -1,5 +1,6 @@
 import {
   formatAddressForDisplay,
+  getDisplayAddressFromClient,
   hasCompleteStructuredAddress,
   type StructuredAddress,
 } from '@/lib/address'
@@ -8,6 +9,9 @@ import {
   geocodeStructuredAddress,
   validateAddressFormat,
 } from '@/lib/geocoding'
+import { formatTimeInTimezone } from '@/lib/timezone'
+
+const TODAY_MAP_JOB_STATUSES = new Set(['scheduled', 'in_progress'])
 
 type RawSchedule = {
   id: string
@@ -16,13 +20,27 @@ type RawSchedule = {
   end_time: string
   status: string
   crew_id: string | null
-  client: { name: string; address?: string | null } | { name: string; address?: string | null }[] | null
+  client:
+    | {
+        name: string
+        address?: string | null
+        address_street?: string | null
+        address_unit?: string | null
+        address_city?: string | null
+        address_state?: string | null
+        address_zip?: string | null
+      }
+    | {
+        name: string
+        address?: string | null
+        address_street?: string | null
+        address_unit?: string | null
+        address_city?: string | null
+        address_state?: string | null
+        address_zip?: string | null
+      }[]
+    | null
   crew: { id: string; name: string } | { id: string; name: string }[] | null
-}
-
-type RawCrew = {
-  id: string
-  name: string
 }
 
 function unwrapRelation<T>(value: T | T[] | null): T | null {
@@ -32,12 +50,14 @@ function unwrapRelation<T>(value: T | T[] | null): T | null {
 
 export type MapMarkerData = {
   id: string
-  kind: 'company' | 'crew'
+  kind: 'company' | 'job'
   label: string
   subtitle?: string
   address: string
   longitude: number
   latitude: number
+  crewId?: string | null
+  status?: string
 }
 
 export type InvalidMapAddress = {
@@ -53,24 +73,70 @@ export type DashboardMapData = {
   invalidAddresses: InvalidMapAddress[]
 }
 
+function formatJobTimeRange(startIso: string, endIso: string, timezone: string): string {
+  const start = formatTimeInTimezone(startIso, timezone)
+  const end = formatTimeInTimezone(endIso, timezone)
+  return `${start} – ${end}`
+}
+
+function buildJobLabel(schedule: RawSchedule, client: { name: string } | null): string {
+  const title = schedule.title?.trim()
+  if (title) return title
+  if (client?.name) return client.name
+  return 'Scheduled job'
+}
+
+function buildJobWarningLabel(
+  schedule: RawSchedule,
+  client: { name: string } | null,
+  crew: { name: string } | null
+): string {
+  const base = buildJobLabel(schedule, client)
+  if (crew?.name) return `${base} (${crew.name})`
+  return base
+}
+
+function buildJobSubtitle(
+  schedule: RawSchedule,
+  client: { name: string } | null,
+  crew: { name: string } | null,
+  timezone: string
+): string | undefined {
+  const parts: string[] = []
+  const timeRange = formatJobTimeRange(schedule.start_time, schedule.end_time, timezone)
+  parts.push(timeRange)
+
+  if (crew?.name) parts.push(crew.name)
+  if (client?.name && client.name !== schedule.title?.trim()) {
+    parts.push(client.name)
+  }
+
+  if (schedule.status === 'in_progress') {
+    parts.push('In progress')
+  }
+
+  return parts.join(' · ')
+}
+
 export async function buildDashboardMapData(input: {
   companyName: string
   companyAddress?: string | null
   companyStructuredAddress?: StructuredAddress | null
-  crews: RawCrew[]
   schedules: RawSchedule[]
+  timezone?: string
   now?: Date
 }): Promise<DashboardMapData> {
-  const now = input.now ?? new Date()
-  const nowMs = now.getTime()
+  const timezone = input.timezone || 'America/Chicago'
   const invalidAddresses: InvalidMapAddress[] = []
   const markers: MapMarkerData[] = []
   const pendingGeocode: Array<{
     id: string
-    kind: 'company' | 'crew'
+    kind: 'company' | 'job'
     label: string
     subtitle?: string
     address: string
+    crewId?: string | null
+    status?: string
   }> = []
 
   const structuredCompany = input.companyStructuredAddress
@@ -129,31 +195,20 @@ export async function buildDashboardMapData(input: {
     }
   }
 
-  for (const crew of input.crews) {
-    const crewJobs = input.schedules.filter(
-      (schedule) => unwrapRelation(schedule.crew)?.id === crew.id
-    )
+  for (const schedule of input.schedules) {
+    if (!TODAY_MAP_JOB_STATUSES.has(schedule.status)) continue
 
-    const activeJob = crewJobs.find((schedule) => {
-      const startMs = new Date(schedule.start_time).getTime()
-      const endMs = new Date(schedule.end_time).getTime()
-      return (
-        schedule.status === 'in_progress' ||
-        (schedule.status === 'scheduled' && nowMs >= startMs && nowMs < endMs)
-      )
-    })
-
-    if (!activeJob) continue
-
-    const client = unwrapRelation(activeJob.client)
-    const locationAddress = client?.address?.trim() || ''
-    const label = crew.name
-    const subtitle = activeJob.title
+    const client = unwrapRelation(schedule.client)
+    const crew = unwrapRelation(schedule.crew)
+    const locationAddress = client ? getDisplayAddressFromClient(client) : ''
+    const label = buildJobLabel(schedule, client)
+    const warningLabel = buildJobWarningLabel(schedule, client, crew)
+    const subtitle = buildJobSubtitle(schedule, client, crew, timezone)
 
     if (!locationAddress) {
       invalidAddresses.push({
-        id: crew.id,
-        label: `${crew.name} (active job)`,
+        id: schedule.id,
+        label: warningLabel,
         address: client?.name ? `Client: ${client.name}` : 'No address on file',
         reason: 'Job site address is missing on the client record',
       })
@@ -163,8 +218,8 @@ export async function buildDashboardMapData(input: {
     const formatError = validateAddressFormat(locationAddress)
     if (formatError) {
       invalidAddresses.push({
-        id: crew.id,
-        label: `${crew.name} (active job)`,
+        id: schedule.id,
+        label: warningLabel,
         address: locationAddress,
         reason: formatError.reason,
       })
@@ -172,11 +227,13 @@ export async function buildDashboardMapData(input: {
     }
 
     pendingGeocode.push({
-      id: crew.id,
-      kind: 'crew',
+      id: schedule.id,
+      kind: 'job',
       label,
       subtitle,
       address: locationAddress,
+      crewId: crew?.id ?? schedule.crew_id,
+      status: schedule.status,
     })
   }
 
@@ -194,7 +251,7 @@ export async function buildDashboardMapData(input: {
         label:
           entry.kind === 'company'
             ? `${entry.label} (company)`
-            : `${entry.label} (active job)`,
+            : entry.label,
         address: entry.address,
         reason: result.reason,
       })
@@ -209,6 +266,8 @@ export async function buildDashboardMapData(input: {
       address: entry.address,
       longitude: result.longitude,
       latitude: result.latitude,
+      crewId: entry.crewId,
+      status: entry.status,
     })
   }
 

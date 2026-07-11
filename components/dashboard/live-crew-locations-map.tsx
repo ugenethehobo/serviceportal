@@ -22,6 +22,8 @@ const CREW_MARKER_COLORS = [
   'bg-pink-500 ring-pink-500/20',
 ]
 
+const DEFAULT_JOB_MARKER_COLOR = 'bg-slate-500 ring-slate-500/20'
+
 function MapBounds({ coordinates }: { coordinates: [number, number][] }) {
   const { map, isLoaded } = useMap()
 
@@ -80,8 +82,11 @@ export function LiveCrewLocationsMap({
     const colors = new globalThis.Map<string, string>()
     let index = 0
     for (const marker of data?.markers || []) {
-      if (marker.kind === 'crew') {
-        colors.set(marker.id, CREW_MARKER_COLORS[index % CREW_MARKER_COLORS.length])
+      if (marker.kind === 'job' && marker.crewId && !colors.has(marker.crewId)) {
+        colors.set(
+          marker.crewId,
+          CREW_MARKER_COLORS[index % CREW_MARKER_COLORS.length]
+        )
         index += 1
       }
     }
@@ -136,12 +141,13 @@ export function LiveCrewLocationsMap({
                   </li>
                 ))}
               </ul>
-              <Link
-                href="/dashboard/settings"
-                className="inline-block mt-1.5 text-primary hover:underline"
-              >
-                Update company address in Settings
-              </Link>
+              <p className="mt-1.5 text-amber-800/80 dark:text-amber-100/70">
+                Update company addresses in{' '}
+                <Link href="/dashboard/settings" className="text-primary hover:underline">
+                  Settings
+                </Link>{' '}
+                and client addresses on each client record.
+              </p>
             </div>
           </div>
         </div>
@@ -155,7 +161,11 @@ export function LiveCrewLocationsMap({
 
             {data.markers.map((marker) => {
               const isCompany = marker.kind === 'company'
-              const crewColor = crewColorMap.get(marker.id)
+              const isInProgress = marker.kind === 'job' && marker.status === 'in_progress'
+              const crewColor =
+                marker.crewId && crewColorMap.get(marker.crewId)
+                  ? crewColorMap.get(marker.crewId)
+                  : DEFAULT_JOB_MARKER_COLOR
 
               return (
                 <MapMarker
@@ -170,7 +180,9 @@ export function LiveCrewLocationsMap({
                       </div>
                     ) : (
                       <div
-                        className={`size-4 rounded-full border-2 border-white shadow-lg ring-4 ${crewColor}`}
+                        className={`rounded-full border-2 border-white shadow-lg ring-4 ${crewColor} ${
+                          isInProgress ? 'size-5' : 'size-4'
+                        }`}
                       />
                     )}
                   </MarkerContent>
@@ -195,8 +207,8 @@ export function LiveCrewLocationsMap({
               No job sites to show for today yet.
             </p>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-              Job site pins appear when crews have active jobs with client addresses on file.
-              Add your company address in Settings to show your office location too.
+              Job site pins appear for today&apos;s scheduled jobs when client addresses are on
+              file. Add your company address in Settings to show your office location too.
             </p>
             <Link
               href="/dashboard/settings"

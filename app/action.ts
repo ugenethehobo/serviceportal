@@ -5458,7 +5458,15 @@ export async function getDashboardMapDataAction(): Promise<
           end_time,
           status,
           crew_id,
-          client:clients!client_id (name, address),
+          client:clients!client_id (
+            name,
+            address,
+            address_street,
+            address_unit,
+            address_city,
+            address_state,
+            address_zip
+          ),
           crew:crews!crew_id (id, name)
         `)
         .in('client_id', clientIds)
@@ -5472,23 +5480,14 @@ export async function getDashboardMapDataAction(): Promise<
       todaySchedules = scheduleData || []
     }
 
-    const { data: crewsData, error: crewsError } = await supabaseAdmin
-      .from('crews')
-      .select('id, name')
-      .eq('company_id', companyId)
-
-    if (crewsError) {
-      return { success: false, error: crewsError.message }
-    }
-
     const companyStructuredAddress = structuredAddressFromCompanyRow(company)
 
     const mapData = await buildDashboardMapData({
       companyName: company.name,
       companyAddress: company.address,
       companyStructuredAddress,
-      crews: crewsData || [],
       schedules: todaySchedules,
+      timezone: companyTimezone,
       now,
     })
 
