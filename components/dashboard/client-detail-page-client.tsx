@@ -69,7 +69,16 @@ import { SearchBar } from '@/components/search-bar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { matchesSearch } from '@/lib/search'
 import { MOBILE_LG_TAB_LIST_CLASS } from '@/lib/mobile-layout'
+import { useLazyMountedTabs } from '@/hooks/use-lazy-mounted-tabs'
 import type { Estimate } from '@/lib/estimates'
+
+type ClientDetailTab =
+  | 'jobs'
+  | 'estimates'
+  | 'billing'
+  | 'documents'
+  | 'photos'
+  | 'messaging'
 
 interface Client {
   id: string
@@ -126,9 +135,13 @@ export function ClientDetailPageClient({
   const [showArchived, setShowArchived] = useState(false)
   const [jobSearchQuery, setJobSearchQuery] = useState('')
 
-  const [activeTab, setActiveTab] = useState<
-    'jobs' | 'estimates' | 'billing' | 'documents' | 'photos' | 'messaging'
-    >('jobs')
+  const [activeTab, setActiveTab] = useState<ClientDetailTab>('jobs')
+  const { mountedTabs, mountTab } = useLazyMountedTabs(activeTab, 'jobs')
+
+  const handleTabChange = (tab: ClientDetailTab) => {
+    setActiveTab(tab)
+    mountTab(tab)
+  }
 
   const [newJob, setNewJob] = useState({
     title: '',
@@ -580,9 +593,7 @@ export function ClientDetailPageClient({
   return (
     <Tabs
       value={activeTab}
-      onValueChange={(value) =>
-        setActiveTab(value as 'jobs' | 'estimates' | 'billing' | 'documents' | 'photos' | 'messaging')
-      }
+      onValueChange={(value) => handleTabChange(value as ClientDetailTab)}
       className="flex flex-col h-full min-h-0 p-6 max-md:p-4"
     >
     {/* Header */}
@@ -817,29 +828,39 @@ export function ClientDetailPageClient({
           </TabsContent>
 
           <TabsContent value="estimates" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
-            <ClientEstimatesPanel
-              clientId={clientId}
-              onConvertToJob={handleConvertToJob}
-              onDocumentsChange={() => setDocumentsRefreshKey((k) => k + 1)}
-            />
+            {mountedTabs.has('estimates') ? (
+              <ClientEstimatesPanel
+                clientId={clientId}
+                onConvertToJob={handleConvertToJob}
+                onDocumentsChange={() => setDocumentsRefreshKey((k) => k + 1)}
+              />
+            ) : null}
           </TabsContent>
 
           <TabsContent value="billing" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
-            <StripeConnectGate>
-              <ClientBillingPanel clientId={clientId} />
-            </StripeConnectGate>
+            {mountedTabs.has('billing') ? (
+              <StripeConnectGate>
+                <ClientBillingPanel clientId={clientId} />
+              </StripeConnectGate>
+            ) : null}
           </TabsContent>
 
           <TabsContent value="documents" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
-            <ClientDocumentsPanel clientId={clientId} refreshKey={documentsRefreshKey} />
+            {mountedTabs.has('documents') ? (
+              <ClientDocumentsPanel clientId={clientId} refreshKey={documentsRefreshKey} />
+            ) : null}
           </TabsContent>
 
           <TabsContent value="photos" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
-            <ClientPhotosPanel clientId={clientId} refreshKey={photosRefreshKey} />
+            {mountedTabs.has('photos') ? (
+              <ClientPhotosPanel clientId={clientId} refreshKey={photosRefreshKey} />
+            ) : null}
           </TabsContent>
 
           <TabsContent value="messaging" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
-            <ClientMessagingPanel clientId={clientId} clientName={client.name} />
+            {mountedTabs.has('messaging') ? (
+              <ClientMessagingPanel clientId={clientId} clientName={client.name} />
+            ) : null}
           </TabsContent>
         </Card>
 
