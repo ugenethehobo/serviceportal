@@ -139,6 +139,11 @@ export async function updateServicePackagesAction(
 }
 
 export async function countActiveServicePackages(companyId: string) {
+  const check = await verifyCompanyStaffForPackages()
+  if (!check.ok || check.companyId !== companyId) {
+    return 0
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
   const { count, error } = await supabaseAdmin
     .from('bookable_services')

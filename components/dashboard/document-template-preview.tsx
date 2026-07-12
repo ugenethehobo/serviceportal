@@ -14,6 +14,7 @@ import {
   getTableColumnOffsets,
   getTableColumnPositions,
   isElementValidForKind,
+  isInteractiveDocumentElement,
   isResizableElement,
   PREVIEW_DISPLAY_WIDTH,
 } from '@/lib/document-template-editor-utils'
@@ -253,7 +254,8 @@ export function DocumentTemplatePreview({
         const nextSize = clampElementSize(
           element,
           drag.originWidth + deltaX,
-          drag.originHeight + (element.kind === 'image' ? deltaY : 0),
+          drag.originHeight +
+            (element.kind === 'image' || isInteractiveDocumentElement(element) ? deltaY : 0),
           template
         )
 
@@ -262,7 +264,10 @@ export function DocumentTemplatePreview({
           [drag.elementId]: {
             ...current[drag.elementId],
             width: nextSize.width,
-            height: element.kind === 'image' ? nextSize.height : current[drag.elementId]?.height,
+            height:
+              element.kind === 'image' || isInteractiveDocumentElement(element)
+                ? nextSize.height
+                : current[drag.elementId]?.height,
           },
         }))
         return

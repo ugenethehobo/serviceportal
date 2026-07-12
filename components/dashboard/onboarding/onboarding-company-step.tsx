@@ -12,6 +12,7 @@ type CompanyRow = {
   timezone?: string | null
   business_hours_start?: string | null
   business_hours_end?: string | null
+  business_open_weekdays?: number[] | null
   address?: string | null
   address_street?: string | null
   address_unit?: string | null

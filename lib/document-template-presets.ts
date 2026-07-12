@@ -1,5 +1,6 @@
 import type { DocumentElement, DocumentKind, DocumentTemplate } from '@/lib/document-template'
 import {
+  DEFAULT_CONTRACT_DOCUMENT_TEMPLATE,
   DEFAULT_ESTIMATE_DOCUMENT_TEMPLATE,
   DEFAULT_INVOICE_DOCUMENT_TEMPLATE,
   normalizeDocumentTemplate,
@@ -82,16 +83,24 @@ function buildCompactTemplate(template: DocumentTemplate): DocumentTemplate {
   }
 }
 
+function getBaseTemplateForKind(kind: DocumentKind) {
+  if (kind === 'invoice') return DEFAULT_INVOICE_DOCUMENT_TEMPLATE
+  if (kind === 'contract') return DEFAULT_CONTRACT_DOCUMENT_TEMPLATE
+  return DEFAULT_ESTIMATE_DOCUMENT_TEMPLATE
+}
+
 export function getDefaultDocumentTemplate(kind: DocumentKind): DocumentTemplate {
-  const defaults =
-    kind === 'invoice' ? DEFAULT_INVOICE_DOCUMENT_TEMPLATE : DEFAULT_ESTIMATE_DOCUMENT_TEMPLATE
-  return normalizeDocumentTemplate(cloneTemplate(defaults), kind)
+  return normalizeDocumentTemplate(cloneTemplate(getBaseTemplateForKind(kind)), kind)
 }
 
 export function getCompactDocumentTemplate(kind: DocumentKind): DocumentTemplate {
-  const defaults =
-    kind === 'invoice' ? DEFAULT_INVOICE_DOCUMENT_TEMPLATE : DEFAULT_ESTIMATE_DOCUMENT_TEMPLATE
-  return normalizeDocumentTemplate(buildCompactTemplate(cloneTemplate(defaults)), kind)
+  if (kind === 'contract') {
+    return getDefaultDocumentTemplate(kind)
+  }
+  return normalizeDocumentTemplate(
+    buildCompactTemplate(cloneTemplate(getBaseTemplateForKind(kind))),
+    kind
+  )
 }
 
 export function resetToDefaultTemplate(kind: DocumentKind): DocumentTemplate {

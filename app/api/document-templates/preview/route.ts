@@ -11,6 +11,7 @@ import {
 import { loadCompanyLogoBytesForPdf } from '@/lib/document-template-logo-server'
 import { renderDocumentPdf } from '@/lib/document-template-renderer'
 import {
+  SAMPLE_CONTRACT_RENDER_DATA,
   SAMPLE_ESTIMATE_RENDER_DATA,
   SAMPLE_INVOICE_RENDER_DATA,
 } from '@/lib/document-template-sample'
@@ -25,11 +26,20 @@ export async function POST(request: Request) {
     const access = await verifyCompanyStaffForDocumentTemplates()
 
     const body = (await request.json()) as PreviewRequestBody
-    const kind: DocumentKind = body.kind === 'estimate' ? 'estimate' : 'invoice'
+    const kind: DocumentKind =
+      body.kind === 'estimate'
+        ? 'estimate'
+        : body.kind === 'contract'
+          ? 'contract'
+          : 'invoice'
     const template = normalizeDocumentTemplate(body.template, kind)
 
     const sampleData =
-      kind === 'invoice' ? SAMPLE_INVOICE_RENDER_DATA : SAMPLE_ESTIMATE_RENDER_DATA
+      kind === 'invoice'
+        ? SAMPLE_INVOICE_RENDER_DATA
+        : kind === 'contract'
+          ? SAMPLE_CONTRACT_RENDER_DATA
+          : SAMPLE_ESTIMATE_RENDER_DATA
 
     const logoBytes = await loadCompanyLogoBytesForPdf(access.companyId)
 

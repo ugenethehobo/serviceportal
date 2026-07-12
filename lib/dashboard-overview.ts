@@ -185,13 +185,33 @@ export function buildCrewSummaries(
 
 export type TimelineDayMode = 'today' | 'tomorrow'
 
+export type DashboardMode = 'live' | 'closed_day'
+
+export type DashboardCollectedSource = 'stripe' | 'recorded'
+
+export type DashboardMonthlyKpis = {
+  monthLabel: string
+  totalBilled: number
+  totalCollected: number
+  collectedSource: DashboardCollectedSource
+  balanceDue: number
+  jobsCompleted: number
+  jobsScheduled: number
+  activeClients: number
+  leadsConverted: number
+  estimatesSent: number
+}
+
 export type DashboardOverviewData = {
   timezone: string
   businessHours: BusinessHours
+  dashboardMode: DashboardMode
   crews: DashboardCrewSummary[]
   jobs: DashboardTimelineJob[]
   laneCount: number
   timelineMode: TimelineDayMode
   timelineDateLabel: string
+  closedDayLabel?: string
+  monthlyKpis?: DashboardMonthlyKpis
   isSoloBusiness?: boolean
 }

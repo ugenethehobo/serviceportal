@@ -3,6 +3,8 @@ import { isJobBillableForClient, type PortalJob } from '@/lib/portal-jobs'
 
 export type PortalActivityType =
   | 'estimate_review'
+  | 'contract_signing'
+  | 'contract_signed'
   | 'payment_due'
   | 'payment_received'
   | 'visit_upcoming'
@@ -23,6 +25,15 @@ type RawEstimate = {
   total: number
   status: string
   updated_at: string
+}
+
+type RawContract = {
+  id: string
+  title: string
+  status: string
+  sent_at: string | null
+  updated_at: string
+  client_signed_at: string | null
 }
 
 type RawPayment = {
@@ -96,6 +107,7 @@ function formatActivityWhen(iso: string, timezone: string) {
 export function buildPortalActivity(input: {
   timezone: string
   estimates: RawEstimate[]
+  contracts?: RawContract[]
   jobs: PortalJob[]
   payments: RawPayment[]
   lineItems: RawLineItem[]
@@ -105,6 +117,32 @@ export function buildPortalActivity(input: {
 }): PortalActivityItem[] {
   const now = input.now ?? new Date()
   const items: PortalActivityItem[] = []
+
+  for (const contract of input.contracts || []) {
+    if (contract.status === 'ready_for_signing') {
+      items.push({
+        id: `contract-sign-${contract.id}`,
+        type: 'contract_signing',
+        title: 'Contract ready for signing',
+        description: contract.title,
+        href: `/portal/contracts/${contract.id}`,
+        occurredAt: contract.sent_at || contract.updated_at,
+        urgent: true,
+      })
+      continue
+    }
+
+    if (contract.status === 'signed' && contract.client_signed_at) {
+      items.push({
+        id: `contract-signed-${contract.id}`,
+        type: 'contract_signed',
+        title: 'Contract signed',
+        description: contract.title,
+        href: `/portal/contracts/${contract.id}`,
+        occurredAt: contract.client_signed_at,
+      })
+    }
+  }
 
   for (const estimate of input.estimates) {
     if (estimate.status !== 'sent') continue

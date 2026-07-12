@@ -74,3 +74,37 @@ export const SAMPLE_ESTIMATE_RENDER_DATA: Omit<DocumentRenderData, 'template'> =
     total: 0,
   },
 }
+
+export const SAMPLE_CONTRACT_RENDER_DATA: Omit<DocumentRenderData, 'template'> = {
+  kind: 'contract',
+  company: {
+    name: getDocumentFieldPlaceholderLabel('company.name'),
+    address: getDocumentFieldPlaceholderLabel('company.address'),
+    phone: getDocumentFieldPlaceholderLabel('company.phone'),
+  },
+  client: {
+    name: getDocumentFieldPlaceholderLabel('client.name'),
+    contact_name: getDocumentFieldPlaceholderLabel('client.contact_name'),
+    email: getDocumentFieldPlaceholderLabel('client.email'),
+    phone: getDocumentFieldPlaceholderLabel('client.phone'),
+    address: getDocumentFieldPlaceholderLabel('client.address'),
+  },
+  document: {
+    title: 'Service Agreement',
+    number: 'CTR-1001',
+    date: getDocumentFieldPlaceholderLabel('document.date'),
+  },
+  job: {
+    title: getDocumentFieldPlaceholderLabel('job.title'),
+    visitDate: getDocumentFieldPlaceholderLabel('job.visit_date'),
+  },
+  contract: {
+    serviceName: getDocumentFieldPlaceholderLabel('service.name'),
+    signedDate: null,
+  },
+  fieldValues: {
+    'input.notes': '',
+  },
+  lineItems: [],
+  summary: {},
+}

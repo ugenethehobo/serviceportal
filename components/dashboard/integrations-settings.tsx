@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import {
   INTEGRATION_PROVIDERS,
+  QUICKBOOKS_INTEGRATION_ENABLED,
   ZAPIER_EVENT_LABELS,
   ZAPIER_EVENT_TYPES,
   type IntegrationProvider,
@@ -32,6 +33,7 @@ import {
 } from '@/lib/integrations'
 import { getGoogleCalendarSyncSettings } from '@/lib/google-calendar-oauth'
 import { getQuickBooksRealmId } from '@/lib/quickbooks-oauth'
+import { cn } from '@/lib/utils'
 import { Calendar, Link2, Loader2, Webhook } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -93,11 +95,13 @@ export function IntegrationsSettings() {
 
     const message = searchParams.get('message')
 
-    if (quickbooksParam === 'connected') {
-      toast.success('QuickBooks connected successfully')
-      void load()
-    } else if (quickbooksParam === 'error') {
-      toast.error(message || 'QuickBooks connection failed')
+    if (quickbooksParam && QUICKBOOKS_INTEGRATION_ENABLED) {
+      if (quickbooksParam === 'connected') {
+        toast.success('QuickBooks connected successfully')
+        void load()
+      } else if (quickbooksParam === 'error') {
+        toast.error(message || 'QuickBooks connection failed')
+      }
     }
 
     if (googleCalendarParam === 'connected') {
@@ -264,8 +268,13 @@ export function IntegrationsSettings() {
             ? getQuickBooksRealmId(record.config)
             : null
 
+        const quickbooksDisabled = provider === 'quickbooks' && !QUICKBOOKS_INTEGRATION_ENABLED
+
         return (
-          <Card key={provider} className="p-5 shadow-sm">
+          <Card
+            key={provider}
+            className={cn('p-5 shadow-sm', quickbooksDisabled && 'opacity-80')}
+          >
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
                 <div className="rounded-lg border p-2 text-muted-foreground">
@@ -278,46 +287,59 @@ export function IntegrationsSettings() {
               </div>
               <Badge
                 variant={
-                  status === 'connected'
-                    ? 'default'
-                    : status === 'error'
-                      ? 'destructive'
-                      : 'outline'
+                  quickbooksDisabled
+                    ? 'secondary'
+                    : status === 'connected'
+                      ? 'default'
+                      : status === 'error'
+                        ? 'destructive'
+                        : 'outline'
                 }
               >
-                {status === 'connected' ? 'Connected' : status === 'error' ? 'Error' : 'Not connected'}
+                {quickbooksDisabled
+                  ? 'Coming soon'
+                  : status === 'connected'
+                    ? 'Connected'
+                    : status === 'error'
+                      ? 'Error'
+                      : 'Not connected'}
               </Badge>
             </div>
 
             {provider === 'quickbooks' ? (
               <div className="mt-4 space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Connect your QuickBooks Online company to prepare for invoice and payment sync.
-                  Full two-way sync ships in a later release — this step only stores OAuth access.
+                  {QUICKBOOKS_INTEGRATION_ENABLED
+                    ? 'Connect your QuickBooks Online company to prepare for invoice and payment sync. Full two-way sync ships in a later release — this step only stores OAuth access.'
+                    : 'QuickBooks Online sync is on the roadmap. Invoice and payment sync will be available in a future update.'}
                 </p>
-                {status === 'connected' && quickbooksRealmId && (
+                {QUICKBOOKS_INTEGRATION_ENABLED && status === 'connected' && quickbooksRealmId && (
                   <p className="text-xs text-muted-foreground">
                     QuickBooks company ID: <span className="font-mono">{quickbooksRealmId}</span>
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  {status === 'connected' ? (
-                    <Button
-                      variant="outline"
-                      onClick={() => void disconnectQuickBooks()}
-                      disabled={isDisconnectingQuickBooks}
-                    >
-                      {isDisconnectingQuickBooks && <Loader2 className="size-4 animate-spin" />}
-                      Disconnect QuickBooks
-                    </Button>
+                  {QUICKBOOKS_INTEGRATION_ENABLED ? (
+                    status === 'connected' ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => void disconnectQuickBooks()}
+                        disabled={isDisconnectingQuickBooks}
+                      >
+                        {isDisconnectingQuickBooks && <Loader2 className="size-4 animate-spin" />}
+                        Disconnect QuickBooks
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => void connectQuickBooks()}
+                        disabled={isConnectingQuickBooks}
+                      >
+                        {isConnectingQuickBooks && <Loader2 className="size-4 animate-spin" />}
+                        Connect QuickBooks
+                      </Button>
+                    )
                   ) : (
-                    <Button
-                      onClick={() => void connectQuickBooks()}
-                      disabled={isConnectingQuickBooks}
-                    >
-                      {isConnectingQuickBooks && <Loader2 className="size-4 animate-spin" />}
-                      Connect QuickBooks
-                    </Button>
+                    <Button disabled>Connect QuickBooks</Button>
                   )}
                 </div>
               </div>

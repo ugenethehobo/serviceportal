@@ -1,5 +1,7 @@
+import type { ContractStatus } from '@/lib/contracts'
 import {
   DEFAULT_DOCUMENT_CATEGORY,
+  SYSTEM_DOCUMENT_CATEGORY_CONTRACTS,
   SYSTEM_DOCUMENT_CATEGORY_ESTIMATES,
   SYSTEM_DOCUMENT_CATEGORY_INVOICES,
   SYSTEM_DOCUMENT_CATEGORY_ORDER,
@@ -31,12 +33,14 @@ export type UploadedDocument = {
   client_id: string
   company_id: string
   estimate_id: string | null
+  contract_id: string | null
   schedule_id: string | null
   name: string
   file_name: string | null
   storage_path: string
   file_type: string
-  source: 'estimate' | 'upload' | 'invoice'
+  source: 'estimate' | 'upload' | 'invoice' | 'contract'
+  contract_status?: ContractStatus | null
   category: string | null
   file_size: number | null
   notes: string | null
@@ -47,6 +51,7 @@ export type UploadedDocument = {
 export type GalleryDocument = UploadedDocument & {
   displayCategory: string
   isSystemDocument: boolean
+  contractStatus?: ContractStatus | null
 }
 
 export function toGalleryDocument(document: UploadedDocument): GalleryDocument {
@@ -66,6 +71,15 @@ export function toGalleryDocument(document: UploadedDocument): GalleryDocument {
     }
   }
 
+  if (document.source === 'contract') {
+    return {
+      ...document,
+      displayCategory: SYSTEM_DOCUMENT_CATEGORY_CONTRACTS,
+      isSystemDocument: true,
+      contractStatus: document.contract_status ?? null,
+    }
+  }
+
   return {
     ...document,
     displayCategory: document.category?.trim() || DEFAULT_DOCUMENT_CATEGORY,
@@ -75,6 +89,26 @@ export function toGalleryDocument(document: UploadedDocument): GalleryDocument {
 
 export function toGalleryDocuments(documents: UploadedDocument[]) {
   return documents.map(toGalleryDocument)
+}
+
+type UploadedDocumentRow = UploadedDocument & {
+  contract?: { status: ContractStatus } | { status: ContractStatus }[] | null
+}
+
+export function normalizeUploadedDocumentRow(row: UploadedDocumentRow): UploadedDocument {
+  const { contract, ...document } = row
+  const contractStatus = Array.isArray(contract)
+    ? contract[0]?.status ?? null
+    : contract?.status ?? null
+
+  return {
+    ...document,
+    contract_status: contractStatus,
+  }
+}
+
+export function normalizeUploadedDocumentRows(rows: UploadedDocumentRow[]): UploadedDocument[] {
+  return rows.map(normalizeUploadedDocumentRow)
 }
 
 export function formatDocumentSize(bytes: number | null | undefined) {

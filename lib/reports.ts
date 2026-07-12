@@ -7,9 +7,10 @@ import {
 } from '@/lib/billing'
 import { getCompanyDateString, parseAsCompanyTime } from '@/lib/timezone'
 
-export type ReportsPeriod = '30d' | '90d' | 'ytd' | 'all'
+export type ReportsPeriod = 'mtd' | '30d' | '90d' | 'ytd' | 'all'
 
 export const REPORTS_PERIOD_LABELS: Record<ReportsPeriod, string> = {
+  mtd: 'Month to date',
   '30d': 'Last 30 days',
   '90d': 'Last 90 days',
   ytd: 'Year to date',
@@ -131,6 +132,12 @@ export function getReportsPeriodBounds(
 
   const today = getCompanyDateString(timezone, now)
 
+  if (period === 'mtd') {
+    const monthStart = `${today.slice(0, 7)}-01`
+    const start = new Date(parseAsCompanyTime(`${monthStart}T00:00`, timezone))
+    return { start, end }
+  }
+
   if (period === '30d' || period === '90d') {
     const days = period === '30d' ? 30 : 90
     const startDateStr = shiftCompanyDateString(today, timezone, -days)
@@ -198,6 +205,7 @@ export function buildReportsData(input: {
   invoiceDocuments?: InvoiceDocumentMeta[]
   leadsConverted: number
   estimatesSent: number
+  scheduleStatusCounts?: Array<{ status: string; count: number }>
   now?: Date
 }): ReportsData {
   const now = input.now ?? new Date()
@@ -228,10 +236,13 @@ export function buildReportsData(input: {
 
   const jobsCompleted = completedJobsInPeriod.length
 
-  const jobsScheduled = input.schedules.filter(
-    (schedule) =>
-      schedule.status === 'scheduled' || schedule.status === 'in_progress'
-  ).length
+  const jobsScheduled = input.scheduleStatusCounts
+    ? (input.scheduleStatusCounts.find((entry) => entry.status === 'scheduled')?.count || 0) +
+      (input.scheduleStatusCounts.find((entry) => entry.status === 'in_progress')?.count || 0)
+    : input.schedules.filter(
+        (schedule) =>
+          schedule.status === 'scheduled' || schedule.status === 'in_progress'
+      ).length
 
   const activeClients = input.clients.filter((client) => client.status === 'active').length
 
@@ -276,8 +287,14 @@ export function buildReportsData(input: {
     }))
 
   const statusCounts = new Map<string, number>()
-  for (const schedule of input.schedules) {
-    statusCounts.set(schedule.status, (statusCounts.get(schedule.status) || 0) + 1)
+  if (input.scheduleStatusCounts) {
+    for (const entry of input.scheduleStatusCounts) {
+      statusCounts.set(entry.status, entry.count)
+    }
+  } else {
+    for (const schedule of input.schedules) {
+      statusCounts.set(schedule.status, (statusCounts.get(schedule.status) || 0) + 1)
+    }
   }
 
   const jobsByStatus = Array.from(statusCounts.entries())

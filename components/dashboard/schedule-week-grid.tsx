@@ -296,6 +296,11 @@ export function ScheduleWeekGrid({
       const day = data.days[drag.currentDayIndex]
       if (!day) return
 
+      if (day.isClosed) {
+        toast.message('That day is marked closed in your business hours')
+        return
+      }
+
       const newStartIso = buildIsoFromDayAndMinutes(
         day.dateStr,
         drag.currentStartMinutes,
@@ -433,11 +438,15 @@ export function ScheduleWeekGrid({
             key={day.dateStr}
             className={cn(
               'px-2 py-2 text-center border-l',
-              day.isToday && 'bg-primary/5'
+              day.isToday && 'bg-primary/5',
+              day.isClosed && 'bg-muted/40'
             )}
           >
             <div className="text-xs font-medium">{day.shortLabel}</div>
             <div className="text-[10px] text-muted-foreground truncate">{day.label}</div>
+            {day.isClosed && (
+              <div className="text-[10px] font-medium text-muted-foreground mt-0.5">Closed</div>
+            )}
           </div>
         ))}
       </div>
@@ -482,7 +491,8 @@ export function ScheduleWeekGrid({
               key={day.dateStr}
               className={cn(
                 'relative border-l h-full',
-                day.isToday && 'bg-primary/[0.03]'
+                day.isToday && 'bg-primary/[0.03]',
+                day.isClosed && 'bg-muted/30'
               )}
             >
               {data.hourLabels.map((_, index) => (
@@ -492,6 +502,14 @@ export function ScheduleWeekGrid({
                   style={{ top: index * pixelsPerHour }}
                 />
               ))}
+
+              {day.isClosed && (
+                <div className="absolute inset-0 z-[1] flex items-center justify-center pointer-events-none">
+                  <span className="rounded-md bg-background/80 px-2 py-1 text-[10px] font-medium text-muted-foreground border">
+                    Closed
+                  </span>
+                </div>
+              )}
 
               {data.jobs
                 .filter((job) => {

@@ -8,11 +8,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  DEFAULT_BOOKABLE_WEEKDAYS,
   DEFAULT_BOOKING_SETTINGS,
   type BookingMode,
   type BookingSettings,
@@ -21,16 +19,6 @@ import { cn } from '@/lib/utils'
 import { CalendarClock, ClipboardList, Copy, Link2 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-
-const WEEKDAY_OPTIONS = [
-  { value: 0, label: 'Sun' },
-  { value: 1, label: 'Mon' },
-  { value: 2, label: 'Tue' },
-  { value: 3, label: 'Wed' },
-  { value: 4, label: 'Thu' },
-  { value: 5, label: 'Fri' },
-  { value: 6, label: 'Sat' },
-] as const
 
 interface ClientBookingSettingsProps {
   embedded?: boolean
@@ -294,40 +282,13 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Bookable days</Label>
-            <div className="flex flex-wrap gap-2">
-              {WEEKDAY_OPTIONS.map((day) => {
-                const selected = bookingSettings.bookable_weekdays.includes(day.value)
-                return (
-                  <label
-                    key={day.value}
-                    className={cn(
-                      'inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm cursor-pointer',
-                      selected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
-                    )}
-                  >
-                    <Checkbox
-                      checked={selected}
-                      onCheckedChange={(checked) => {
-                        setBookingSettings((current) => {
-                          const next = checked
-                            ? [...current.bookable_weekdays, day.value]
-                            : current.bookable_weekdays.filter((value) => value !== day.value)
-                          return {
-                            ...current,
-                            bookable_weekdays:
-                              next.length > 0 ? next.sort((a, b) => a - b) : [...DEFAULT_BOOKABLE_WEEKDAYS],
-                          }
-                        })
-                      }}
-                    />
-                    {day.label}
-                  </label>
-                )
-              })}
-            </div>
-          </div>
+          <p className="text-xs text-muted-foreground rounded-lg border bg-muted/20 px-3 py-2">
+            Which days clients can book follows your company{' '}
+            <Link href="/dashboard/settings?section=company" className="text-primary hover:underline">
+              open days
+            </Link>{' '}
+            in Company profile → Business hours.
+          </p>
         </div>
       ) : (
         <div className="rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">

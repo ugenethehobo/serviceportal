@@ -5,9 +5,19 @@ import {
   type InvoiceTemplateBlockType,
 } from '@/lib/invoice-template'
 
-export type DocumentKind = 'invoice' | 'estimate'
+export type DocumentKind = 'invoice' | 'estimate' | 'contract'
 
-export type DocumentElementKind = 'field' | 'text' | 'image' | 'table' | 'line'
+export type InvoiceEstimateDocumentKind = Exclude<DocumentKind, 'contract'>
+
+export type DocumentElementKind =
+  | 'field'
+  | 'text'
+  | 'image'
+  | 'table'
+  | 'line'
+  | 'signature'
+  | 'initial'
+  | 'input'
 
 export type DocumentElementLayout = 'flow' | 'absolute'
 
@@ -505,6 +515,204 @@ export const DEFAULT_ESTIMATE_DOCUMENT_TEMPLATE: DocumentTemplate = {
   ],
 }
 
+export const DEFAULT_CONTRACT_DOCUMENT_TEMPLATE: DocumentTemplate = {
+  version: 2,
+  page: { ...DOCUMENT_PAGE },
+  brandColors: { ...DEFAULT_BRAND_COLORS },
+  preset: 'classic',
+  footerDueText: 'This agreement is binding upon signature by the client.',
+  elements: [
+    { ...COMPANY_LOGO_ELEMENT, visible: false },
+    {
+      id: 'company-name',
+      kind: 'field',
+      fieldKey: 'company.name',
+      x: 50,
+      y: 42,
+      fontSize: 20,
+      fontWeight: 'bold',
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'company-address',
+      kind: 'field',
+      fieldKey: 'company.address',
+      x: 50,
+      y: 66,
+      fontSize: 10,
+      color: '#595959',
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'company-phone',
+      kind: 'field',
+      fieldKey: 'company.phone',
+      x: 50,
+      y: 82,
+      fontSize: 10,
+      color: '#595959',
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'doc-title',
+      kind: 'field',
+      fieldKey: 'document.title',
+      x: 50,
+      y: 118,
+      fontSize: 18,
+      fontWeight: 'bold',
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'doc-number',
+      kind: 'field',
+      fieldKey: 'document.number',
+      x: 50,
+      y: 142,
+      fontSize: 10,
+      color: '#595959',
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'doc-date',
+      kind: 'field',
+      fieldKey: 'document.date',
+      x: 50,
+      y: 158,
+      fontSize: 10,
+      color: '#595959',
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'client-name',
+      kind: 'field',
+      fieldKey: 'client.name',
+      x: 50,
+      y: 196,
+      fontSize: 12,
+      fontWeight: 'bold',
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'client-address',
+      kind: 'field',
+      fieldKey: 'client.address',
+      x: 50,
+      y: 214,
+      fontSize: 10,
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'service-name',
+      kind: 'field',
+      fieldKey: 'service.name',
+      x: 50,
+      y: 252,
+      fontSize: 12,
+      fontWeight: 'bold',
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'job-title',
+      kind: 'field',
+      fieldKey: 'job.title',
+      x: 50,
+      y: 272,
+      fontSize: 10,
+      color: '#595959',
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'contract-body',
+      kind: 'text',
+      text: 'Service terms and scope of work appear here. Edit this text block or add additional clauses.',
+      x: 50,
+      y: 310,
+      width: 512,
+      fontSize: 10,
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'input-notes',
+      kind: 'input',
+      fieldKey: 'input.notes',
+      label: 'Additional notes',
+      x: 50,
+      y: 520,
+      width: 512,
+      height: 48,
+      fontSize: 10,
+      visible: true,
+      layout: 'absolute',
+    },
+    {
+      id: 'client-signature',
+      kind: 'signature',
+      fieldKey: 'sign.client',
+      label: 'Client signature',
+      x: 50,
+      y: 620,
+      width: 260,
+      height: 72,
+      fontSize: 10,
+      visible: true,
+      layout: 'absolute',
+    },
+    {
+      id: 'client-initials',
+      kind: 'initial',
+      fieldKey: 'sign.client.initials',
+      label: 'Client initials',
+      x: 340,
+      y: 620,
+      width: 120,
+      height: 48,
+      fontSize: 10,
+      visible: true,
+      layout: 'absolute',
+    },
+    {
+      id: 'signature-date',
+      kind: 'field',
+      fieldKey: 'contract.signed_date',
+      x: 50,
+      y: 710,
+      fontSize: 10,
+      color: '#595959',
+      visible: true,
+      layout: 'flow',
+    },
+    {
+      id: 'footer',
+      kind: 'field',
+      fieldKey: 'footer.text',
+      x: 50,
+      y: 740,
+      fontSize: 9,
+      color: '#808080',
+      visible: true,
+      layout: 'flow',
+    },
+  ],
+}
+
+function getDefaultTemplateForKind(kind: DocumentKind): DocumentTemplate {
+  if (kind === 'invoice') return DEFAULT_INVOICE_DOCUMENT_TEMPLATE
+  if (kind === 'contract') return DEFAULT_CONTRACT_DOCUMENT_TEMPLATE
+  return DEFAULT_ESTIMATE_DOCUMENT_TEMPLATE
+}
+
 const BLOCK_ELEMENT_IDS: Record<InvoiceTemplateBlockType, string[]> = {
   company_header: ['company-logo', 'company-name', 'company-address', 'company-phone', 'doc-title'],
   invoice_meta: ['doc-number', 'doc-date'],
@@ -588,10 +796,22 @@ function normalizeTableColumns(input: unknown): DocumentTableColumns {
   }
 }
 
+const VALID_ELEMENT_KINDS: DocumentElementKind[] = [
+  'field',
+  'text',
+  'image',
+  'table',
+  'line',
+  'signature',
+  'initial',
+  'input',
+]
+
 function normalizeElement(input: unknown, fallback?: DocumentElement): DocumentElement | null {
   if (!input || typeof input !== 'object') return fallback ?? null
   const raw = input as Partial<DocumentElement>
   if (!raw.id || !raw.kind) return fallback ?? null
+  if (!VALID_ELEMENT_KINDS.includes(raw.kind)) return fallback ?? null
 
   return {
     id: String(raw.id),
@@ -620,8 +840,7 @@ export function normalizeDocumentTemplate(
   input: unknown,
   kind: DocumentKind
 ): DocumentTemplate {
-  const defaults =
-    kind === 'invoice' ? DEFAULT_INVOICE_DOCUMENT_TEMPLATE : DEFAULT_ESTIMATE_DOCUMENT_TEMPLATE
+  const defaults = getDefaultTemplateForKind(kind)
 
   if (!input || typeof input !== 'object') {
     return cloneTemplate(defaults)
@@ -692,8 +911,7 @@ function repairDocumentTemplatePositions(
   template: DocumentTemplate,
   kind: DocumentKind
 ): DocumentTemplate {
-  const defaults =
-    kind === 'invoice' ? DEFAULT_INVOICE_DOCUMENT_TEMPLATE : DEFAULT_ESTIMATE_DOCUMENT_TEMPLATE
+  const defaults = getDefaultTemplateForKind(kind)
   const defaultById = new Map(defaults.elements.map((element) => [element.id, element]))
 
   const stackCounts = new Map<string, number>()

@@ -25,10 +25,18 @@ describe('schedule calendar helpers', () => {
   })
 
   it('clamps start minutes inside business hours', () => {
-    const clamped = clampCalendarStartMinutes(7 * 60, 60, { start: '08:00', end: '17:00' })
+    const clamped = clampCalendarStartMinutes(7 * 60, 60, {
+      start: '08:00',
+      end: '17:00',
+      openWeekdays: [1, 2, 3, 4, 5],
+    })
     assert.equal(clamped, 8 * 60)
 
-    const late = clampCalendarStartMinutes(16 * 60 + 30, 60, { start: '08:00', end: '17:00' })
+    const late = clampCalendarStartMinutes(16 * 60 + 30, 60, {
+      start: '08:00',
+      end: '17:00',
+      openWeekdays: [1, 2, 3, 4, 5],
+    })
     assert.equal(late, 16 * 60)
   })
 
@@ -50,8 +58,9 @@ describe('schedule calendar helpers', () => {
     const days: ScheduleCalendarDay[] = week.days.map((day, dayIndex) => ({
       ...day,
       dayIndex,
+      isClosed: day.isClosed ?? false,
     }))
-    const businessHours = { start: '08:00', end: '17:00' }
+    const businessHours = { start: '08:00', end: '17:00', openWeekdays: [1, 2, 3, 4, 5] }
 
     const jobs = buildScheduleCalendarJobs(
       [
@@ -98,8 +107,9 @@ describe('schedule calendar helpers', () => {
     const days: ScheduleCalendarDay[] = week.days.map((day, dayIndex) => ({
       ...day,
       dayIndex,
+      isClosed: day.isClosed ?? false,
     }))
-    const businessHours = { start: '08:00', end: '17:00' }
+    const businessHours = { start: '08:00', end: '17:00', openWeekdays: [1, 2, 3, 4, 5] }
     const schedules = [
       {
         id: 'anchor',
@@ -141,8 +151,9 @@ describe('schedule calendar helpers', () => {
     const days: ScheduleCalendarDay[] = week.days.map((day, dayIndex) => ({
       ...day,
       dayIndex,
+      isClosed: day.isClosed ?? false,
     }))
-    const businessHours = { start: '08:00', end: '17:00' }
+    const businessHours = { start: '08:00', end: '17:00', openWeekdays: [1, 2, 3, 4, 5] }
 
     const jobs = buildScheduleCalendarJobs(
       [
@@ -174,8 +185,9 @@ describe('schedule calendar helpers', () => {
     const days: ScheduleCalendarDay[] = week.days.map((day, dayIndex) => ({
       ...day,
       dayIndex,
+      isClosed: day.isClosed ?? false,
     }))
-    const businessHours = { start: '08:00', end: '17:00' }
+    const businessHours = { start: '08:00', end: '17:00', openWeekdays: [1, 2, 3, 4, 5] }
     const schedules = [
       {
         id: 'anchor',

@@ -67,8 +67,13 @@ export type InvalidMapAddress = {
   reason: string
 }
 
+export type DashboardMapMode = 'today' | 'upcoming_open_days'
+
 export type DashboardMapData = {
   companyName: string
+  mode: DashboardMapMode
+  previewRangeLabel?: string
+  previewJobCount?: number
   markers: MapMarkerData[]
   invalidAddresses: InvalidMapAddress[]
 }
@@ -96,13 +101,27 @@ function buildJobWarningLabel(
   return base
 }
 
+function formatJobDayLabel(startIso: string, timezone: string): string {
+  const anchor = new Date(startIso)
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(anchor)
+}
+
 function buildJobSubtitle(
   schedule: RawSchedule,
   client: { name: string } | null,
   crew: { name: string } | null,
-  timezone: string
+  timezone: string,
+  options?: { includeDayLabel?: boolean }
 ): string | undefined {
   const parts: string[] = []
+  if (options?.includeDayLabel) {
+    parts.push(formatJobDayLabel(schedule.start_time, timezone))
+  }
   const timeRange = formatJobTimeRange(schedule.start_time, schedule.end_time, timezone)
   parts.push(timeRange)
 
@@ -125,6 +144,8 @@ export async function buildDashboardMapData(input: {
   schedules: RawSchedule[]
   timezone?: string
   now?: Date
+  mode?: DashboardMapMode
+  previewRangeLabel?: string
 }): Promise<DashboardMapData> {
   const timezone = input.timezone || 'America/Chicago'
   const invalidAddresses: InvalidMapAddress[] = []
@@ -203,7 +224,9 @@ export async function buildDashboardMapData(input: {
     const locationAddress = client ? getDisplayAddressFromClient(client) : ''
     const label = buildJobLabel(schedule, client)
     const warningLabel = buildJobWarningLabel(schedule, client, crew)
-    const subtitle = buildJobSubtitle(schedule, client, crew, timezone)
+    const subtitle = buildJobSubtitle(schedule, client, crew, timezone, {
+      includeDayLabel: input.mode === 'upcoming_open_days',
+    })
 
     if (!locationAddress) {
       invalidAddresses.push({
@@ -271,8 +294,13 @@ export async function buildDashboardMapData(input: {
     })
   }
 
+  const jobMarkers = markers.filter((marker) => marker.kind === 'job')
+
   return {
     companyName: input.companyName,
+    mode: input.mode || 'today',
+    previewRangeLabel: input.previewRangeLabel,
+    previewJobCount: input.mode === 'upcoming_open_days' ? jobMarkers.length : undefined,
     markers,
     invalidAddresses,
   }

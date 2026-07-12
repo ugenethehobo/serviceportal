@@ -1,6 +1,7 @@
 import {
   formatMinutesAsTime,
   getTimelineDurationMinutes,
+  isOpenOnDate,
   parseTimeToMinutes,
   type BusinessHours,
 } from '@/lib/business-hours'
@@ -40,6 +41,7 @@ export type ScheduleCalendarDay = {
   label: string
   shortLabel: string
   isToday: boolean
+  isClosed: boolean
   dayIndex: number
   startIso: string
   endIso: string
@@ -201,7 +203,8 @@ export function getCompanyDayOfWeek(timezone: string, date: Date = new Date()): 
 export function getCompanyWeekDayBounds(
   timezone: string,
   date: Date = new Date(),
-  weekOffset = 0
+  weekOffset = 0,
+  openWeekdays?: number[]
 ) {
   const dayOfWeek = getCompanyDayOfWeek(timezone, date)
   const weekStartOffset = -dayOfWeek + weekOffset * 7
@@ -226,6 +229,9 @@ export function getCompanyWeekDayBounds(
       label,
       shortLabel,
       isToday: bounds.dateStr === todayStr,
+      isClosed: openWeekdays
+        ? !isOpenOnDate(bounds.dateStr, timezone, openWeekdays)
+        : false,
       dayIndex: index,
     }
   })
@@ -612,7 +618,12 @@ export function buildScheduleCalendarData(input: {
   now?: Date
 }): ScheduleCalendarData {
   const now = input.now ?? new Date()
-  const week = getCompanyWeekDayBounds(input.timezone, now, input.weekOffset)
+  const week = getCompanyWeekDayBounds(
+    input.timezone,
+    now,
+    input.weekOffset,
+    input.businessHours.openWeekdays
+  )
   const crewColorById = buildCrewColorIndexMap(input.crews)
   const anchorJobIdByRuleId = new Map(
     (input.recurringSeries ?? []).map((series) => [

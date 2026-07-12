@@ -56,15 +56,26 @@ export function ScheduleMobileWeekList({
                       <p className="text-sm font-semibold">{day.shortLabel}</p>
                       <p className="text-xs text-muted-foreground">{day.label}</p>
                     </div>
-                    {day.isToday && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Today
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {day.isClosed && (
+                        <Badge variant="outline" className="text-[10px]">
+                          Closed
+                        </Badge>
+                      )}
+                      {day.isToday && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          Today
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {dayJobs.length === 0 ? (
+                {day.isClosed ? (
+                  <p className="px-1 py-3 text-sm text-muted-foreground">
+                    Closed — no new jobs can be scheduled
+                  </p>
+                ) : dayJobs.length === 0 ? (
                   <p className="px-1 py-3 text-sm text-muted-foreground">No jobs scheduled</p>
                 ) : (
                   <ul className="space-y-2">

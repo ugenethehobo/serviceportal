@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { QUICKBOOKS_INTEGRATION_ENABLED } from '@/lib/integrations'
 import { createSupabaseAdmin } from '@/lib/portal-auth'
 import {
   buildQuickBooksIntegrationSecrets,
@@ -17,6 +18,14 @@ function settingsRedirect(origin: string, params: Record<string, string>) {
 
 export async function GET(request: Request) {
   const origin = new URL(request.url).origin
+
+  if (!QUICKBOOKS_INTEGRATION_ENABLED) {
+    return settingsRedirect(origin, {
+      quickbooks: 'error',
+      message: 'QuickBooks integration is not available yet.',
+    })
+  }
+
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const realmId = searchParams.get('realmId')

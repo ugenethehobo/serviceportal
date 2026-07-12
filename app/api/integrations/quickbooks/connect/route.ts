@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { QUICKBOOKS_INTEGRATION_ENABLED } from '@/lib/integrations'
 import {
   assertCompanyAdminForIntegrations,
   getIntegrationOAuthUser,
@@ -11,6 +12,13 @@ import {
 
 export async function POST() {
   try {
+    if (!QUICKBOOKS_INTEGRATION_ENABLED) {
+      return NextResponse.json(
+        { error: 'QuickBooks integration is not available yet.' },
+        { status: 503 }
+      )
+    }
+
     if (!isQuickBooksOAuthConfigured()) {
       return NextResponse.json(
         {

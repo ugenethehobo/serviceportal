@@ -10,14 +10,18 @@ import {
 import {
   calcBillingSummary,
   calcLineAmount,
-  summarizePayments,
   type CompanyPaymentRow,
   type PaymentsSummary,
 } from '@/lib/billing'
 import { seedBillingFromJobPrice, duplicateBillingToSchedule } from '@/lib/billing-server'
 import { SYSTEM_DOCUMENT_CATEGORY_INVOICES } from '@/lib/document-categories'
 import { syncJobInvoiceDocument } from '@/lib/invoices-server'
-import { getCompanyStripeStatus } from '@/lib/stripe-connect'
+import {
+  countMtdJobOccurrences,
+  sumRecordedPaymentsInPeriod,
+  sumRecordedStripePaymentsInPeriod,
+} from '@/lib/dashboard-month-kpis'
+import { getCompanyStripeStatus, resolveMonthCollectedAmount } from '@/lib/stripe-connect'
 import {
   recalcEstimateTotal,
   syncEstimateDocument,
@@ -51,9 +55,15 @@ import {
   type ThemePreference,
 } from '@/lib/theme'
 import {
+  formatUpcomingOpenDaysRangeLabel,
+  getClosedDayError,
+  getNextOpenDayDates,
+  isClosedDayToday,
+  isOpenAtInstant,
   normalizeBusinessHours,
   isValidBusinessHoursRange,
   shouldShowTomorrowTimeline,
+  UPCOMING_OPEN_DAYS_PREVIEW_COUNT,
   type BusinessHours,
 } from '@/lib/business-hours'
 import { formatCompanyDateLabel, getCompanyDayBounds } from '@/lib/timezone'
@@ -61,6 +71,7 @@ import {
   assignTimelineLanes,
   buildCrewSummaries,
   buildTimelineJobs,
+  type DashboardMonthlyKpis,
   type DashboardOverviewData,
 } from '@/lib/dashboard-overview'
 import { buildDashboardMapData, type DashboardMapData } from '@/lib/dashboard-map'
@@ -76,10 +87,20 @@ import {
   type LeadStatus,
 } from '@/lib/leads'
 import {
+  DEFAULT_CLIENTS_PAGE_SIZE,
+  DEFAULT_PAYMENTS_PAGE_SIZE,
+  fetchBillingRowsForScheduleIds,
+  fetchCompanyPaymentsPage,
+  fetchCompanyPaymentsSummary,
+  fetchMtdDashboardSchedules,
+  fetchReportsBillingBundle,
+  mapPaymentRow,
+  type PaymentsFilterSource,
+} from '@/lib/billing-queries'
+import {
   buildReportsData,
   getReportsPeriodBounds,
   getReportsPeriodStart,
-  isInReportsPeriod,
   type ReportsData,
   type ReportsPeriod,
 } from '@/lib/reports'
@@ -117,6 +138,7 @@ import {
 } from '@/lib/document-categories'
 import {
   CLIENT_DOCUMENTS_BUCKET,
+  normalizeUploadedDocumentRows,
   UPLOADED_DOCUMENT_ACCEPTED_TYPES,
   UPLOADED_DOCUMENT_MAX_BYTES,
   type UploadedDocument,
@@ -161,6 +183,11 @@ export async function createCompanyUser(data: {
   avatarUrl?: string | null
   companyId: string
 }) {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false, error: adminCheck.error }
+  }
+
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -240,6 +267,11 @@ export async function createCompanyUser(data: {
 }
 
 export async function getCompanyData(companyId: string) {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { company: null, users: [], error: adminCheck.error }
+  }
+
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -282,6 +314,11 @@ export async function getCompanyData(companyId: string) {
 }
 
 export async function getDashboardData() {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { companies: [], totalUsers: 0, billingMetrics: null, error: adminCheck.error }
+  }
+
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -563,6 +600,11 @@ export async function updateCompanyUser(data: {
   role: string
   avatarUrl?: string | null
 }) {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false, error: adminCheck.error }
+  }
+
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -685,6 +727,9 @@ export async function updateCrew(data: {
   membersToAdd: string[]
   membersToRemove: string[]
 }) {
+  const access = await verifyCrewCompanyAccess(data.crewId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -742,16 +787,13 @@ export async function createClientAction(data: {
   notes?: string
   companyId: string
 }) {
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  )
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return { success: false, error: check.error }
+  if (check.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const supabaseAdmin = createSupabaseAdmin()
 
   try {
     let addressFields: ReturnType<typeof buildStructuredAddressDbFields> | null = null
@@ -784,7 +826,7 @@ export async function createClientAction(data: {
       address_state: addressFields?.address_state ?? null,
       address_zip: addressFields?.address_zip ?? null,
       notes: data.notes || null,
-      company_id: data.companyId,
+      company_id: check.companyId,
       status: 'active',
     })
 
@@ -799,6 +841,9 @@ export async function createClientAction(data: {
 }
 
 export async function deleteCrew(crewId: string) {
+  const access = await verifyCrewCompanyAccess(crewId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -834,6 +879,11 @@ export async function deleteCrew(crewId: string) {
 }
 
 export async function deleteUserCompletely(userId: string, avatarUrl?: string | null) {
+  const adminCheck = await assertPlatformAdmin()
+  if (!adminCheck.ok) {
+    return { success: false, error: adminCheck.error }
+  }
+
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!, // <-- Service Role Key
@@ -877,16 +927,10 @@ export async function updateClientAction(data: {
   clientAddress?: StructuredAddress
   notes?: string
 }) {
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  )
+  const check = await verifyClientForStaff(data.id)
+  if (!check.ok) return { success: false, error: check.error }
+
+  const supabaseAdmin = createSupabaseAdmin()
 
   try {
     // Only include fields that were actually passed in
@@ -942,6 +986,36 @@ async function verifyClientForStaff(clientId: string) {
   }
 
   return { ...check, client }
+}
+
+async function verifyClientCompanyAccess(clientId: string) {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return check
+
+  const owned = await verifyClientOwnership(clientId, check.companyId)
+  if (!owned) {
+    return { ok: false as const, error: 'Client not found' }
+  }
+
+  return check
+}
+
+async function verifyCrewCompanyAccess(crewId: string) {
+  const check = await verifyCompanyStaff()
+  if (!check.ok) return check
+
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data: crew, error } = await supabaseAdmin
+    .from('crews')
+    .select('id, company_id, name, crew_lead_id')
+    .eq('id', crewId)
+    .single()
+
+  if (error || !crew || crew.company_id !== check.companyId) {
+    return { ok: false as const, error: 'Crew not found' }
+  }
+
+  return { ...check, crew }
 }
 
 export async function archiveClientAction(clientId: string) {
@@ -1007,27 +1081,33 @@ export async function createJobAction(data: {
   recurrence?: string
   price?: number
 }) {
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  )
+  const clientCheck = await verifyClientCompanyAccess(data.clientId)
+  if (!clientCheck.ok) return { success: false, error: clientCheck.error }
+  if (clientCheck.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  const supabaseAdmin = createSupabaseAdmin()
 
   try {
+    const closedDayError = await assertScheduleOnOpenCompanyDay(
+      supabaseAdmin,
+      clientCheck.companyId,
+      data.startTime
+    )
+    if (closedDayError) {
+      return { success: false, error: closedDayError }
+    }
+
     if (data.crewId) {
-      const bufferMinutes = await getCompanyTravelBufferMinutes(supabaseAdmin, data.companyId)
+      const bufferMinutes = await getCompanyTravelBufferMinutes(supabaseAdmin, clientCheck.companyId)
       const conflict = await checkJobConflict(data.crewId, data.startTime, data.endTime, {
         bufferMinutes,
       })
 
       if (conflict.hasConflict) {
         const alternatives = await suggestAlternativeCrews(
-          data.companyId,
+          clientCheck.companyId,
           data.startTime,
           data.endTime,
           data.crewId,
@@ -1082,7 +1162,7 @@ export async function createJobAction(data: {
             supabaseAdmin,
             newSchedule.id,
             data.clientId,
-            data.companyId,
+            clientCheck.companyId,
             data.title,
             data.price || 0
           )
@@ -1102,7 +1182,7 @@ export async function createJobAction(data: {
         ])
 
         queueCompanyZapierEvent(supabaseAdmin, {
-          companyId: data.companyId,
+          companyId: clientCheck.companyId,
           event: 'job_scheduled',
           data: {
             schedule_id: newSchedule.id,
@@ -1134,59 +1214,15 @@ export async function createJobAction(data: {
   }
 }
 
-async function syncScheduleStatusesForClient(
-  supabaseAdmin: ReturnType<typeof createSupabaseAdmin>,
-  clientId: string
-) {
-  const now = new Date().toISOString()
-  let activated = 0
-  let archived = 0
-
-  const { data: toActivate } = await supabaseAdmin
-    .from('schedules')
-    .select('id')
-    .eq('client_id', clientId)
-    .eq('status', 'scheduled')
-    .lte('start_time', now)
-    .gt('end_time', now)
-
-  if (toActivate && toActivate.length > 0) {
-    await supabaseAdmin
-      .from('schedules')
-      .update({ status: 'in_progress' })
-      .in('id', toActivate.map((s) => s.id))
-    activated = toActivate.length
-  }
-
-  const { data: toArchive } = await supabaseAdmin
-    .from('schedules')
-    .select('*')
-    .eq('client_id', clientId)
-    .neq('status', 'archived')
-    .lt('end_time', now)
-
-  if (toArchive && toArchive.length > 0) {
-    for (const schedule of toArchive) {
-      await supabaseAdmin
-        .from('schedules')
-        .update({ status: 'archived' })
-        .eq('id', schedule.id)
-      archived++
-
-      if (schedule.recurring_rule_id) {
-        await generateNextRecurringInstance(schedule, supabaseAdmin)
-      }
-    }
-  }
-
-  return { activated, archived }
-}
-
 export async function syncScheduleStatusesAction(clientId: string) {
+  const access = await verifyClientCompanyAccess(clientId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    const { activated, archived } = await syncScheduleStatusesForClient(supabaseAdmin, clientId)
+    const { syncClientScheduleStatuses } = await import('@/lib/schedule-status-sync')
+    const { activated, archived } = await syncClientScheduleStatuses(supabaseAdmin, clientId)
 
     revalidatePath(`/dashboard/clients/${clientId}`)
 
@@ -1199,107 +1235,6 @@ export async function syncScheduleStatusesAction(clientId: string) {
   } catch (error: any) {
     console.error('syncScheduleStatusesAction error:', error)
     return { success: false, error: error.message }
-  }
-}
-
-// ============================================
-// Helper: Create next recurring instance
-// ============================================
-async function generateNextRecurringInstance(currentSchedule: any, supabaseAdmin: any) {
-  if (!currentSchedule.recurring_rule_id) return
-
-  // Get the recurring rule
-  const { data: rule } = await supabaseAdmin
-    .from('recurring_rules')
-    .select('*')
-    .eq('id', currentSchedule.recurring_rule_id)
-    .single()
-
-  if (!rule) return
-
-  const currentEnd = new Date(currentSchedule.end_time)
-  let nextStart = new Date(currentEnd)
-
-  // Calculate next occurrence
-  switch (rule.frequency) {
-    case 'daily':
-      nextStart.setDate(nextStart.getDate() + (rule.interval || 1))
-      break
-    case 'weekly':
-      nextStart.setDate(nextStart.getDate() + 7 * (rule.interval || 1))
-      break
-    case 'monthly':
-      nextStart.setMonth(nextStart.getMonth() + (rule.interval || 1))
-      break
-    default:
-      return
-  }
-
-  const duration = new Date(currentSchedule.end_time).getTime() - new Date(currentSchedule.start_time).getTime()
-  const nextEnd = new Date(nextStart.getTime() + duration)
-
-  // Check if crew is available for the new time slot
-  let hasConflict = false
-  if (currentSchedule.crew_id) {
-    const { data: conflicts } = await supabaseAdmin
-      .from('schedules')
-      .select('id')
-      .eq('crew_id', currentSchedule.crew_id)
-      .neq('status', 'archived')
-      .lte('start_time', nextEnd.toISOString())
-      .gte('end_time', nextStart.toISOString())
-
-    hasConflict = !!(conflicts && conflicts.length > 0)
-  }
-
-  const { data: client } = await supabaseAdmin
-    .from('clients')
-    .select('company_id')
-    .eq('id', currentSchedule.client_id)
-    .single()
-
-  const { data: newSchedule, error: insertError } = await supabaseAdmin
-    .from('schedules')
-    .insert({
-      client_id: currentSchedule.client_id,
-      crew_id: currentSchedule.crew_id,
-      recurring_rule_id: currentSchedule.recurring_rule_id,
-      title: currentSchedule.title,
-      description: currentSchedule.description,
-      start_time: nextStart.toISOString(),
-      end_time: nextEnd.toISOString(),
-      status: 'scheduled',
-      price: currentSchedule.price || 0,
-    })
-    .select()
-    .single()
-
-  if (insertError || !newSchedule) {
-    console.error('Failed to create recurring schedule:', insertError)
-    return
-  }
-
-  if (client?.company_id) {
-    await duplicateBillingToSchedule(
-      supabaseAdmin,
-      currentSchedule.id,
-      newSchedule.id,
-      currentSchedule.client_id,
-      client.company_id,
-      {
-        title: currentSchedule.title,
-        price: currentSchedule.price || 0,
-      }
-    )
-    try {
-      await syncJobInvoiceDocument(newSchedule.id)
-    } catch (invoiceError) {
-      console.error('generateNextRecurringInstance invoice sync error:', invoiceError)
-    }
-  }
-
-  if (hasConflict) {
-    console.log(`Created next recurring schedule for ${currentSchedule.id} but crew has conflict`)
   }
 }
 
@@ -1333,7 +1268,52 @@ async function getCompanyTravelBufferMinutes(
   return normalizeBookingSettings(data?.booking_settings).travel_buffer_minutes
 }
 
+async function getCompanyBusinessHoursForScheduling(
+  supabaseAdmin: ReturnType<typeof createSupabaseAdmin>,
+  companyId: string
+) {
+  const { data, error } = await supabaseAdmin
+    .from('companies')
+    .select('timezone, business_hours_start, business_hours_end, business_open_weekdays')
+    .eq('id', companyId)
+    .single()
+
+  if (error || !data) {
+    throw new Error('Company not found')
+  }
+
+  return {
+    timezone: data.timezone || 'America/Chicago',
+    businessHours: normalizeBusinessHours(
+      data.business_hours_start,
+      data.business_hours_end,
+      data.business_open_weekdays
+    ),
+  }
+}
+
+async function assertScheduleOnOpenCompanyDay(
+  supabaseAdmin: ReturnType<typeof createSupabaseAdmin>,
+  companyId: string,
+  startIso: string
+): Promise<string | null> {
+  const { timezone, businessHours } = await getCompanyBusinessHoursForScheduling(
+    supabaseAdmin,
+    companyId
+  )
+
+  if (!isOpenAtInstant(startIso, timezone, businessHours)) {
+    const { getCompanyDateString } = await import('@/lib/timezone')
+    return getClosedDayError(getCompanyDateString(timezone, new Date(startIso)), timezone)
+  }
+
+  return null
+}
+
 export async function getJobAction(jobId: string, clientId: string) {
+  const access = await verifyScheduleCompanyAccess(jobId, clientId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
@@ -1378,20 +1358,16 @@ export async function updateJobAction(data: {
   crewId?: string | null
   price?: number
 }) {
+  const access = await verifyScheduleCompanyAccess(data.jobId, data.clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const existing = access.schedule
 
   try {
-    const { data: existing, error: fetchError } = await supabaseAdmin
-      .from('schedules')
-      .select('*')
-      .eq('id', data.jobId)
-      .eq('client_id', data.clientId)
-      .single()
-
-    if (fetchError || !existing) {
-      return { success: false, error: 'Job not found' }
-    }
-
     if (existing.status === 'archived' || existing.status === 'cancelled') {
       return { success: false, error: 'Cannot edit archived or cancelled jobs' }
     }
@@ -1400,8 +1376,19 @@ export async function updateJobAction(data: {
     const endTime = data.endTime ?? existing.end_time
     const crewId = data.crewId !== undefined ? data.crewId : existing.crew_id
 
+    if (data.startTime !== undefined) {
+      const closedDayError = await assertScheduleOnOpenCompanyDay(
+        supabaseAdmin,
+        access.companyId,
+        startTime
+      )
+      if (closedDayError) {
+        return { success: false, error: closedDayError }
+      }
+    }
+
     if (crewId) {
-      const bufferMinutes = await getCompanyTravelBufferMinutes(supabaseAdmin, data.companyId)
+      const bufferMinutes = await getCompanyTravelBufferMinutes(supabaseAdmin, access.companyId)
       const conflict = await checkJobConflict(crewId, startTime, endTime, {
         bufferMinutes,
         excludeScheduleId: data.jobId,
@@ -1409,7 +1396,7 @@ export async function updateJobAction(data: {
 
       if (conflict.hasConflict) {
         const alternatives = await suggestAlternativeCrews(
-          data.companyId,
+          access.companyId,
           startTime,
           endTime,
           crewId,
@@ -1456,7 +1443,7 @@ export async function updateJobAction(data: {
           supabaseAdmin,
           data.jobId,
           data.clientId,
-          data.companyId,
+          access.companyId,
           (data.title ?? existing.title) as string,
           data.price
         )
@@ -1483,7 +1470,7 @@ export async function updateJobAction(data: {
         .single()
 
       queueCompanyZapierEvent(supabaseAdmin, {
-        companyId: data.companyId,
+        companyId: access.companyId,
         event: 'job_scheduled',
         data: {
           schedule_id: updated.id,
@@ -1514,17 +1501,13 @@ export async function updateJobAction(data: {
 }
 
 export async function cancelJobAction(jobId: string, clientId: string) {
+  const access = await verifyScheduleCompanyAccess(jobId, clientId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const existing = access.schedule
 
   try {
-    const { data: existing } = await supabaseAdmin
-      .from('schedules')
-      .select('status')
-      .eq('id', jobId)
-      .eq('client_id', clientId)
-      .single()
-
-    if (!existing) return { success: false, error: 'Job not found' }
     if (existing.status !== 'scheduled') {
       return { success: false, error: 'Only scheduled jobs can be cancelled' }
     }
@@ -1560,17 +1543,13 @@ export async function cancelJobAction(jobId: string, clientId: string) {
 }
 
 export async function archiveJobAction(jobId: string, clientId: string) {
+  const access = await verifyScheduleCompanyAccess(jobId, clientId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const existing = access.schedule
 
   try {
-    const { data: existing } = await supabaseAdmin
-      .from('schedules')
-      .select('status, recurring_rule_id')
-      .eq('id', jobId)
-      .eq('client_id', clientId)
-      .single()
-
-    if (!existing) return { success: false, error: 'Job not found' }
     if (existing.status !== 'in_progress') {
       return { success: false, error: 'Only in-progress jobs can be archived early' }
     }
@@ -1597,17 +1576,13 @@ export async function archiveJobAction(jobId: string, clientId: string) {
 }
 
 export async function deleteJobAction(jobId: string, clientId: string) {
+  const access = await verifyScheduleCompanyAccess(jobId, clientId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const existing = access.schedule
 
   try {
-    const { data: existing } = await supabaseAdmin
-      .from('schedules')
-      .select('status')
-      .eq('id', jobId)
-      .eq('client_id', clientId)
-      .single()
-
-    if (!existing) return { success: false, error: 'Job not found' }
     if (existing.status !== 'scheduled' && existing.status !== 'cancelled') {
       return { success: false, error: 'Only scheduled or cancelled jobs can be deleted' }
     }
@@ -1640,7 +1615,7 @@ async function verifyScheduleOwnership(scheduleId: string, clientId: string) {
   const supabaseAdmin = createSupabaseAdmin()
   const { data, error } = await supabaseAdmin
     .from('schedules')
-    .select('id, client_id, title, start_time, status, price')
+    .select('id, client_id, title, start_time, end_time, status, price, crew_id, recurring_rule_id')
     .eq('id', scheduleId)
     .eq('client_id', clientId)
     .single()
@@ -2276,7 +2251,7 @@ export async function getDocumentTemplatesAction(): Promise<
 }
 
 export async function updateDocumentTemplateAction(
-  kind: import('@/lib/document-template').DocumentKind,
+  kind: import('@/lib/document-template').InvoiceEstimateDocumentKind,
   template: import('@/lib/document-template').DocumentTemplate
 ): Promise<{ success: true } | { success: false; error: string }> {
   try {
@@ -2328,7 +2303,7 @@ export async function updateDocumentTemplateAction(
 }
 
 export async function resetDocumentTemplateAction(
-  kind: import('@/lib/document-template').DocumentKind
+  kind: import('@/lib/document-template').InvoiceEstimateDocumentKind
 ): Promise<
   | { success: true; template: import('@/lib/document-template').DocumentTemplate }
   | { success: false; error: string }
@@ -2701,17 +2676,17 @@ export async function getUploadedDocumentsAction(
     if (!access.ok) return { success: false, error: access.error }
 
     if (scheduleId) {
-      const schedule = await verifyScheduleOwnership(scheduleId, clientId)
-      if (!schedule) return { success: false, error: 'Job not found' }
+      const scheduleAccess = await verifyScheduleCompanyAccess(scheduleId, clientId)
+      if (!scheduleAccess.ok) return { success: false, error: scheduleAccess.error }
     }
 
     const supabaseAdmin = createSupabaseAdmin()
     let query = supabaseAdmin
       .from('client_documents')
-      .select('*')
+      .select('*, contract:contracts!contract_id (status)')
       .eq('client_id', clientId)
       .eq('company_id', access.companyId)
-      .in('source', ['upload', 'estimate', 'invoice'])
+      .in('source', ['upload', 'estimate', 'invoice', 'contract'])
       .order('created_at', { ascending: false })
 
     if (scheduleId) {
@@ -2727,7 +2702,10 @@ export async function getUploadedDocumentsAction(
       throw error
     }
 
-    return { success: true, documents: (documents || []) as UploadedDocument[] }
+    return {
+      success: true,
+      documents: normalizeUploadedDocumentRows((documents || []) as Parameters<typeof normalizeUploadedDocumentRows>[0]),
+    }
   } catch (error: any) {
     console.error('getUploadedDocumentsAction error:', error)
     return { success: false, error: error.message || 'Failed to load documents' }
@@ -2889,11 +2867,13 @@ export async function deleteUploadedDocumentAction(
 }
 
 export async function getJobBillingAction(scheduleId: string, clientId: string) {
+  const access = await verifyScheduleCompanyAccess(scheduleId, clientId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const schedule = access.schedule
 
   try {
-    const schedule = await verifyScheduleOwnership(scheduleId, clientId)
-    if (!schedule) return { success: false, error: 'Job not found' }
 
     const { data: lineItems, error: lineError } = await supabaseAdmin
       .from('billing_line_items')
@@ -2945,6 +2925,9 @@ export async function getJobBillingAction(scheduleId: string, clientId: string) 
 }
 
 export async function getClientBillingAction(clientId: string) {
+  const access = await verifyClientCompanyAccess(clientId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
@@ -3011,12 +2994,15 @@ export async function addBillingLineItemAction(data: {
   quantity: number
   unitPrice: number
 }) {
+  const access = await verifyScheduleCompanyAccess(data.scheduleId, data.clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    const schedule = await verifyScheduleOwnership(data.scheduleId, data.clientId)
-    if (!schedule) return { success: false, error: 'Job not found' }
-
     const amount = calcLineAmount(data.quantity, data.unitPrice)
 
     const { data: item, error } = await supabaseAdmin
@@ -3024,7 +3010,7 @@ export async function addBillingLineItemAction(data: {
       .insert({
         schedule_id: data.scheduleId,
         client_id: data.clientId,
-        company_id: data.companyId,
+        company_id: access.companyId,
         description: data.description.trim(),
         quantity: data.quantity,
         unit_price: data.unitPrice,
@@ -3062,12 +3048,15 @@ export async function updateBillingLineItemAction(data: {
   quantity: number
   unitPrice: number
 }) {
+  const access = await verifyScheduleCompanyAccess(data.scheduleId, data.clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    const schedule = await verifyScheduleOwnership(data.scheduleId, data.clientId)
-    if (!schedule) return { success: false, error: 'Job not found' }
-
     const amount = calcLineAmount(data.quantity, data.unitPrice)
 
     const { data: item, error } = await supabaseAdmin
@@ -3109,12 +3098,15 @@ export async function deleteBillingLineItemAction(
   clientId: string,
   companyId: string
 ) {
+  const access = await verifyScheduleCompanyAccess(scheduleId, clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    const schedule = await verifyScheduleOwnership(scheduleId, clientId)
-    if (!schedule) return { success: false, error: 'Job not found' }
-
     const { error } = await supabaseAdmin
       .from('billing_line_items')
       .delete()
@@ -3150,12 +3142,16 @@ export async function addBillingPaymentAction(data: {
   method: string
   notes?: string
 }) {
+  const access = await verifyScheduleCompanyAccess(data.scheduleId, data.clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const schedule = access.schedule
 
   try {
-    const schedule = await verifyScheduleOwnership(data.scheduleId, data.clientId)
-    if (!schedule) return { success: false, error: 'Job not found' }
-
     const [{ data: lineItems }, { data: existingPayments }, { data: client }] = await Promise.all([
       supabaseAdmin.from('billing_line_items').select('amount').eq('schedule_id', data.scheduleId),
       supabaseAdmin.from('billing_payments').select('amount').eq('schedule_id', data.scheduleId),
@@ -3163,7 +3159,7 @@ export async function addBillingPaymentAction(data: {
         .from('clients')
         .select('name, email')
         .eq('id', data.clientId)
-        .eq('company_id', data.companyId)
+        .eq('company_id', access.companyId)
         .single(),
     ])
 
@@ -3189,7 +3185,7 @@ export async function addBillingPaymentAction(data: {
       .insert({
         schedule_id: data.scheduleId,
         client_id: data.clientId,
-        company_id: data.companyId,
+        company_id: access.companyId,
         amount: roundedAmount,
         payment_date: data.paymentDate,
         method: data.method,
@@ -3205,12 +3201,12 @@ export async function addBillingPaymentAction(data: {
     const { data: company } = await supabaseAdmin
       .from('companies')
       .select('name')
-      .eq('id', data.companyId)
+      .eq('id', access.companyId)
       .single()
 
     void queueNotification(supabaseAdmin, async (admin) => {
       await notifyPaymentReceived(admin, {
-        companyId: data.companyId,
+        companyId: access.companyId,
         companyName: company?.name,
         clientEmail: client?.email,
         clientName: client?.name,
@@ -3246,12 +3242,15 @@ export async function deleteBillingPaymentAction(
   clientId: string,
   companyId: string
 ) {
+  const access = await verifyScheduleCompanyAccess(scheduleId, clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    const schedule = await verifyScheduleOwnership(scheduleId, clientId)
-    if (!schedule) return { success: false, error: 'Job not found' }
-
     const { data: payment, error: fetchError } = await supabaseAdmin
       .from('billing_payments')
       .select('source')
@@ -3328,12 +3327,14 @@ export async function generateJobInvoiceAction(scheduleId: string, clientId: str
 }
 
 export async function sendJobInvoiceAction(scheduleId: string, clientId: string) {
+  const access = await verifyScheduleCompanyAccess(scheduleId, clientId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const schedule = access.schedule
+  const companyId = access.companyId
 
   try {
-    const schedule = await verifyScheduleOwnership(scheduleId, clientId)
-    if (!schedule) return { success: false, error: 'Job not found' }
-
     const { data: lineItems } = await supabaseAdmin
       .from('billing_line_items')
       .select('id')
@@ -3348,9 +3349,6 @@ export async function sendJobInvoiceAction(scheduleId: string, clientId: string)
     if (!generated.success) {
       return generated
     }
-
-    const companyId = await getCompanyIdForClient(clientId)
-    if (!companyId) return { success: false, error: 'Client not found' }
 
     const [{ data: fullLineItems }, { data: payments }, { data: client }, { data: company }] =
       await Promise.all([
@@ -3390,18 +3388,24 @@ export async function sendJobInvoiceAction(scheduleId: string, clientId: string)
   }
 }
 
-export type PaymentsFilterSource = 'all' | 'manual' | 'stripe'
-
 export async function getCompanyPaymentsAction(options?: {
   period?: ReportsPeriod
   source?: PaymentsFilterSource
   search?: string
+  page?: number
+  pageSize?: number
 }): Promise<
   | {
       success: true
       payments: CompanyPaymentRow[]
       summary: PaymentsSummary
       periodLabel: string
+      pagination: {
+        page: number
+        pageSize: number
+        total: number
+        hasMore: boolean
+      }
     }
   | { success: false; error: string }
 > {
@@ -3416,7 +3420,9 @@ export async function getCompanyPaymentsAction(options?: {
     const companyId = check.companyId
     const period = options?.period ?? '30d'
     const source = options?.source ?? 'all'
-    const search = options?.search?.trim().toLowerCase() ?? ''
+    const search = options?.search?.trim() ?? ''
+    const page = Math.max(1, options?.page ?? 1)
+    const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? DEFAULT_PAYMENTS_PAGE_SIZE))
 
     const { data: company, error: companyError } = await supabaseAdmin
       .from('companies')
@@ -3431,76 +3437,40 @@ export async function getCompanyPaymentsAction(options?: {
     const timezone = company.timezone || 'America/Chicago'
     const bounds = getReportsPeriodBounds(period, timezone)
 
-    const { data: payments, error: paymentsError } = await supabaseAdmin
-      .from('billing_payments')
-      .select(
-        `
-        id,
-        schedule_id,
-        client_id,
-        company_id,
-        amount,
-        payment_date,
-        method,
-        notes,
+    const [pageResult, summary] = await Promise.all([
+      fetchCompanyPaymentsPage({
+        supabaseAdmin,
+        companyId,
+        bounds,
         source,
-        stripe_payment_intent_id,
-        created_at,
-        schedule:schedules!schedule_id (title, status),
-        client:clients!client_id (name)
-      `
-      )
-      .eq('company_id', companyId)
-      .order('payment_date', { ascending: false })
-      .order('created_at', { ascending: false })
+        search,
+        page,
+        pageSize,
+      }),
+      fetchCompanyPaymentsSummary({
+        supabaseAdmin,
+        companyId,
+        bounds,
+        source,
+        search,
+      }),
+    ])
 
-    if (paymentsError) throw paymentsError
-
-    const rows: CompanyPaymentRow[] = (payments || [])
-      .map((payment: any) => {
-        const schedule = Array.isArray(payment.schedule) ? payment.schedule[0] : payment.schedule
-        const client = Array.isArray(payment.client) ? payment.client[0] : payment.client
-
-        return {
-          id: payment.id,
-          scheduleId: payment.schedule_id,
-          clientId: payment.client_id,
-          companyId: payment.company_id,
-          amount: Number(payment.amount),
-          paymentDate: payment.payment_date,
-          method: payment.method,
-          notes: payment.notes,
-          source: (payment.source === 'stripe' ? 'stripe' : 'manual') as 'manual' | 'stripe',
-          stripePaymentIntentId: payment.stripe_payment_intent_id,
-          createdAt: payment.created_at,
-          clientName: client?.name || 'Unknown client',
-          jobTitle: schedule?.title || 'Job',
-          jobStatus: schedule?.status || 'unknown',
-        }
-      })
-      .filter((payment) => {
-        if (!isInReportsPeriod(payment.paymentDate, bounds)) return false
-        if (source !== 'all' && payment.source !== source) return false
-        if (!search) return true
-        const haystack = [
-          payment.clientName,
-          payment.jobTitle,
-          payment.method,
-          payment.notes || '',
-          payment.source,
-        ]
-          .join(' ')
-          .toLowerCase()
-        return haystack.includes(search)
-      })
+    const rows: CompanyPaymentRow[] = pageResult.payments.map(mapPaymentRow)
 
     return {
       success: true,
       payments: rows,
-      summary: summarizePayments(rows),
+      summary,
       periodLabel: bounds.start
         ? `${bounds.start.toLocaleDateString()} – ${bounds.end.toLocaleDateString()}`
         : 'All time',
+      pagination: {
+        page,
+        pageSize,
+        total: pageResult.total,
+        hasMore: page * pageSize < pageResult.total,
+      },
     }
   } catch (error: any) {
     console.error('getCompanyPaymentsAction error:', error)
@@ -3534,7 +3504,22 @@ async function verifyEstimateOwnership(estimateId: string, clientId: string) {
   return data
 }
 
+async function verifyEstimateCompanyAccess(estimateId: string, clientId: string) {
+  const access = await verifyClientCompanyAccess(clientId)
+  if (!access.ok) return access
+
+  const estimate = await verifyEstimateOwnership(estimateId, clientId)
+  if (!estimate || estimate.company_id !== access.companyId) {
+    return { ok: false as const, error: 'Estimate not found' }
+  }
+
+  return { ...access, estimate }
+}
+
 export async function getClientEstimatesAction(clientId: string) {
+  const access = await verifyClientCompanyAccess(clientId)
+  if (!access.ok) return { success: false, error: access.error }
+
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
@@ -3621,18 +3606,20 @@ export async function createEstimateAction(data: {
   title: string
   description?: string
 }) {
+  const access = await verifyClientCompanyAccess(data.clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
-    if (!(await verifyClientOwnership(data.clientId, data.companyId))) {
-      return { success: false, error: 'Client not found' }
-    }
-
     const { data: estimate, error } = await supabaseAdmin
       .from('estimates')
       .insert({
         client_id: data.clientId,
-        company_id: data.companyId,
+        company_id: access.companyId,
         title: data.title.trim(),
         description: data.description?.trim() || null,
         status: 'draft',
@@ -3662,12 +3649,16 @@ export async function updateEstimateAction(data: {
   description?: string
   status?: string
 }) {
+  const access = await verifyEstimateCompanyAccess(data.id, data.clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const estimate = access.estimate
 
   try {
-    const estimate = await verifyEstimateOwnership(data.id, data.clientId)
-    if (!estimate) return { success: false, error: 'Estimate not found' }
-
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     }
@@ -3701,11 +3692,16 @@ export async function setEstimateStatusAction(data: {
   companyId: string
   status: 'accepted' | 'declined' | 'sent'
 }) {
+  const access = await verifyEstimateCompanyAccess(data.id, data.clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const estimate = access.estimate
 
   try {
-    const estimate = await verifyEstimateOwnership(data.id, data.clientId)
-    if (!estimate) return { success: false, error: 'Estimate not found' }
     if (estimate.status === 'converted') {
       return { success: false, error: 'Cannot change status of a converted estimate' }
     }
@@ -3741,11 +3737,16 @@ export async function deleteEstimateAction(
   clientId: string,
   companyId: string
 ) {
+  const access = await verifyEstimateCompanyAccess(id, clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const estimate = access.estimate
 
   try {
-    const estimate = await verifyEstimateOwnership(id, clientId)
-    if (!estimate) return { success: false, error: 'Estimate not found' }
     if (estimate.status === 'converted') {
       return { success: false, error: 'Cannot delete a converted estimate' }
     }
@@ -3780,11 +3781,16 @@ export async function addEstimateLineItemAction(data: {
   quantity: number
   unitPrice: number
 }) {
+  const access = await verifyEstimateCompanyAccess(data.estimateId, data.clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const estimate = access.estimate
 
   try {
-    const estimate = await verifyEstimateOwnership(data.estimateId, data.clientId)
-    if (!estimate) return { success: false, error: 'Estimate not found' }
     if (estimate.status === 'converted') {
       return { success: false, error: 'Cannot edit a converted estimate' }
     }
@@ -3833,11 +3839,16 @@ export async function updateEstimateLineItemAction(data: {
   quantity: number
   unitPrice: number
 }) {
+  const access = await verifyEstimateCompanyAccess(data.estimateId, data.clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const estimate = access.estimate
 
   try {
-    const estimate = await verifyEstimateOwnership(data.estimateId, data.clientId)
-    if (!estimate) return { success: false, error: 'Estimate not found' }
     if (estimate.status === 'converted') {
       return { success: false, error: 'Cannot edit a converted estimate' }
     }
@@ -3878,11 +3889,16 @@ export async function deleteEstimateLineItemAction(
   clientId: string,
   companyId: string
 ) {
+  const access = await verifyEstimateCompanyAccess(estimateId, clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const estimate = access.estimate
 
   try {
-    const estimate = await verifyEstimateOwnership(estimateId, clientId)
-    if (!estimate) return { success: false, error: 'Estimate not found' }
     if (estimate.status === 'converted') {
       return { success: false, error: 'Cannot edit a converted estimate' }
     }
@@ -3919,11 +3935,16 @@ export async function convertEstimateToJobAction(data: {
   endTime: string
   recurrence?: string
 }) {
+  const access = await verifyEstimateCompanyAccess(data.estimateId, data.clientId)
+  if (!access.ok) return { success: false, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
   const supabaseAdmin = createSupabaseAdmin()
+  const estimate = access.estimate
 
   try {
-    const estimate = await verifyEstimateOwnership(data.estimateId, data.clientId)
-    if (!estimate) return { success: false, error: 'Estimate not found' }
     if (estimate.status === 'converted') {
       return { success: false, error: 'This estimate has already been converted to a job' }
     }
@@ -3939,7 +3960,7 @@ export async function convertEstimateToJobAction(data: {
 
       if (conflicting && conflicting.length > 0) {
         const alternatives = await suggestAlternativeCrews(
-          data.companyId,
+          access.companyId,
           data.startTime,
           data.endTime,
           data.crewId
@@ -3982,13 +4003,13 @@ export async function convertEstimateToJobAction(data: {
 
     if (scheduleError || !newSchedule) throw scheduleError
 
-    const stripeStatus = await getCompanyStripeStatus(data.companyId)
+    const stripeStatus = await getCompanyStripeStatus(access.companyId)
     if (stripeStatus.billingEnabled) {
       await seedBillingFromEstimate(
         supabaseAdmin,
         newSchedule.id,
         data.clientId,
-        data.companyId,
+        access.companyId,
         data.estimateId,
         data.title,
         jobPrice
@@ -4434,24 +4455,40 @@ export const getDashboardShellDataAction = cache(async () => {
   }
 })
 
-export async function getClientsListAction() {
+export async function getClientsListAction(options?: {
+  page?: number
+  pageSize?: number
+  status?: 'active' | 'archived' | 'all'
+}) {
   try {
     const check = await verifyCompanyStaff()
     if (!check.ok) return { success: false as const, error: check.error }
 
     const supabaseAdmin = createSupabaseAdmin()
-    const { data, error } = await supabaseAdmin
+    const page = Math.max(1, options?.page ?? 1)
+    const pageSize = Math.min(100, Math.max(1, options?.pageSize ?? DEFAULT_CLIENTS_PAGE_SIZE))
+    const status = options?.status ?? 'all'
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+
+    let clientsQuery = supabaseAdmin
       .from('clients')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('company_id', check.companyId)
       .order('created_at', { ascending: false })
+
+    if (status !== 'all') {
+      clientsQuery = clientsQuery.eq('status', status)
+    }
+
+    const { data, error, count } = await clientsQuery.range(from, to)
 
     if (error) {
       console.error('getClientsListAction error:', error)
       return { success: false as const, error: error.message }
     }
 
-    const clientIds = (data || []).map((c) => c.id)
+    const clientIds = (data || []).map((client) => client.id)
     const statsMap: Record<
       string,
       { jobsInProgress: number; nextJobDate?: string; amountDue: number }
@@ -4459,28 +4496,26 @@ export async function getClientsListAction() {
 
     if (clientIds.length > 0) {
       const now = new Date().toISOString()
-      const [{ data: schedules }, { data: lineItems }, { data: payments }] =
-        await Promise.all([
-          supabaseAdmin
-            .from('schedules')
-            .select('id, client_id, status, start_time, end_time, price')
-            .in('client_id', clientIds)
-            .in('status', ['scheduled', 'in_progress']),
-          supabaseAdmin
-            .from('billing_line_items')
-            .select('schedule_id, client_id, amount')
-            .eq('company_id', check.companyId),
-          supabaseAdmin
-            .from('billing_payments')
-            .select('schedule_id, amount')
-            .eq('company_id', check.companyId),
-        ])
+      const { data: schedules, error: schedulesError } = await supabaseAdmin
+        .from('schedules')
+        .select('id, client_id, status, start_time, end_time, price')
+        .in('client_id', clientIds)
+        .in('status', ['scheduled', 'in_progress'])
+
+      if (schedulesError) throw schedulesError
+
+      const scheduleIds = (schedules || []).map((schedule) => schedule.id)
+      const { lineItems, payments } = await fetchBillingRowsForScheduleIds(
+        supabaseAdmin,
+        check.companyId,
+        scheduleIds
+      )
 
       const { computeOpenJobBalancesByClient } = await import('@/lib/billing')
       const { byClient: amountDueByClient } = computeOpenJobBalancesByClient(
         schedules || [],
-        lineItems || [],
-        payments || []
+        lineItems,
+        payments
       )
 
       const { countActiveClientJobs } = await import('@/lib/client-job-stats')
@@ -4501,7 +4536,10 @@ export async function getClientsListAction() {
 
           for (const schedule of clientSchedules) {
             if (schedule.status === 'scheduled' && schedule.start_time > now) {
-              if (!statsMap[clientId].nextJobDate || schedule.start_time < statsMap[clientId].nextJobDate!) {
+              if (
+                !statsMap[clientId].nextJobDate ||
+                schedule.start_time < statsMap[clientId].nextJobDate!
+              ) {
                 statsMap[clientId].nextJobDate = schedule.start_time
               }
             }
@@ -4524,7 +4562,18 @@ export async function getClientsListAction() {
       amountDue: statsMap[client.id]?.amountDue ?? 0,
     }))
 
-    return { success: true as const, data: clients }
+    const total = count || 0
+
+    return {
+      success: true as const,
+      data: clients,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        hasMore: page * pageSize < total,
+      },
+    }
   } catch (error: any) {
     console.error('getClientsListAction error:', error)
     return { success: false as const, error: error.message || 'Failed to load clients' }
@@ -4739,6 +4788,7 @@ export async function getSettingsPageInitialDataAction() {
       timezone: string | null
       business_hours_start: string | null
       business_hours_end: string | null
+      business_open_weekdays: number[] | null
       address: string | null
       address_street: string | null
       address_unit: string | null
@@ -4764,6 +4814,7 @@ export async function getSettingsPageInitialDataAction() {
           timezone,
           business_hours_start,
           business_hours_end,
+          business_open_weekdays,
           address,
           address_street,
           address_unit,
@@ -5184,50 +5235,17 @@ export async function getTeamMemberDashboardAction(): Promise<
       return { success: false, error: scheduleError.message }
     }
 
-    const clientIds = [...new Set((schedules || []).map((schedule) => schedule.client_id))]
-    for (const clientId of clientIds) {
-      await syncScheduleStatusesForClient(supabaseAdmin, clientId)
-    }
+    const companyId = session.profile.company_id
+    const { queueCompanyScheduleStatusSync } = await import('@/lib/schedule-status-sync')
+    queueCompanyScheduleStatusSync(supabaseAdmin, companyId)
 
-    let refreshedSchedules = schedules || []
-    if (clientIds.length > 0) {
-      const { data: latestSchedules, error: refreshError } = await supabaseAdmin
-        .from('schedules')
-        .select(`
-          id,
-          title,
-          start_time,
-          end_time,
-          status,
-          client_id,
-          client:clients!client_id (
-            name,
-            address,
-            address_street,
-            address_unit,
-            address_city,
-            address_state,
-            address_zip
-          )
-        `)
-        .eq('crew_id', crewId)
-        .neq('status', 'cancelled')
-        .lt('start_time', endIso)
-        .gt('end_time', startIso)
-        .order('start_time', { ascending: true })
-
-      if (!refreshError && latestSchedules) {
-        refreshedSchedules = latestSchedules
-      }
-    }
-
-    const jobs = buildTeamMemberJobs(refreshedSchedules, timezone, now)
+    const jobs = buildTeamMemberJobs(schedules || [], timezone, now)
     const routeData = await buildTeamMemberRouteData({
       companyName: companyDetails.name || 'Company',
       companyAddress: companyDetails.address,
       companyStructuredAddress: structuredAddressFromCompany(companyDetails),
       crew,
-      schedules: refreshedSchedules,
+      schedules: schedules || [],
     })
 
     return {
@@ -5250,17 +5268,181 @@ export async function getTeamMemberDashboardAction(): Promise<
   }
 }
 
-async function syncCompanyScheduleStatuses(companyId: string) {
-  const supabaseAdmin = createSupabaseAdmin()
-  const { data: clients } = await supabaseAdmin
+async function fetchDashboardMonthKpis(
+  supabaseAdmin: ReturnType<typeof createSupabaseAdmin>,
+  companyId: string,
+  timezone: string,
+  now: Date
+): Promise<DashboardMonthlyKpis> {
+  const { data: clients, error: clientsError } = await supabaseAdmin
     .from('clients')
-    .select('id')
+    .select('id, name, status')
     .eq('company_id', companyId)
 
-  if (!clients?.length) return
+  if (clientsError) throw clientsError
 
-  for (const client of clients) {
-    await syncScheduleStatusesForClient(supabaseAdmin, client.id)
+  const clientIds = (clients || []).map((client) => client.id)
+
+  const [billingBundle, schedules] = await Promise.all([
+    fetchReportsBillingBundle({
+      supabaseAdmin,
+      companyId,
+      clientIds,
+      period: 'mtd',
+      timezone,
+      now,
+    }),
+    fetchMtdDashboardSchedules({
+      supabaseAdmin,
+      clientIds,
+      timezone,
+      now,
+    }),
+  ])
+
+  const { lineItems, payments, invoiceDocuments, scheduleStatusCounts } = billingBundle
+
+  const periodStart = getReportsPeriodStart('mtd', timezone, now)
+  const periodStartIso = periodStart ? periodStart.toISOString() : null
+
+  let leadsConverted = 0
+  let estimatesSent = 0
+
+  const leadsQuery = supabaseAdmin
+    .from('leads')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId)
+    .not('converted_at', 'is', null)
+
+  if (periodStartIso) {
+    leadsQuery.gte('converted_at', periodStartIso)
+  }
+
+  const { count: leadsConvertedCount, error: leadsError } = await leadsQuery
+  if (leadsError && leadsError.code !== '42P01') throw leadsError
+  if (!leadsError) leadsConverted = leadsConvertedCount || 0
+
+  const estimatesQuery = supabaseAdmin
+    .from('estimates')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId)
+    .in('status', ['sent', 'accepted', 'declined', 'converted'])
+
+  if (periodStartIso) {
+    estimatesQuery.gte('updated_at', periodStartIso)
+  }
+
+  const { count: estimatesSentCount, error: estimatesError } = await estimatesQuery
+  if (estimatesError) throw estimatesError
+  estimatesSent = estimatesSentCount || 0
+
+  const reports = buildReportsData({
+    period: 'mtd',
+    timezone,
+    lineItems,
+    payments,
+    schedules: billingBundle.schedules,
+    clients: clients || [],
+    invoiceDocuments,
+    leadsConverted,
+    estimatesSent,
+    scheduleStatusCounts,
+    now,
+  })
+
+  let recurringSeries: import('@/lib/schedule-calendar').RecurringSeriesAnchor[] = []
+
+  if (clientIds.length > 0) {
+    const recurringAnchors = schedules.filter(
+      (schedule) =>
+        !!schedule.recurring_rule_id &&
+        ['scheduled', 'in_progress'].includes(schedule.status)
+    )
+    const recurringRuleIds = [
+      ...new Set(
+        recurringAnchors
+          .map((schedule) => schedule.recurring_rule_id)
+          .filter((ruleId): ruleId is string => !!ruleId)
+      ),
+    ]
+
+    if (recurringRuleIds.length > 0) {
+      const { data: rulesData, error: rulesError } = await supabaseAdmin
+        .from('recurring_rules')
+        .select('id, frequency, interval')
+        .in('id', recurringRuleIds)
+
+      if (rulesError) throw rulesError
+
+      const { selectRecurringSeriesAnchors } = await import('@/lib/schedule-calendar')
+      const rulesById = new Map(
+        (rulesData || []).map((rule) => [
+          rule.id,
+          {
+            id: rule.id,
+            frequency: rule.frequency as 'daily' | 'weekly' | 'monthly',
+            interval: rule.interval,
+          },
+        ])
+      )
+
+      recurringSeries = selectRecurringSeriesAnchors(
+        recurringAnchors.map((schedule) => ({
+          id: schedule.id,
+          title: schedule.title,
+          start_time: schedule.start_time,
+          end_time: schedule.end_time,
+          status: schedule.status,
+          client_id: schedule.client_id,
+          crew_id: null,
+          recurring_rule_id: schedule.recurring_rule_id,
+          occurrence_origin_start: schedule.occurrence_origin_start,
+          client: null,
+          crew: null,
+        })),
+        rulesById
+      )
+    }
+  }
+
+  const mtdJobCounts = countMtdJobOccurrences({
+    schedules,
+    recurringSeries,
+    timezone,
+    now,
+  })
+
+  const stripeStatus = await getCompanyStripeStatus(companyId)
+  const mtdBounds = getReportsPeriodBounds('mtd', timezone, now)
+  const recordedAllPayments = sumRecordedPaymentsInPeriod(payments, timezone, now)
+  const recordedStripePayments = sumRecordedStripePaymentsInPeriod(payments, timezone, now)
+  const collected = await resolveMonthCollectedAmount({
+    companyId,
+    stripeAccountId: stripeStatus.stripeAccountId,
+    billingEnabled: stripeStatus.billingEnabled,
+    bounds: {
+      start: mtdBounds.start ?? new Date(0),
+      end: mtdBounds.end,
+    },
+    recordedAllPayments,
+    recordedStripePayments,
+  })
+
+  return {
+    monthLabel: new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      month: 'long',
+      year: 'numeric',
+    }).format(now),
+    totalBilled: reports.summary.totalBilled,
+    totalCollected: collected.amount,
+    collectedSource: collected.source,
+    balanceDue: reports.summary.balanceDue,
+    jobsCompleted: mtdJobCounts.completed,
+    jobsScheduled: mtdJobCounts.open,
+    activeClients: reports.summary.activeClients,
+    leadsConverted: reports.summary.leadsConverted,
+    estimatesSent: reports.summary.estimatesSent,
   }
 }
 
@@ -5274,12 +5456,13 @@ export async function getDashboardOverviewAction(): Promise<
     }
 
     const companyId = session.profile.company_id
-    await syncCompanyScheduleStatuses(companyId)
-
     const supabaseAdmin = createSupabaseAdmin()
+    const { queueCompanyScheduleStatusSync } = await import('@/lib/schedule-status-sync')
+    queueCompanyScheduleStatusSync(supabaseAdmin, companyId)
+
     const { data: company, error: companyError } = await supabaseAdmin
       .from('companies')
-      .select('timezone, business_hours_start, business_hours_end, is_solo_business')
+      .select('timezone, business_hours_start, business_hours_end, business_open_weekdays, is_solo_business')
       .eq('id', companyId)
       .single()
 
@@ -5290,9 +5473,45 @@ export async function getDashboardOverviewAction(): Promise<
     const timezone = company.timezone || 'America/Chicago'
     const businessHours = normalizeBusinessHours(
       company.business_hours_start,
-      company.business_hours_end
+      company.business_hours_end,
+      company.business_open_weekdays
     )
     const now = new Date()
+    const closedDayToday = isClosedDayToday(timezone, businessHours, now)
+
+    if (closedDayToday) {
+      const { getCompanySoloContext } = await import('@/lib/solo-business-server')
+      const soloContext = await getCompanySoloContext(companyId)
+      const todayStr = formatCompanyDateLabel(timezone, now, 0)
+      const weekday = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        weekday: 'long',
+      }).format(now)
+      const monthlyKpis = await fetchDashboardMonthKpis(
+        supabaseAdmin,
+        companyId,
+        timezone,
+        now
+      )
+
+      return {
+        success: true,
+        data: {
+          timezone,
+          businessHours,
+          dashboardMode: 'closed_day',
+          crews: [],
+          jobs: [],
+          laneCount: 1,
+          timelineMode: 'today',
+          timelineDateLabel: todayStr,
+          closedDayLabel: weekday,
+          monthlyKpis,
+          isSoloBusiness: soloContext.isSoloBusiness,
+        },
+      }
+    }
+
     const showTomorrow = shouldShowTomorrowTimeline(timezone, businessHours, now)
     const timelineMode = showTomorrow ? 'tomorrow' : 'today'
     const timelineDayOffset = showTomorrow ? 1 : 0
@@ -5386,6 +5605,7 @@ export async function getDashboardOverviewAction(): Promise<
       data: {
         timezone,
         businessHours,
+        dashboardMode: 'live',
         crews,
         jobs: timelineJobs,
         laneCount,
@@ -5420,6 +5640,9 @@ export async function getDashboardMapDataAction(): Promise<
         name,
         address,
         timezone,
+        business_hours_start,
+        business_hours_end,
+        business_open_weekdays,
         address_street,
         address_unit,
         address_city,
@@ -5434,11 +5657,12 @@ export async function getDashboardMapDataAction(): Promise<
     }
 
     const companyTimezone = company.timezone || timezone
-    const { startIso: todayStartIso, endIso: todayEndIso } = getCompanyDayBounds(
-      companyTimezone,
-      now,
-      0
+    const businessHours = normalizeBusinessHours(
+      company.business_hours_start,
+      company.business_hours_end,
+      company.business_open_weekdays
     )
+    const closedDayToday = isClosedDayToday(companyTimezone, businessHours, now)
 
     const { data: clients } = await supabaseAdmin
       .from('clients')
@@ -5446,38 +5670,85 @@ export async function getDashboardMapDataAction(): Promise<
       .eq('company_id', companyId)
 
     const clientIds = clients?.map((client) => client.id) || []
-    let todaySchedules: any[] = []
+    let schedules: any[] = []
+    let mapMode: 'today' | 'upcoming_open_days' = 'today'
+    let previewRangeLabel: string | undefined
+
+    const scheduleSelect = `
+      id,
+      title,
+      start_time,
+      end_time,
+      status,
+      crew_id,
+      client:clients!client_id (
+        name,
+        address,
+        address_street,
+        address_unit,
+        address_city,
+        address_state,
+        address_zip
+      ),
+      crew:crews!crew_id (id, name)
+    `
 
     if (clientIds.length > 0) {
-      const { data: scheduleData, error: scheduleError } = await supabaseAdmin
-        .from('schedules')
-        .select(`
-          id,
-          title,
-          start_time,
-          end_time,
-          status,
-          crew_id,
-          client:clients!client_id (
-            name,
-            address,
-            address_street,
-            address_unit,
-            address_city,
-            address_state,
-            address_zip
-          ),
-          crew:crews!crew_id (id, name)
-        `)
-        .in('client_id', clientIds)
-        .neq('status', 'cancelled')
-        .lt('start_time', todayEndIso)
-        .gt('end_time', todayStartIso)
+      if (closedDayToday) {
+        const upcomingOpenDays = getNextOpenDayDates(
+          companyTimezone,
+          businessHours.openWeekdays,
+          UPCOMING_OPEN_DAYS_PREVIEW_COUNT,
+          now
+        )
+        previewRangeLabel = formatUpcomingOpenDaysRangeLabel(upcomingOpenDays)
+        mapMode = 'upcoming_open_days'
 
-      if (scheduleError) {
-        return { success: false, error: scheduleError.message }
+        if (upcomingOpenDays.length > 0) {
+          const rangeStartIso = getCompanyDayBounds(
+            companyTimezone,
+            now,
+            upcomingOpenDays[0].dayOffset
+          ).startIso
+          const rangeEndIso = getCompanyDayBounds(
+            companyTimezone,
+            now,
+            upcomingOpenDays[upcomingOpenDays.length - 1].dayOffset
+          ).endIso
+
+          const { data: scheduleData, error: scheduleError } = await supabaseAdmin
+            .from('schedules')
+            .select(scheduleSelect)
+            .in('client_id', clientIds)
+            .neq('status', 'cancelled')
+            .lt('start_time', rangeEndIso)
+            .gt('end_time', rangeStartIso)
+
+          if (scheduleError) {
+            return { success: false, error: scheduleError.message }
+          }
+          schedules = scheduleData || []
+        }
+      } else {
+        const { startIso: todayStartIso, endIso: todayEndIso } = getCompanyDayBounds(
+          companyTimezone,
+          now,
+          0
+        )
+
+        const { data: scheduleData, error: scheduleError } = await supabaseAdmin
+          .from('schedules')
+          .select(scheduleSelect)
+          .in('client_id', clientIds)
+          .neq('status', 'cancelled')
+          .lt('start_time', todayEndIso)
+          .gt('end_time', todayStartIso)
+
+        if (scheduleError) {
+          return { success: false, error: scheduleError.message }
+        }
+        schedules = scheduleData || []
       }
-      todaySchedules = scheduleData || []
     }
 
     const companyStructuredAddress = structuredAddressFromCompanyRow(company)
@@ -5486,9 +5757,11 @@ export async function getDashboardMapDataAction(): Promise<
       companyName: company.name,
       companyAddress: company.address,
       companyStructuredAddress,
-      schedules: todaySchedules,
+      schedules,
       timezone: companyTimezone,
       now,
+      mode: mapMode,
+      previewRangeLabel,
     })
 
     return { success: true, data: mapData }
@@ -5507,12 +5780,13 @@ export async function getScheduleCalendarAction(weekOffset = 0): Promise<
     if (!check.ok) return { success: false, error: check.error }
 
     const companyId = check.companyId
-    await syncCompanyScheduleStatuses(companyId)
-
     const supabaseAdmin = createSupabaseAdmin()
+    const { queueCompanyScheduleStatusSync } = await import('@/lib/schedule-status-sync')
+    queueCompanyScheduleStatusSync(supabaseAdmin, companyId)
+
     const { data: company, error: companyError } = await supabaseAdmin
       .from('companies')
-      .select('timezone, business_hours_start, business_hours_end')
+      .select('timezone, business_hours_start, business_hours_end, business_open_weekdays')
       .eq('id', companyId)
       .single()
 
@@ -5523,7 +5797,8 @@ export async function getScheduleCalendarAction(weekOffset = 0): Promise<
     const timezone = company.timezone || 'America/Chicago'
     const businessHours = normalizeBusinessHours(
       company.business_hours_start,
-      company.business_hours_end
+      company.business_hours_end,
+      company.business_open_weekdays
     )
 
     const { getCompanyWeekDayBounds, buildScheduleCalendarData } = await import(
@@ -6166,6 +6441,11 @@ export async function getCompanyLogoDisplayUrlAction(
   logoRef: string | null | undefined
 ): Promise<{ success: true; url: string | null } | { success: false; error: string }> {
   try {
+    const session = await getSessionProfile()
+    if (!session) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
     const { getCompanyLogoStoragePath } = await import('@/lib/company-logo')
     const storagePath = getCompanyLogoStoragePath(logoRef)
 
@@ -6384,6 +6664,7 @@ export async function updateCompanySettingsAction(data: {
     timezone: data.timezone,
     business_hours_start: data.businessHours.start,
     business_hours_end: data.businessHours.end,
+    business_open_weekdays: data.businessHours.openWeekdays,
     address_street: normalizedAddress.street,
     address_unit: normalizedAddress.unit || null,
     address_city: normalizedAddress.city,
@@ -7277,70 +7558,20 @@ export async function getReportsDataAction(
 
     const clientIds = (clients || []).map((client) => client.id)
 
-    let lineItems: Array<{
-      id: string
-      client_id: string
-      schedule_id: string
-      amount: number
-      created_at: string
-    }> = []
-    let payments: Array<{
-      id: string
-      client_id: string
-      schedule_id: string
-      amount: number
-      payment_date: string
-    }> = []
-    let schedules: Array<{
-      id: string
-      client_id: string
-      title: string
-      status: string
-      start_time: string
-      end_time: string
-      price: number | null
-      recurring_rule_id: string | null
-    }> = []
-    let invoiceDocuments: Array<{
-      schedule_id: string
-      id: string
-      created_at: string
-    }> = []
-
-    if (clientIds.length > 0) {
-      const [linesResult, paymentsResult, schedulesResult, invoiceDocsResult] = await Promise.all([
-        supabaseAdmin
-          .from('billing_line_items')
-          .select('id, client_id, schedule_id, amount, created_at')
-          .eq('company_id', companyId),
-        supabaseAdmin
-          .from('billing_payments')
-          .select('id, client_id, schedule_id, amount, payment_date')
-          .eq('company_id', companyId),
-        supabaseAdmin
-          .from('schedules')
-          .select('id, client_id, title, status, start_time, end_time, price, recurring_rule_id')
-          .in('client_id', clientIds),
-        supabaseAdmin
-          .from('client_documents')
-          .select('id, schedule_id, created_at')
-          .eq('company_id', companyId)
-          .eq('source', 'invoice')
-          .not('schedule_id', 'is', null),
-      ])
-
-      if (linesResult.error) throw linesResult.error
-      if (paymentsResult.error) throw paymentsResult.error
-      if (schedulesResult.error) throw schedulesResult.error
-      if (invoiceDocsResult.error && invoiceDocsResult.error.code !== '42703') {
-        throw invoiceDocsResult.error
-      }
-
-      lineItems = linesResult.data || []
-      payments = paymentsResult.data || []
-      schedules = schedulesResult.data || []
-      invoiceDocuments = invoiceDocsResult.error ? [] : invoiceDocsResult.data || []
-    }
+    const {
+      schedules,
+      lineItems,
+      payments,
+      invoiceDocuments,
+      scheduleStatusCounts,
+    } = await fetchReportsBillingBundle({
+      supabaseAdmin,
+      companyId,
+      clientIds,
+      period,
+      timezone,
+      now,
+    })
 
     const periodStart = getReportsPeriodStart(period, timezone, now)
     const periodStartIso = periodStart ? periodStart.toISOString() : null
@@ -7386,6 +7617,7 @@ export async function getReportsDataAction(
       invoiceDocuments,
       leadsConverted,
       estimatesSent,
+      scheduleStatusCounts,
       now,
     })
 
@@ -7469,18 +7701,6 @@ export async function convertLeadToClientAction(leadId: string) {
 // ============================================
 // Messaging
 // ============================================
-
-async function verifyClientCompanyAccess(clientId: string) {
-  const check = await verifyCompanyStaff()
-  if (!check.ok) return check
-
-  const companyId = await getCompanyIdForClient(clientId)
-  if (!companyId || companyId !== check.companyId) {
-    return { ok: false as const, error: 'Client not found' }
-  }
-
-  return { ...check, companyId }
-}
 
 export async function getMessagingThreadAction(
   clientId: string,

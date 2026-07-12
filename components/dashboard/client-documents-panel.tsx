@@ -30,7 +30,7 @@ export function ClientDocumentsPanel({
         initialDocuments={initialDocuments}
         initialJobs={initialJobs}
         title="Documents"
-        description="Invoices, estimates, and files from your service provider — organized by job."
+        description="Invoices, estimates, contracts, and files from your service provider — organized by job."
       />
     )
   }

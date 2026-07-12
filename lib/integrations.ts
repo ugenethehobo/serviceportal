@@ -1,3 +1,6 @@
+/** Flip to true when QuickBooks OAuth + sync is ready for production use. */
+export const QUICKBOOKS_INTEGRATION_ENABLED = false
+
 export type IntegrationProvider = 'quickbooks' | 'google_calendar' | 'zapier'
 
 export type IntegrationStatus = 'disconnected' | 'connected' | 'error'
@@ -35,6 +38,8 @@ export const ZAPIER_EVENT_TYPES = [
   'payment_received',
   'job_scheduled',
   'estimate_sent',
+  'contract_sent',
+  'contract_signed',
   'lead_created',
 ] as const
 
@@ -46,6 +51,8 @@ export const ZAPIER_EVENT_LABELS: Record<ZapierEventType, string> = {
   payment_received: 'Payment recorded',
   job_scheduled: 'Job scheduled or rescheduled',
   estimate_sent: 'Estimate sent to client',
+  contract_sent: 'Contract sent to client',
+  contract_signed: 'Contract signed by client',
   lead_created: 'Lead created',
 }
 
@@ -77,6 +84,21 @@ export const ZAPIER_EVENT_PAYLOAD_FIELDS: Record<ZapierEventType, readonly strin
     'estimate_total',
     'client_name',
     'client_email',
+  ],
+  contract_sent: [
+    'contract_id',
+    'client_id',
+    'schedule_id',
+    'contract_title',
+    'client_name',
+    'client_email',
+  ],
+  contract_signed: [
+    'contract_id',
+    'client_id',
+    'schedule_id',
+    'contract_title',
+    'client_name',
   ],
   job_scheduled: [
     'schedule_id',
@@ -132,6 +154,25 @@ export function getZapierTestPayload(event: ZapierEventType): Record<string, unk
         estimate_total: 1200,
         client_name: 'Sample Client',
         client_email: 'client@example.com',
+      }
+    case 'contract_sent':
+      return {
+        test: true,
+        contract_id: '00000000-0000-0000-0000-000000000006',
+        client_id: '00000000-0000-0000-0000-000000000002',
+        schedule_id: '00000000-0000-0000-0000-000000000001',
+        contract_title: 'Sample service agreement',
+        client_name: 'Sample Client',
+        client_email: 'client@example.com',
+      }
+    case 'contract_signed':
+      return {
+        test: true,
+        contract_id: '00000000-0000-0000-0000-000000000006',
+        client_id: '00000000-0000-0000-0000-000000000002',
+        schedule_id: '00000000-0000-0000-0000-000000000001',
+        contract_title: 'Sample service agreement',
+        client_name: 'Sample Client',
       }
     case 'job_scheduled':
       return {

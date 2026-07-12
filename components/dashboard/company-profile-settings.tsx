@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { TimePicker } from '@/components/ui/time-picker'
 import { Separator } from '@/components/ui/separator'
+import { BusinessOpenDaysPicker } from '@/components/dashboard/business-open-days-picker'
 import { CompanyAddressForm } from '@/components/dashboard/company-address-form'
 import { CompanyLogoUpload } from '@/components/dashboard/company-logo-upload'
 
@@ -44,6 +45,7 @@ type CompanyRow = {
   timezone?: string | null
   business_hours_start?: string | null
   business_hours_end?: string | null
+  business_open_weekdays?: number[] | null
   address?: string | null
   address_street?: string | null
   address_unit?: string | null
@@ -138,6 +140,7 @@ export function CompanyProfileSettings({
       company.timezone,
       company.business_hours_start,
       company.business_hours_end,
+      company.business_open_weekdays?.join(','),
       company.address_street,
       company.address_unit,
       company.address_city,
@@ -157,7 +160,8 @@ export function CompanyProfileSettings({
       timezone: company.timezone || 'America/Chicago',
       businessHours: normalizeBusinessHours(
         company.business_hours_start,
-        company.business_hours_end
+        company.business_hours_end,
+        company.business_open_weekdays
       ),
     }
 
@@ -204,7 +208,12 @@ export function CompanyProfileSettings({
     setAddressErrors({})
 
     if (!isValidBusinessHoursRange(businessHours)) {
-      updateSaveStatus('error', 'Business hours end must be after start')
+      updateSaveStatus(
+        'error',
+        businessHours.openWeekdays.length === 0
+          ? 'Select at least one open day'
+          : 'Business hours end must be after start'
+      )
       return
     }
 
@@ -384,39 +393,48 @@ export function CompanyProfileSettings({
 
           <Separator />
 
-          <div>
-            <Label>Business hours</Label>
-            <p className="text-xs text-muted-foreground mt-0.5 mb-3">
-              Dashboard timeline window · default 8:00 AM – 5:00 PM
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="hours-start" className="text-xs text-muted-foreground">
-                  Opens
-                </Label>
-                <TimePicker
-                  id="hours-start"
-                  value={businessHours.start}
-                  onChange={(value) =>
-                    setBusinessHours((current) => ({ ...current, start: value }))
-                  }
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="hours-end" className="text-xs text-muted-foreground">
-                  Closes
-                </Label>
-                <TimePicker
-                  id="hours-end"
-                  value={businessHours.end}
-                  onChange={(value) =>
-                    setBusinessHours((current) => ({ ...current, end: value }))
-                  }
-                  className="mt-1"
-                />
+          <div className="space-y-4">
+            <div>
+              <Label>Business hours</Label>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-3">
+                Daily operating window for scheduling, the calendar, and online booking
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="hours-start" className="text-xs text-muted-foreground">
+                    Opens
+                  </Label>
+                  <TimePicker
+                    id="hours-start"
+                    value={businessHours.start}
+                    onChange={(value) =>
+                      setBusinessHours((current) => ({ ...current, start: value }))
+                    }
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="hours-end" className="text-xs text-muted-foreground">
+                    Closes
+                  </Label>
+                  <TimePicker
+                    id="hours-end"
+                    value={businessHours.end}
+                    onChange={(value) =>
+                      setBusinessHours((current) => ({ ...current, end: value }))
+                    }
+                    className="mt-1"
+                  />
+                </div>
               </div>
             </div>
+
+            <BusinessOpenDaysPicker
+              value={businessHours.openWeekdays}
+              onChange={(openWeekdays) =>
+                setBusinessHours((current) => ({ ...current, openWeekdays }))
+              }
+            />
           </div>
         </div>
       </SettingsSubsection>

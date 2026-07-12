@@ -47,6 +47,15 @@ export type DocumentRenderData = {
     title: string
     description: string | null
   }
+  contract?: {
+    serviceName: string | null
+    signedDate: string | null
+  }
+  fieldValues?: Record<string, string>
+  signatures?: {
+    client?: Uint8Array | null
+    clientInitials?: Uint8Array | null
+  }
   lineItems: Array<{
     description: string
     quantity: number
@@ -76,6 +85,10 @@ type RenderContext = {
   page: PDFPage
   fonts: FontSet
   data: DocumentRenderData
+  signatureImages: {
+    client: PDFImage | null
+    clientInitials: PDFImage | null
+  }
   pageWidth: number
   pageHeight: number
   margin: number
@@ -103,6 +116,7 @@ export async function renderDocumentPdf(data: DocumentRenderData): Promise<Uint8
   }
 
   const logoImage = await resolveLogoImage(pdf, data.company)
+  const signatureImages = await resolveSignatureImages(pdf, data.signatures)
 
   const visibleElements = data.template.elements.filter((element) => element.visible)
   const tableElement = visibleElements.find((element) => element.fieldKey === 'table.line_items')
@@ -134,6 +148,7 @@ export async function renderDocumentPdf(data: DocumentRenderData): Promise<Uint8
     pageHeight,
     margin: MARGIN,
     logoImage,
+    signatureImages,
   }
 
   for (const element of staticElements) {
@@ -156,6 +171,27 @@ export async function renderDocumentPdf(data: DocumentRenderData): Promise<Uint8
   }
 
   return pdf.save()
+}
+
+async function resolveSignatureImages(
+  pdf: PDFDocument,
+  signatures: DocumentRenderData['signatures']
+): Promise<RenderContext['signatureImages']> {
+  const { embedLogoInPdf } = await import('@/lib/document-template-logo-embed')
+
+  const embed = async (bytes?: Uint8Array | null) => {
+    if (!bytes?.length) return null
+    try {
+      return await embedLogoInPdf(pdf, bytes)
+    } catch {
+      return null
+    }
+  }
+
+  return {
+    client: await embed(signatures?.client),
+    clientInitials: await embed(signatures?.clientInitials),
+  }
 }
 
 async function resolveLogoImage(
@@ -195,6 +231,12 @@ function renderElement(ctx: RenderContext, element: DocumentElement, topY: numbe
       return renderLine(ctx, element, topY)
     case 'text':
       return renderStaticText(ctx, element, topY)
+    case 'signature':
+      return renderSignatureField(ctx, element, topY, 'signature')
+    case 'initial':
+      return renderSignatureField(ctx, element, topY, 'initial')
+    case 'input':
+      return renderInputField(ctx, element, topY)
     case 'field':
     default:
       return renderField(ctx, element, topY)
@@ -240,7 +282,7 @@ function renderField(ctx: RenderContext, element: DocumentElement, topY: number)
         ctx,
         element,
         topY,
-        `${ctx.data.kind === 'invoice' ? 'Invoice' : 'Estimate'} #: ${ctx.data.document.number}`,
+        `${ctx.data.kind === 'invoice' ? 'Invoice' : ctx.data.kind === 'contract' ? 'Contract' : 'Estimate'} #: ${ctx.data.document.number}`,
         'muted'
       )
     case 'document.date':
@@ -286,9 +328,124 @@ function renderField(ctx: RenderContext, element: DocumentElement, topY: number)
       return renderEstimateTotal(ctx, element, topY)
     case 'footer.text':
       return renderFooter(ctx, element, topY)
+    case 'service.name':
+      return drawOptionalText(
+        ctx,
+        element,
+        topY,
+        ctx.data.contract?.serviceName,
+        'primary'
+      )
+    case 'contract.signed_date':
+      return drawOptionalText(
+        ctx,
+        element,
+        topY,
+        ctx.data.contract?.signedDate
+          ? `Signed: ${ctx.data.contract.signedDate}`
+          : 'Signed: _____________',
+        'muted'
+      )
+    case 'sign.client':
+      return renderSignatureField(ctx, element, topY, 'signature')
+    case 'sign.client.initials':
+      return renderSignatureField(ctx, element, topY, 'initial')
     default:
+      if (fieldKey.startsWith('input.')) {
+        return renderInputField(ctx, element, topY)
+      }
       return topY
   }
+}
+
+function renderInputField(ctx: RenderContext, element: DocumentElement, topY: number): number {
+  const width = element.width || 260
+  const height = element.height || 48
+  const label = element.label?.trim() || 'Response'
+  const fieldKey = element.fieldKey || element.id
+  const value = ctx.data.fieldValues?.[fieldKey]?.trim() || ''
+
+  if (!value) {
+    const borderColor = resolveBrandColor(ctx.data.template, 'border')
+    ctx.page.drawRectangle({
+      x: element.x,
+      y: pdfY(ctx, topY + height),
+      width,
+      height,
+      borderColor,
+      borderWidth: 1,
+    })
+  }
+
+  drawTextBlock(ctx, { ...element, fontSize: element.fontSize || 9 }, topY + 4, label, 'muted')
+
+  if (value) {
+    drawWrappedOptionalText(ctx, element, topY + 18, value, Math.floor(width / 6), 'primary')
+  } else {
+    drawTextBlock(
+      ctx,
+      { ...element, fontSize: element.fontSize || 10, color: '#9ca3af' },
+      topY + 22,
+      'Client fills in when signing',
+      'muted'
+    )
+  }
+
+  return topY + height + 8
+}
+
+function renderSignatureField(
+  ctx: RenderContext,
+  element: DocumentElement,
+  topY: number,
+  variant: 'signature' | 'initial'
+): number {
+  const width = element.width || (variant === 'signature' ? 260 : 120)
+  const height = element.height || (variant === 'signature' ? 72 : 48)
+  const label =
+    element.label?.trim() || (variant === 'signature' ? 'Client signature' : 'Client initials')
+  const image =
+    variant === 'signature'
+      ? ctx.signatureImages.client
+      : ctx.signatureImages.clientInitials
+
+  if (!image) {
+    const borderColor = resolveBrandColor(ctx.data.template, 'border')
+    ctx.page.drawRectangle({
+      x: element.x,
+      y: pdfY(ctx, topY + height),
+      width,
+      height,
+      borderColor,
+      borderWidth: 1,
+    })
+  }
+
+  if (image) {
+    const padding = 6
+    const availableWidth = width - padding * 2
+    const availableHeight = height - padding * 2
+    const scale = Math.min(availableWidth / image.width, availableHeight / image.height)
+    const drawWidth = image.width * scale
+    const drawHeight = image.height * scale
+    const offsetY = topY + padding + (availableHeight - drawHeight) / 2
+    ctx.page.drawImage(image, {
+      x: element.x + padding,
+      y: pdfY(ctx, offsetY + drawHeight),
+      width: drawWidth,
+      height: drawHeight,
+    })
+  } else {
+    drawTextBlock(
+      ctx,
+      { ...element, fontSize: element.fontSize || 9 },
+      topY + height / 2 - 6,
+      label,
+      'muted'
+    )
+  }
+
+  return topY + height + 8
 }
 
 function resolveBrandColor(template: DocumentTemplate, key: keyof typeof DEFAULT_BRAND_COLORS): RGB {

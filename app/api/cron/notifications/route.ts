@@ -91,7 +91,10 @@ export async function GET(request: Request) {
     leadSent += 1
   }
 
-  const [visitReminders, invoiceReminders] = await Promise.all([
+  const [scheduleStatusSync, visitReminders, invoiceReminders] = await Promise.all([
+    import('@/lib/schedule-status-sync').then((module) =>
+      module.syncAllCompaniesScheduleStatuses(supabaseAdmin)
+    ),
     runVisitReminderCron(supabaseAdmin, now),
     runInvoiceOverdueReminderCron(supabaseAdmin, now),
   ])
@@ -103,6 +106,7 @@ export async function GET(request: Request) {
       sent: leadSent,
       skipped: leadSkipped,
     },
+    schedule_status_sync: scheduleStatusSync,
     visit_reminders: visitReminders,
     invoice_overdue_reminders: invoiceReminders,
   })

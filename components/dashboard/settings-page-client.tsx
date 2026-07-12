@@ -30,6 +30,7 @@ import {
   CalendarClock,
   Camera,
   CreditCard,
+  FileSignature,
   FileText,
   KeyRound,
   Layers3,
@@ -72,6 +73,14 @@ const DocumentTemplateEditor = dynamic(
   () =>
     import('@/components/dashboard/document-template-editor').then((m) => ({
       default: m.DocumentTemplateEditor,
+    })),
+  { loading: sectionLoading }
+)
+
+const ContractTemplatesSettings = dynamic(
+  () =>
+    import('@/components/dashboard/contract-templates-settings').then((m) => ({
+      default: m.ContractTemplatesSettings,
     })),
   { loading: sectionLoading }
 )
@@ -132,6 +141,7 @@ type SettingsSectionId =
   | 'billing'
   | 'subscription'
   | 'invoice-template'
+  | 'contract-templates'
   | 'job-photos'
   | 'service-packages'
   | 'client-booking'
@@ -194,6 +204,13 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     adminOnly: true,
   },
   {
+    id: 'contract-templates',
+    label: 'Contract templates',
+    description: 'Service agreements with signing fields.',
+    icon: FileSignature,
+    adminOnly: true,
+  },
+  {
     id: 'job-photos',
     label: 'Job photos',
     description: 'Photo upload categories.',
@@ -236,6 +253,7 @@ type CompanySettings = {
   timezone?: string | null
   business_hours_start?: string | null
   business_hours_end?: string | null
+  business_open_weekdays?: number[] | null
   address?: string | null
   address_street?: string | null
   address_unit?: string | null
@@ -525,7 +543,23 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
           <div
             className={cn(
               'min-h-0 flex-1',
-              activeSection === 'invoice-template' && isAdmin ? 'hidden' : 'flex flex-col'
+              activeSection !== 'contract-templates' || !isAdmin ? 'hidden' : 'flex flex-col'
+            )}
+          >
+            {visitedSections.has('contract-templates') && isAdmin ? (
+              <MainPageCardScroll contentClassName="max-w-none p-4 sm:p-6 lg:p-8">
+                <ContractTemplatesSettings />
+              </MainPageCardScroll>
+            ) : null}
+          </div>
+
+          <div
+            className={cn(
+              'min-h-0 flex-1',
+              (activeSection === 'invoice-template' || activeSection === 'contract-templates') &&
+                isAdmin
+                ? 'hidden'
+                : 'flex flex-col'
             )}
           >
             <MainPageCardScroll contentClassName={cn('max-w-4xl p-4 sm:p-6 lg:p-8')}>

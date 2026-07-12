@@ -15,7 +15,7 @@ export default async function PortalDocumentsPage() {
     <div className="flex flex-col gap-6 h-full min-h-0">
       <PortalPageHeader
         title="Documents"
-        description="Browse invoices, estimates, and files organized by job folder."
+        description="Browse invoices, estimates, contracts, and files organized by job folder."
       />
 
       <MainPageCard className="p-5 shadow-sm">

@@ -5,14 +5,12 @@ import {
   getBookingSettingsAction,
   updateBookingSettingsAction,
 } from '@/app/booking-actions'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import type { OnboardingStepHandle } from '@/components/dashboard/onboarding/onboarding-profile-step'
 import {
-  DEFAULT_BOOKABLE_WEEKDAYS,
   DEFAULT_BOOKING_SETTINGS,
   isValidBookingSlug,
   type BookingMode,
@@ -21,16 +19,6 @@ import {
 import { cn } from '@/lib/utils'
 import { CalendarClock, ClipboardList } from 'lucide-react'
 import { toast } from 'sonner'
-
-const WEEKDAY_OPTIONS = [
-  { value: 0, label: 'Sun' },
-  { value: 1, label: 'Mon' },
-  { value: 2, label: 'Tue' },
-  { value: 3, label: 'Wed' },
-  { value: 4, label: 'Thu' },
-  { value: 5, label: 'Fri' },
-  { value: 6, label: 'Sat' },
-] as const
 
 type OnboardingBookingStepProps = {
   suggestedSlug: string
@@ -165,40 +153,9 @@ export const OnboardingBookingStep = forwardRef<
       </div>
 
       {bookingMode === 'online_booking' ? (
-        <div className="space-y-3 rounded-lg border p-4">
-          <Label>Bookable days</Label>
-          <div className="flex flex-wrap gap-2">
-            {WEEKDAY_OPTIONS.map((day) => {
-              const selected = bookingSettings.bookable_weekdays.includes(day.value)
-              return (
-                <label
-                  key={day.value}
-                  className={cn(
-                    'inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm cursor-pointer',
-                    selected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
-                  )}
-                >
-                  <Checkbox
-                    checked={selected}
-                    onCheckedChange={(checked) => {
-                      setBookingSettings((current) => {
-                        const next = checked
-                          ? [...current.bookable_weekdays, day.value]
-                          : current.bookable_weekdays.filter((value) => value !== day.value)
-                        return {
-                          ...current,
-                          bookable_weekdays:
-                            next.length > 0 ? next.sort((a, b) => a - b) : [...DEFAULT_BOOKABLE_WEEKDAYS],
-                        }
-                      })
-                    }}
-                  />
-                  {day.label}
-                </label>
-              )
-            })}
-          </div>
-        </div>
+        <p className="text-xs text-muted-foreground rounded-lg border bg-muted/20 px-3 py-2">
+          Online booking uses the open days you set in the company step above.
+        </p>
       ) : null}
     </div>
   )

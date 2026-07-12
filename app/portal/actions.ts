@@ -16,7 +16,10 @@ import { syncEstimateDocument } from '@/lib/estimates-server'
 import { validateMessageBody, type MessagingMessage } from '@/lib/messaging'
 import { normalizeJobPhotoCategories } from '@/lib/job-photo-categories'
 import { JOB_PHOTO_BUCKET, type JobPhoto, type JobPhotoWithUrl } from '@/lib/job-photos'
-import type { UploadedDocument } from '@/lib/uploaded-documents'
+import {
+  normalizeUploadedDocumentRows,
+  type UploadedDocument,
+} from '@/lib/uploaded-documents'
 import {
   notifyStaffEstimateResponse,
   notifyStaffMessageFromClient,
@@ -176,6 +179,7 @@ export async function getPortalHomeData() {
     { data: allLineItems },
     { data: recentPayments },
     { data: scheduleRows },
+    { data: contracts },
   ] = await Promise.all([
     admin
       .from('estimates')
@@ -196,6 +200,13 @@ export async function getPortalHomeData() {
       .from('schedules')
       .select('id, title, status, start_time')
       .eq('client_id', clientId),
+    admin
+      .from('contracts')
+      .select('id, title, status, sent_at, updated_at, client_signed_at')
+      .eq('client_id', clientId)
+      .in('status', ['ready_for_signing', 'signed'])
+      .order('updated_at', { ascending: false })
+      .limit(50),
   ])
 
   const schedulesById = new Map(
@@ -205,6 +216,7 @@ export async function getPortalHomeData() {
   const activity = buildPortalActivity({
     timezone,
     estimates: estimates || [],
+    contracts: contracts || [],
     jobs,
     payments: recentPayments || [],
     lineItems: allLineItems || [],
@@ -476,9 +488,9 @@ export async function getPortalDocumentsPageDataAction(): Promise<
     const [documentsResult, jobsResult] = await Promise.all([
       admin
         .from('client_documents')
-        .select('*')
+        .select('*, contract:contracts!contract_id (status)')
         .eq('client_id', clientId)
-        .in('source', ['upload', 'estimate', 'invoice'])
+        .in('source', ['upload', 'estimate', 'invoice', 'contract'])
         .order('created_at', { ascending: false }),
       admin
         .from('schedules')
@@ -497,7 +509,9 @@ export async function getPortalDocumentsPageDataAction(): Promise<
 
     return {
       success: true,
-      documents: (documentsResult.data || []) as UploadedDocument[],
+      documents: normalizeUploadedDocumentRows(
+        (documentsResult.data || []) as Parameters<typeof normalizeUploadedDocumentRows>[0]
+      ),
       jobs: jobsResult.data || [],
     }
   } catch (error: any) {
@@ -537,9 +551,9 @@ export async function getPortalUploadedDocumentsAction(): Promise<
 
     const { data: documents, error } = await admin
       .from('client_documents')
-      .select('*')
+      .select('*, contract:contracts!contract_id (status)')
       .eq('client_id', clientId)
-      .in('source', ['upload', 'estimate', 'invoice'])
+      .in('source', ['upload', 'estimate', 'invoice', 'contract'])
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -549,7 +563,10 @@ export async function getPortalUploadedDocumentsAction(): Promise<
       throw error
     }
 
-    return { success: true, documents: (documents || []) as UploadedDocument[] }
+    return {
+      success: true,
+      documents: normalizeUploadedDocumentRows((documents || []) as Parameters<typeof normalizeUploadedDocumentRows>[0]),
+    }
   } catch (error: any) {
     console.error('getPortalUploadedDocumentsAction error:', error)
     return { success: false, error: error.message || 'Failed to load documents' }

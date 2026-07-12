@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from "@/components/ui/button"
@@ -78,10 +78,24 @@ interface Client {
   amountDue?: number
 }
 
-export function ClientsPageClient({ initialClients }: { initialClients: Client[] }) {
+type ClientsPagination = {
+  page: number
+  pageSize: number
+  total: number
+  hasMore: boolean
+}
+
+export function ClientsPageClient({
+  initialClients,
+  initialPagination,
+}: {
+  initialClients: Client[]
+  initialPagination: ClientsPagination
+}) {
   const supabase = createClient()
   const router = useRouter()
   const [clients, setClients] = useState<Client[]>(initialClients)
+  const [pagination, setPagination] = useState(initialPagination)
   const [filteredClients, setFilteredClients] = useState<Client[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [showArchived, setShowArchived] = useState(false)
@@ -103,11 +117,21 @@ export function ClientsPageClient({ initialClients }: { initialClients: Client[]
   const [statusAction, setStatusAction] = useState<'archive' | 'restore' | null>(null)
   const [isStatusLoading, setIsStatusLoading] = useState(false)
 
-  const fetchClients = async () => {
+  const fetchClients = async (options?: {
+    page?: number
+    append?: boolean
+    status?: 'active' | 'archived' | 'all'
+  }) => {
     setIsLoading(true)
-    const result = await getClientsListAction()
+    const page = options?.page ?? 1
+    const status =
+      options?.status ?? (showArchived ? 'archived' : 'active')
+    const result = await getClientsListAction({ page, status })
     if (result.success) {
-      setClients(result.data)
+      setClients((current) =>
+        options?.append ? [...current, ...result.data] : result.data
+      )
+      setPagination(result.pagination)
     } else {
       console.error('Error fetching clients:', result.error)
     }
@@ -238,13 +262,17 @@ const openEditClient = (client: Client) => {
       )
     }
 
-    // Archived filter
-    if (!showArchived) {
-      result = result.filter(client => client.status === 'active')
-    }
-
     setFilteredClients(result)
-  }, [clients, searchTerm, showArchived])
+  }, [clients, searchTerm])
+
+  const skipArchivedRefetch = useRef(true)
+  useEffect(() => {
+    if (skipArchivedRefetch.current) {
+      skipArchivedRefetch.current = false
+      return
+    }
+    void fetchClients({ page: 1, status: showArchived ? 'archived' : 'active' })
+  }, [showArchived])
 
   return (
     <div className={MOBILE_PAGE_ROOT_CLASS}>
@@ -535,6 +563,30 @@ const openEditClient = (client: Client) => {
               </div>
             )
           )}
+          {pagination.hasMore ? (
+            <div className="flex items-center justify-between gap-3 border-t pt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {clients.length} of {pagination.total} clients
+              </p>
+              <Button
+                variant="outline"
+                disabled={isLoading}
+                onClick={() =>
+                  void fetchClients({
+                    page: pagination.page + 1,
+                    append: true,
+                    status: showArchived ? 'archived' : 'active',
+                  })
+                }
+              >
+                Load more
+              </Button>
+            </div>
+          ) : clients.length > 0 ? (
+            <p className="text-sm text-muted-foreground border-t pt-4">
+              Showing all {pagination.total} clients
+            </p>
+          ) : null}
         </MainPageCardScroll>
       </MainPageCard>
 

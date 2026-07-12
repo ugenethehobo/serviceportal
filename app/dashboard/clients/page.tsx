@@ -19,5 +19,10 @@ export default async function ClientsPage() {
     )
   }
 
-  return <ClientsPageClient initialClients={result.data} />
+  return (
+    <ClientsPageClient
+      initialClients={result.data}
+      initialPagination={result.pagination}
+    />
+  )
 }

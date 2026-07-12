@@ -74,6 +74,7 @@ async function getCompanyByBookingSlug(slug: string) {
       timezone,
       business_hours_start,
       business_hours_end,
+      business_open_weekdays,
       booking_mode,
       booking_slug,
       booking_settings
@@ -111,6 +112,13 @@ export async function getPublicBookingPageAction(
       .eq('company_id', company.id),
   ])
 
+  const businessHours = normalizeBusinessHours(
+    company.business_hours_start,
+    company.business_hours_end,
+    company.business_open_weekdays
+  )
+  const bookingSettings = normalizeBookingSettings(company.booking_settings)
+
   return {
     success: true,
     data: {
@@ -118,7 +126,10 @@ export async function getPublicBookingPageAction(
       companyName: company.name,
       logoRef: company.logo_url,
       bookingMode: normalizeBookingMode(company.booking_mode),
-      bookingSettings: normalizeBookingSettings(company.booking_settings),
+      bookingSettings: {
+        ...bookingSettings,
+        bookable_weekdays: businessHours.openWeekdays,
+      },
       timezone: company.timezone || 'America/Chicago',
       services: (services || []) as BookableService[],
       hasBookableCrews: (crewCount || 0) > 0,
@@ -304,14 +315,15 @@ export async function getPublicBookingSlotsAction(input: {
   const timezone = company.timezone || 'America/Chicago'
   const businessHours = normalizeBusinessHours(
     company.business_hours_start,
-    company.business_hours_end
+    company.business_hours_end,
+    company.business_open_weekdays
   )
   const bookingSettings = normalizeBookingSettings(company.booking_settings)
   const todayStr = getCompanyDateString(timezone)
   if (input.dateStr < todayStr) {
     return { success: true as const, slots: [] }
   }
-  if (!isBookableWeekday(input.dateStr, timezone, bookingSettings.bookable_weekdays)) {
+  if (!isBookableWeekday(input.dateStr, timezone, businessHours.openWeekdays)) {
     return { success: true as const, slots: [] }
   }
 
@@ -453,7 +465,8 @@ export async function confirmPublicOnlineBookingAction(input: {
   const timezone = company.timezone || 'America/Chicago'
   const businessHours = normalizeBusinessHours(
     company.business_hours_start,
-    company.business_hours_end
+    company.business_hours_end,
+    company.business_open_weekdays
   )
 
   const start = new Date(input.startIso)
@@ -465,7 +478,7 @@ export async function confirmPublicOnlineBookingAction(input: {
   }
 
   const dateStr = getCompanyDateString(timezone, start)
-  if (!isBookableWeekday(dateStr, timezone, bookingSettings.bookable_weekdays)) {
+  if (!isBookableWeekday(dateStr, timezone, businessHours.openWeekdays)) {
     return { success: false as const, error: 'That day is not available for booking' }
   }
 

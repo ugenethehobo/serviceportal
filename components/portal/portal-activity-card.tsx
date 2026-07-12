@@ -22,12 +22,15 @@ import {
 import {
   CalendarDays,
   CreditCard,
+  FileSignature,
   FileText,
   Receipt,
 } from 'lucide-react'
 
 const ICONS = {
   estimate_review: FileText,
+  contract_signing: FileSignature,
+  contract_signed: FileSignature,
   payment_due: CreditCard,
   payment_received: Receipt,
   visit_upcoming: CalendarDays,
@@ -53,7 +56,7 @@ export function PortalActivityCard({
         <div>
           <h2 className="font-semibold text-lg">Activity</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Estimates, payments, and visits that need your attention
+            Estimates, contracts, payments, and visits that need your attention
           </p>
         </div>
         <Select

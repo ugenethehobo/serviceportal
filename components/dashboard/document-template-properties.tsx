@@ -244,6 +244,37 @@ function ElementProperties({
         </div>
       )}
 
+      {(selectedElement.kind === 'signature' ||
+        selectedElement.kind === 'initial' ||
+        selectedElement.kind === 'input') && (
+        <div className="space-y-2">
+          <Label htmlFor="field-label" className="text-sm">
+            Field label
+          </Label>
+          <Input
+            id="field-label"
+            value={selectedElement.label || ''}
+            onChange={(event) =>
+              onUpdateElement(selectedElement.id, {
+                label: event.target.value || undefined,
+              })
+            }
+            placeholder={
+              selectedElement.kind === 'signature'
+                ? 'Client signature'
+                : selectedElement.kind === 'initial'
+                  ? 'Client initials'
+                  : 'Text field'
+            }
+          />
+          {selectedElement.kind === 'input' ? (
+            <p className="text-xs text-muted-foreground">
+              Clients fill this in when signing the contract.
+            </p>
+          ) : null}
+        </div>
+      )}
+
       {selectedElement.kind !== 'table' && selectedElement.kind !== 'line' && (
         <>
           <div className="space-y-2">

@@ -25,6 +25,7 @@ export default async function PaymentsPage() {
         payments: result.payments,
         summary: result.summary,
         periodLabel: result.periodLabel,
+        pagination: result.pagination,
       }}
     />
   )

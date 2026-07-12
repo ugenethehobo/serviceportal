@@ -196,6 +196,78 @@ export async function getCompanyIdForUser(userId: string) {
   return profile?.company_id ?? null
 }
 
+export type StripeMonthCollectedResult = {
+  amount: number
+  source: 'stripe' | 'recorded'
+}
+
+export async function getStripeConnectMonthCollected(
+  stripeAccountId: string,
+  bounds: { start: Date; end: Date }
+): Promise<number> {
+  const created = {
+    gte: Math.floor(bounds.start.getTime() / 1000),
+    lte: Math.floor(bounds.end.getTime() / 1000),
+  }
+
+  let totalCents = 0
+  let hasMore = true
+  let startingAfter: string | undefined
+
+  while (hasMore) {
+    const page = await stripe.balanceTransactions.list(
+      {
+        created,
+        limit: 100,
+        ...(startingAfter ? { starting_after: startingAfter } : {}),
+      },
+      { stripeAccount: stripeAccountId }
+    )
+
+    for (const txn of page.data) {
+      if (txn.type === 'charge' || txn.type === 'payment') {
+        totalCents += txn.net
+      }
+    }
+
+    hasMore = page.has_more
+    startingAfter = page.data.at(-1)?.id
+    if (!startingAfter) break
+  }
+
+  return Math.round(totalCents) / 100
+}
+
+export async function resolveMonthCollectedAmount(input: {
+  companyId: string
+  stripeAccountId: string | null
+  billingEnabled: boolean
+  bounds: { start: Date; end: Date }
+  recordedAllPayments: number
+  recordedStripePayments: number
+}): Promise<StripeMonthCollectedResult> {
+  if (!input.billingEnabled || !input.stripeAccountId) {
+    return {
+      amount: input.recordedAllPayments,
+      source: 'recorded',
+    }
+  }
+
+  try {
+    const amount = await getStripeConnectMonthCollected(
+      input.stripeAccountId,
+      input.bounds
+    )
+    return { amount, source: 'stripe' }
+  } catch (error) {
+    console.error('getStripeConnectMonthCollected error:', error)
+    return {
+      amount: input.recordedStripePayments,
+      source: 'recorded',
+    }
+  }
+}
+
 export async function assertCompanyAdminForStripe(userId: string) {
   const supabaseAdmin = createSupabaseAdmin()
   const { data: profile } = await supabaseAdmin

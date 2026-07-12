@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { getCompanyPaymentsAction, type PaymentsFilterSource } from '@/app/action'
+import { getCompanyPaymentsAction } from '@/app/action'
+import type { PaymentsFilterSource } from '@/lib/billing-queries'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -34,6 +35,7 @@ import {
   MOBILE_TABLE_DESKTOP_ONLY_CLASS,
 } from '@/lib/mobile-layout'
 import { REPORTS_PERIOD_LABELS, type ReportsPeriod } from '@/lib/reports'
+import { Button } from '@/components/ui/button'
 import { CreditCard, ExternalLink, Search } from 'lucide-react'
 
 const SOURCE_LABELS: Record<PaymentsFilterSource, string> = {
@@ -76,6 +78,12 @@ type PaymentsPageInitialData = {
     paymentCount: number
   }
   periodLabel: string
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+    hasMore: boolean
+  }
 }
 
 export function PaymentsPageClient({
@@ -92,6 +100,8 @@ export function PaymentsPageClient({
   const [payments, setPayments] = useState<CompanyPaymentRow[]>(initialData.payments)
   const [summary, setSummary] = useState(initialData.summary)
   const [periodLabel, setPeriodLabel] = useState(initialData.periodLabel)
+  const [pagination, setPagination] = useState(initialData.pagination)
+  const [page, setPage] = useState(initialData.pagination.page)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -106,12 +116,14 @@ export function PaymentsPageClient({
       period,
       source,
       search: debouncedSearch,
+      page,
     })
 
     if (result.success) {
       setPayments(result.payments)
       setSummary(result.summary)
       setPeriodLabel(result.periodLabel)
+      setPagination(result.pagination)
       setError(null)
     } else {
       setPayments([])
@@ -119,10 +131,15 @@ export function PaymentsPageClient({
     }
 
     setIsLoading(false)
+  }, [period, source, debouncedSearch, page])
+
+  useEffect(() => {
+    setPage(1)
   }, [period, source, debouncedSearch])
 
   useEffect(() => {
     if (
+      page === 1 &&
       period === initialPeriod &&
       source === 'all' &&
       debouncedSearch === ''
@@ -130,7 +147,7 @@ export function PaymentsPageClient({
       return
     }
     void fetchPayments()
-  }, [fetchPayments, period, initialPeriod, source, debouncedSearch])
+  }, [fetchPayments, page, period, initialPeriod, source, debouncedSearch])
 
   return (
     <div className={MOBILE_PAGE_ROOT_CLASS}>
@@ -297,6 +314,32 @@ export function PaymentsPageClient({
                   description="No payments match this period and filter."
                 />
               )}
+
+              {pagination.total > 0 ? (
+                <div className="flex items-center justify-between gap-3 border-t pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Page {pagination.page} · {pagination.total} payments
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isLoading || pagination.page <= 1}
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isLoading || !pagination.hasMore}
+                      onClick={() => setPage((current) => current + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
           </MainPageCardScroll>
         )}
       </MainPageCard>

@@ -45,9 +45,25 @@ export function getPreviewFitDimensions(
   }
 }
 
+export function isInteractiveDocumentElement(element: DocumentElement): boolean {
+  return element.kind === 'signature' || element.kind === 'initial' || element.kind === 'input'
+}
+
 export function getElementLabel(element: DocumentElement): string {
   if (element.kind === 'text') {
     return element.text?.trim() || 'Custom text'
+  }
+
+  if (element.kind === 'signature') {
+    return element.label?.trim() || 'Signature field'
+  }
+
+  if (element.kind === 'initial') {
+    return element.label?.trim() || 'Initials field'
+  }
+
+  if (element.kind === 'input') {
+    return element.label?.trim() || 'Text input field'
   }
 
   if (element.fieldKey) {
@@ -59,6 +75,10 @@ export function getElementLabel(element: DocumentElement): string {
 }
 
 export function isElementValidForKind(element: DocumentElement, kind: DocumentKind): boolean {
+  if (element.kind === 'signature' || element.kind === 'initial' || element.kind === 'input') {
+    return kind === 'contract'
+  }
+
   if (!element.fieldKey) return true
 
   const definition = DOCUMENT_FIELD_DEFINITIONS.find((field) => field.key === element.fieldKey)
@@ -68,10 +88,17 @@ export function isElementValidForKind(element: DocumentElement, kind: DocumentKi
 }
 
 export function getElementGroup(element: DocumentElement, kind: DocumentKind): string {
+  if (element.kind === 'signature' || element.kind === 'initial' || element.kind === 'input') {
+    return 'Signing'
+  }
+
   if (element.fieldKey) {
     const definition = DOCUMENT_FIELD_DEFINITIONS.find((field) => field.key === element.fieldKey)
     if (definition && definition.kinds.includes(kind)) {
       return definition.group
+    }
+    if (element.fieldKey.startsWith('input.')) {
+      return 'Inputs'
     }
   }
   return 'Other'
@@ -113,7 +140,20 @@ export function getElementBounds(element: DocumentElement): { width: number; hei
       return { width: 420, height: 48 }
     case 'footer.text':
       return { width: 420, height: 32 }
+    case 'sign.client':
+      return { width: element.width || 260, height: element.height || 72 }
+    case 'sign.client.initials':
+      return { width: element.width || 120, height: element.height || 48 }
     default:
+      if (element.kind === 'signature') {
+        return { width: element.width || 260, height: element.height || 72 }
+      }
+      if (element.kind === 'initial') {
+        return { width: element.width || 120, height: element.height || 48 }
+      }
+      if (element.kind === 'input') {
+        return { width: element.width || 260, height: element.height || 48 }
+      }
       return { width: element.width || 220, height: Math.max(20, fontSize + 10) }
   }
 }
@@ -158,7 +198,21 @@ export function groupElementsForKind(template: DocumentTemplate, kind: DocumentK
     groups.set(group, current)
   }
 
-  const order = ['Company', 'Document', 'Client', 'Job', 'Estimate', 'Line items', 'Totals', 'Footer', 'Other']
+  const order = [
+    'Company',
+    'Document',
+    'Client',
+    'Service',
+    'Job',
+    'Estimate',
+    'Contract',
+    'Signing',
+    'Inputs',
+    'Line items',
+    'Totals',
+    'Footer',
+    'Other',
+  ]
   return order
     .filter((group) => groups.has(group))
     .map((group) => ({
@@ -181,7 +235,13 @@ export function updateTemplateElement(
 }
 
 export function isResizableElement(element: DocumentElement): boolean {
-  return element.kind === 'image' || element.kind === 'table'
+  return (
+    element.kind === 'image' ||
+    element.kind === 'table' ||
+    element.kind === 'signature' ||
+    element.kind === 'initial' ||
+    element.kind === 'input'
+  )
 }
 
 export function getTableColumnOffsets(template: DocumentTemplate): DocumentTableColumns {
@@ -220,10 +280,15 @@ export function clampElementSize(
 ) {
   const pageWidth = template.page.width || DOCUMENT_PAGE.width
   const pageHeight = template.page.height || DOCUMENT_PAGE.height
-  const minWidth = element.kind === 'image' ? 40 : 240
-  const minHeight = element.kind === 'image' ? 24 : 80
+  const isInteractive = isInteractiveDocumentElement(element)
+  const minWidth = element.kind === 'image' ? 40 : isInteractive ? 80 : 240
+  const minHeight =
+    element.kind === 'image' ? 24 : isInteractive ? 28 : element.kind === 'table' ? 80 : 80
   const maxWidth = pageWidth - element.x
-  const maxHeight = element.kind === 'image' ? pageHeight - element.y : element.height || 200
+  const maxHeight =
+    element.kind === 'image' || isInteractive
+      ? pageHeight - element.y
+      : element.height || 200
 
   return {
     width: Math.round(Math.min(Math.max(minWidth, width), maxWidth)),

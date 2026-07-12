@@ -3,6 +3,8 @@ export type NotificationEvent =
   | 'message_from_client'
   | 'estimate_sent'
   | 'estimate_response'
+  | 'contract_sent'
+  | 'contract_signed'
   | 'invoice_sent'
   | 'payment_received'
   | 'lead_follow_up_due'
@@ -37,6 +39,8 @@ export const NOTIFICATION_EVENT_LABELS: Record<NotificationEvent, string> = {
   message_from_client: 'New message from client',
   estimate_sent: 'Estimate ready for client',
   estimate_response: 'Client estimate response',
+  contract_sent: 'Contract ready for signing',
+  contract_signed: 'Contract signed by client',
   invoice_sent: 'Invoice ready for client',
   payment_received: 'Payment received',
   lead_follow_up_due: 'Lead follow-up reminder',
@@ -62,6 +66,8 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
     message_from_client: { email: true, sms: false },
     estimate_sent: { email: true, sms: true },
     estimate_response: { email: true, sms: false },
+    contract_sent: { email: true, sms: true },
+    contract_signed: { email: true, sms: false },
     invoice_sent: { email: true, sms: true },
     payment_received: { email: true, sms: false },
     lead_follow_up_due: { email: true, sms: false },

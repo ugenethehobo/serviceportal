@@ -363,6 +363,68 @@ export async function notifyClientEstimateSent(
   })
 }
 
+export async function notifyClientContractSent(
+  supabaseAdmin: SupabaseClient,
+  input: {
+    companyId: string
+    companyName?: string
+    clientId?: string | null
+    clientEmail?: string | null
+    clientPhone?: string | null
+    clientName?: string | null
+    contractTitle: string
+    contractId: string
+    scheduleId?: string | null
+  }
+) {
+  const baseUrl = getAppBaseUrl()
+  const portalUrl = `${baseUrl}/portal/contracts/${input.contractId}`
+  const companyName = input.companyName?.trim() || 'Your service company'
+  const clientLabel = input.clientName?.trim() || 'there'
+
+  const { queueCompanyZapierEvent } = await import('@/lib/integration-events')
+  queueCompanyZapierEvent(supabaseAdmin, {
+    companyId: input.companyId,
+    event: 'contract_sent',
+    data: {
+      contract_id: input.contractId,
+      client_id: input.clientId ?? null,
+      schedule_id: input.scheduleId ?? null,
+      contract_title: input.contractTitle,
+      client_name: input.clientName ?? null,
+      client_email: input.clientEmail ?? null,
+    },
+  })
+
+  await dispatchNotification(supabaseAdmin, {
+    companyId: input.companyId,
+    event: 'contract_sent',
+    email: input.clientEmail
+      ? {
+          to: input.clientEmail,
+          subject: `Contract ready: ${input.contractTitle}`,
+          ...buildNotificationEmail(
+            companyName,
+            'Your contract is ready for signing',
+            `<p>Hi ${escapeHtml(clientLabel)},</p><p><strong>${escapeHtml(input.contractTitle)}</strong> is ready for your review and signature.</p>`,
+            { label: 'Review and sign', href: portalUrl }
+          ),
+          text: `${companyName} sent you a contract: ${input.contractTitle}. Sign: ${portalUrl}`,
+        }
+      : undefined,
+    sms: input.clientPhone
+      ? {
+          phone: input.clientPhone,
+          message: `${companyName}: Contract "${input.contractTitle}" is ready for signing. ${portalUrl}`,
+        }
+      : undefined,
+    metadata: {
+      contract_id: input.contractId,
+      schedule_id: input.scheduleId || null,
+    },
+  })
+}
+
 export async function notifyClientInvoiceSent(
   supabaseAdmin: SupabaseClient,
   input: {
@@ -421,6 +483,64 @@ export async function notifyClientInvoiceSent(
       : undefined,
     metadata: { schedule_id: input.scheduleId },
   })
+}
+
+export async function notifyStaffContractSigned(
+  supabaseAdmin: SupabaseClient,
+  input: {
+    companyId: string
+    companyName?: string
+    clientName?: string | null
+    contractTitle: string
+    clientId: string
+    contractId: string
+    scheduleId?: string | null
+  }
+) {
+  const staffEmails = await getStaffEmailsForCompany(supabaseAdmin, input.companyId)
+  if (staffEmails.length === 0) return
+
+  const baseUrl = getAppBaseUrl()
+  const clientLabel = input.clientName?.trim() || 'A client'
+  const companyName = input.companyName?.trim() || 'Service Portal'
+  const jobUrl = input.scheduleId
+    ? `${baseUrl}/dashboard/clients/${input.clientId}/jobs/${input.scheduleId}`
+    : `${baseUrl}/dashboard/clients/${input.clientId}`
+
+  const { queueCompanyZapierEvent } = await import('@/lib/integration-events')
+  queueCompanyZapierEvent(supabaseAdmin, {
+    companyId: input.companyId,
+    event: 'contract_signed',
+    data: {
+      contract_id: input.contractId,
+      client_id: input.clientId,
+      schedule_id: input.scheduleId ?? null,
+      contract_title: input.contractTitle,
+      client_name: input.clientName ?? null,
+    },
+  })
+
+  for (const email of staffEmails) {
+    await dispatchNotification(supabaseAdmin, {
+      companyId: input.companyId,
+      event: 'contract_signed',
+      email: {
+        to: email,
+        subject: `${clientLabel} signed contract: ${input.contractTitle}`,
+        ...buildNotificationEmail(
+          companyName,
+          'Contract signed',
+          `<p>${escapeHtml(clientLabel)} signed <strong>${escapeHtml(input.contractTitle)}</strong>.</p>`,
+          { label: 'View job', href: jobUrl }
+        ),
+        text: `${clientLabel} signed contract "${input.contractTitle}". View: ${jobUrl}`,
+      },
+      metadata: {
+        contract_id: input.contractId,
+        schedule_id: input.scheduleId || null,
+      },
+    })
+  }
 }
 
 export async function notifyStaffEstimateResponse(

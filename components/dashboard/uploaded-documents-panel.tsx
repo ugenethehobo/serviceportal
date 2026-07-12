@@ -254,6 +254,7 @@ export function UploadedDocumentsPanel({
             onDownload={handleDownload}
             isDeleting={deletingId === document.id}
             canDelete={canUpload && !document.isSystemDocument}
+            variant={variant}
           />
         ))}
       </AttachmentGroup>

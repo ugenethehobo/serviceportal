@@ -117,6 +117,7 @@ export function LiveCrewLocationsMap({
     )
   }
 
+  const isUpcomingPreview = data.mode === 'upcoming_open_days'
   const hasMarkers = data.markers.length > 0
   const hasWarnings = data.invalidAddresses.length > 0
 
@@ -204,11 +205,16 @@ export function LiveCrewLocationsMap({
           <div className="h-full flex flex-col items-center justify-center bg-muted/20 px-4 text-center">
             <MapPin className="size-8 text-muted-foreground/60 mb-2" />
             <p className="text-sm text-muted-foreground">
-              No job sites to show for today yet.
+              {isUpcomingPreview
+                ? 'No upcoming job sites in the next open days.'
+                : 'No job sites to show for today yet.'}
             </p>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-              Job site pins appear for today&apos;s scheduled jobs when client addresses are on
-              file. Add your company address in Settings to show your office location too.
+              {isUpcomingPreview
+                ? data.previewRangeLabel
+                  ? `No scheduled jobs with addresses between ${data.previewRangeLabel}.`
+                  : 'Schedule jobs on your next open days to preview them here.'
+                : 'Job site pins appear for today\u2019s scheduled jobs when client addresses are on file. Add your company address in Settings to show your office location too.'}
             </p>
             <Link
               href="/dashboard/settings"

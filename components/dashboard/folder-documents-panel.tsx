@@ -358,6 +358,7 @@ export function FolderDocumentsPanel({
             onDownload={handleDownload}
             isDeleting={deletingId === doc.id}
             canDelete={!isPortal && !doc.isSystemDocument}
+            variant={isPortal ? 'portal' : 'staff'}
           />
         ))}
       </AttachmentGroup>

@@ -12,7 +12,11 @@ import { DocumentTemplateWorkspace } from '@/components/dashboard/document-templ
 import { SaveStatusBadge, type SaveStatus } from '@/components/dashboard/save-status-badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
-import type { CompanyDocumentTemplates, DocumentKind, DocumentTemplate } from '@/lib/document-template'
+import type {
+  CompanyDocumentTemplates,
+  DocumentTemplate,
+  InvoiceEstimateDocumentKind,
+} from '@/lib/document-template'
 import { normalizeDocumentTemplate } from '@/lib/document-template'
 import { updateTemplateElement } from '@/lib/document-template-editor-utils'
 import {
@@ -25,7 +29,7 @@ import { toast } from 'sonner'
 const SAVE_DEBOUNCE_MS = 600
 const PREVIEW_DEBOUNCE_MS = 450
 
-async function fetchTemplatePreview(kind: DocumentKind, template: DocumentTemplate) {
+async function fetchTemplatePreview(kind: InvoiceEstimateDocumentKind, template: DocumentTemplate) {
   const response = await fetch('/api/document-templates/preview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -43,7 +47,7 @@ async function fetchTemplatePreview(kind: DocumentKind, template: DocumentTempla
 
 export function DocumentTemplateEditor() {
   const [templates, setTemplates] = useState<CompanyDocumentTemplates | null>(null)
-  const [activeKind, setActiveKind] = useState<DocumentKind>('invoice')
+  const [activeKind, setActiveKind] = useState<InvoiceEstimateDocumentKind>('invoice')
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
@@ -74,7 +78,7 @@ export function DocumentTemplateEditor() {
     void loadTemplates()
   }, [loadTemplates])
 
-  const refreshPreview = useCallback(async (kind: DocumentKind, template: DocumentTemplate) => {
+  const refreshPreview = useCallback(async (kind: InvoiceEstimateDocumentKind, template: DocumentTemplate) => {
     setIsPreviewLoading(true)
     try {
       const nextUrl = await fetchTemplatePreview(kind, template)
@@ -92,14 +96,14 @@ export function DocumentTemplateEditor() {
   }, [])
 
   const debouncedRefreshPreview = useDebouncedCallback(
-    (kind: DocumentKind, template: DocumentTemplate) => {
+    (kind: InvoiceEstimateDocumentKind, template: DocumentTemplate) => {
       void refreshPreview(kind, template)
     },
     PREVIEW_DEBOUNCE_MS
   )
 
   const debouncedSave = useDebouncedCallback(
-    async (kind: DocumentKind, template: DocumentTemplate) => {
+    async (kind: InvoiceEstimateDocumentKind, template: DocumentTemplate) => {
       setSaveStatus('saving')
       setSaveMessage('')
 
@@ -142,7 +146,7 @@ export function DocumentTemplateEditor() {
   )
 
   const handleApplyPreset = useCallback(
-    async (kind: DocumentKind, preset: TemplateLayoutPreset) => {
+    async (kind: InvoiceEstimateDocumentKind, preset: TemplateLayoutPreset) => {
       if (!templates) return
 
       setIsToolbarBusy(true)
@@ -217,7 +221,7 @@ export function DocumentTemplateEditor() {
   )
 
   const handleResetTemplate = useCallback(
-    async (kind: DocumentKind) => {
+    async (kind: InvoiceEstimateDocumentKind) => {
       setIsToolbarBusy(true)
       setSaveStatus('saving')
       try {
@@ -325,7 +329,7 @@ export function DocumentTemplateEditor() {
           </TabsTrigger>
         </TabsList>
 
-        {(['invoice', 'estimate'] as DocumentKind[]).map((kind) => (
+        {(['invoice', 'estimate'] as InvoiceEstimateDocumentKind[]).map((kind) => (
           <TabsContent key={kind} value={kind} className="mt-5 space-y-4">
             <DocumentTemplateToolbar
               kind={kind}

@@ -32,6 +32,8 @@ const EVENT_ORDER: NotificationEvent[] = [
   'message_from_client',
   'estimate_sent',
   'estimate_response',
+  'contract_sent',
+  'contract_signed',
   'invoice_sent',
   'payment_received',
   'lead_follow_up_due',

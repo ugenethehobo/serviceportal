@@ -5,8 +5,8 @@ import {
   normalizeDocumentTemplate,
   resolveCompanyDocumentTemplates,
   type CompanyDocumentTemplates,
-  type DocumentKind,
   type DocumentTemplate,
+  type InvoiceEstimateDocumentKind,
 } from '@/lib/document-template'
 import { normalizeInvoiceTemplate } from '@/lib/invoice-template'
 
@@ -51,7 +51,7 @@ export async function loadCompanyDocumentTemplates(
 export async function loadCompanyDocumentTemplate(
   supabaseAdmin: SupabaseClient,
   companyId: string,
-  kind: DocumentKind
+  kind: InvoiceEstimateDocumentKind
 ): Promise<DocumentTemplate> {
   const templates = await loadCompanyDocumentTemplates(supabaseAdmin, companyId)
   return templates[kind]
@@ -59,7 +59,7 @@ export async function loadCompanyDocumentTemplate(
 
 export function buildDocumentTemplatesPayload(
   current: CompanyDocumentTemplates,
-  kind: DocumentKind,
+  kind: InvoiceEstimateDocumentKind,
   template: DocumentTemplate
 ): CompanyDocumentTemplates {
   return normalizeCompanyDocumentTemplates({
