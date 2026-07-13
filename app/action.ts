@@ -143,7 +143,11 @@ import {
   UPLOADED_DOCUMENT_MAX_BYTES,
   type UploadedDocument,
 } from '@/lib/uploaded-documents'
-import { geocodeStructuredAddress } from '@/lib/geocoding'
+import {
+  CLEARED_GEOCODE_FIELDS,
+  geocodeClientAddressFields,
+  geocodeCompanyAddressFields,
+} from '@/lib/address-geocoding'
 import {
   buildStructuredAddressDbFields,
   formatAddressForDisplay,
@@ -814,6 +818,17 @@ export async function createClientAction(data: {
         ? data.address
         : null
 
+    const geocodeFields = compiledAddress
+      ? await geocodeClientAddressFields({
+          address: compiledAddress,
+          address_street: addressFields?.address_street ?? null,
+          address_unit: addressFields?.address_unit ?? null,
+          address_city: addressFields?.address_city ?? null,
+          address_state: addressFields?.address_state ?? null,
+          address_zip: addressFields?.address_zip ?? null,
+        })
+      : CLEARED_GEOCODE_FIELDS
+
     const { error } = await supabaseAdmin.from('clients').insert({
       name: data.name,
       contact_name: data.contact_name || null,
@@ -828,6 +843,7 @@ export async function createClientAction(data: {
       notes: data.notes || null,
       company_id: check.companyId,
       status: 'active',
+      ...geocodeFields,
     })
 
     if (error) throw error
@@ -949,8 +965,19 @@ export async function updateClientAction(data: {
         return { success: false, error: firstError || 'Client address is invalid' }
       }
       Object.assign(updateData, buildStructuredAddressDbFields(normalized))
+      Object.assign(updateData, await geocodeClientAddressFields({
+        ...buildStructuredAddressDbFields(normalized),
+      }))
     } else if (data.address !== undefined) {
       updateData.address = data.address || null
+      if (data.address) {
+        Object.assign(
+          updateData,
+          await geocodeClientAddressFields({ address: data.address })
+        )
+      } else {
+        Object.assign(updateData, CLEARED_GEOCODE_FIELDS)
+      }
     }
 
     const { error } = await supabaseAdmin
@@ -5142,7 +5169,10 @@ export async function getTeamMemberDashboardAction(): Promise<
         address_unit,
         address_city,
         address_state,
-        address_zip
+        address_zip,
+        latitude,
+        longitude,
+        geocode_address_key
       `)
       .eq('id', session.profile.company_id)
       .single()
@@ -5216,13 +5246,17 @@ export async function getTeamMemberDashboardAction(): Promise<
         status,
         client_id,
         client:clients!client_id (
+          id,
           name,
           address,
           address_street,
           address_unit,
           address_city,
           address_state,
-          address_zip
+          address_zip,
+          latitude,
+          longitude,
+          geocode_address_key
         )
       `)
       .eq('crew_id', crewId)
@@ -5239,13 +5273,18 @@ export async function getTeamMemberDashboardAction(): Promise<
     const { queueCompanyScheduleStatusSync } = await import('@/lib/schedule-status-sync')
     queueCompanyScheduleStatusSync(supabaseAdmin, companyId)
 
+    const { persistResolvedGeocodes } = await import('@/lib/address-geocoding-server')
     const jobs = buildTeamMemberJobs(schedules || [], timezone, now)
     const routeData = await buildTeamMemberRouteData({
       companyName: companyDetails.name || 'Company',
       companyAddress: companyDetails.address,
       companyStructuredAddress: structuredAddressFromCompany(companyDetails),
+      companyCoordinates: companyDetails,
       crew,
       schedules: schedules || [],
+      onGeocodesResolved: async (resolved) => {
+        await persistResolvedGeocodes(supabaseAdmin, companyId, resolved)
+      },
     })
 
     return {
@@ -5647,7 +5686,10 @@ export async function getDashboardMapDataAction(): Promise<
         address_unit,
         address_city,
         address_state,
-        address_zip
+        address_zip,
+        latitude,
+        longitude,
+        geocode_address_key
       `)
       .eq('id', companyId)
       .single()
@@ -5656,6 +5698,7 @@ export async function getDashboardMapDataAction(): Promise<
       return { success: false, error: 'Company not found' }
     }
 
+    const { persistResolvedGeocodes } = await import('@/lib/address-geocoding-server')
     const companyTimezone = company.timezone || timezone
     const businessHours = normalizeBusinessHours(
       company.business_hours_start,
@@ -5682,13 +5725,17 @@ export async function getDashboardMapDataAction(): Promise<
       status,
       crew_id,
       client:clients!client_id (
+        id,
         name,
         address,
         address_street,
         address_unit,
         address_city,
         address_state,
-        address_zip
+        address_zip,
+        latitude,
+        longitude,
+        geocode_address_key
       ),
       crew:crews!crew_id (id, name)
     `
@@ -5757,11 +5804,15 @@ export async function getDashboardMapDataAction(): Promise<
       companyName: company.name,
       companyAddress: company.address,
       companyStructuredAddress,
+      companyCoordinates: company,
       schedules,
       timezone: companyTimezone,
       now,
       mode: mapMode,
       previewRangeLabel,
+      onGeocodesResolved: async (resolved) => {
+        await persistResolvedGeocodes(supabaseAdmin, companyId, resolved)
+      },
     })
 
     return { success: true, data: mapData }
@@ -6087,7 +6138,10 @@ export async function getRoutePlannerDataAction(): Promise<
         address_unit,
         address_city,
         address_state,
-        address_zip
+        address_zip,
+        latitude,
+        longitude,
+        geocode_address_key
       `)
       .eq('id', companyId)
       .single()
@@ -6096,6 +6150,7 @@ export async function getRoutePlannerDataAction(): Promise<
       return { success: false, error: 'Company not found' }
     }
 
+    const { persistResolvedGeocodes } = await import('@/lib/address-geocoding-server')
     const companyTimezone = company.timezone || 'America/Chicago'
     const { startIso: todayStartIso, endIso: todayEndIso } = getCompanyDayBounds(
       companyTimezone,
@@ -6121,7 +6176,19 @@ export async function getRoutePlannerDataAction(): Promise<
           end_time,
           status,
           crew_id,
-          client:clients!client_id (id, name, address),
+          client:clients!client_id (
+            id,
+            name,
+            address,
+            address_street,
+            address_unit,
+            address_city,
+            address_state,
+            address_zip,
+            latitude,
+            longitude,
+            geocode_address_key
+          ),
           crew:crews!crew_id (id, name)
         `)
         .in('client_id', clientIds)
@@ -6151,8 +6218,12 @@ export async function getRoutePlannerDataAction(): Promise<
       companyName: company.name,
       companyAddress: company.address,
       companyStructuredAddress,
+      companyCoordinates: company,
       crews: crewsData || [],
       schedules: todaySchedules,
+      onGeocodesResolved: async (resolved) => {
+        await persistResolvedGeocodes(supabaseAdmin, companyId, resolved)
+      },
     })
 
     routeData.dateLabel = formatCompanyDateLabel(companyTimezone, now, 0)
@@ -6659,6 +6730,7 @@ export async function updateCompanySettingsAction(data: {
     }
 
   const supabaseAdmin = createSupabaseAdmin()
+  const geocodeFields = await geocodeCompanyAddressFields(normalizedAddress)
   const companyUpdate: Record<string, unknown> = {
     ...(companyName !== undefined ? { name: companyName } : {}),
     timezone: data.timezone,
@@ -6671,6 +6743,7 @@ export async function updateCompanySettingsAction(data: {
     address_state: normalizedAddress.state,
     address_zip: normalizedAddress.zip,
     address: formatAddressForDisplay(normalizedAddress),
+    ...geocodeFields,
   }
 
   if (data.isSoloBusiness !== undefined) {
@@ -6694,20 +6767,24 @@ export async function updateCompanySettingsAction(data: {
     }
   }
 
-  const geocodeResult = await geocodeStructuredAddress(normalizedAddress)
-
   revalidatePath('/dashboard')
   revalidatePath('/dashboard/settings')
   revalidatePath('/dashboard/crews')
+  revalidatePath('/dashboard/routes')
+
+  const mapReady =
+    'latitude' in geocodeFields &&
+    geocodeFields.latitude != null &&
+    geocodeFields.longitude != null
 
   return {
     success: true,
     companyName: companyName,
     isSoloBusiness: data.isSoloBusiness,
-    mapReady: geocodeResult.success,
-    mapWarning: geocodeResult.success
+    mapReady,
+    mapWarning: mapReady
       ? undefined
-      : geocodeResult.reason,
+      : 'Could not locate this company address on the map. Double-check the street name and ZIP code.',
   }
   } catch (error: any) {
     console.error('updateCompanySettingsAction error:', error)

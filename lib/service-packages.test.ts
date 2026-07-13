@@ -3,6 +3,8 @@ import test from 'node:test'
 import {
   applyServicePackageToJobForm,
   buildRequestedServicesNote,
+  normalizeServicePackageDescription,
+  normalizeServicePackageDraft,
   sumServicePackageEstimates,
   type ServicePackage,
 } from './service-packages.ts'
@@ -17,6 +19,30 @@ const samplePackage: ServicePackage = {
   active: true,
   sort_order: 0,
 }
+
+test('normalizeServicePackageDescription keeps internal spaces and line breaks', () => {
+  assert.equal(
+    normalizeServicePackageDescription('  Kitchen, baths,\nand floors  '),
+    'Kitchen, baths,\nand floors'
+  )
+  assert.equal(normalizeServicePackageDescription('Includes  oven  cleaning'), 'Includes  oven  cleaning')
+  assert.equal(normalizeServicePackageDescription('   '), null)
+})
+
+test('normalizeServicePackageDraft preserves spaced descriptions on save', () => {
+  const result = normalizeServicePackageDraft(
+    {
+      name: 'Deep clean',
+      description: 'Kitchen, baths, and floors',
+      duration_minutes: 90,
+      price_estimate: '200',
+      active: true,
+    },
+    0
+  )
+
+  assert.equal(result?.description, 'Kitchen, baths, and floors')
+})
 
 test('applyServicePackageToJobForm fills title, description, price, and end time', () => {
   const result = applyServicePackageToJobForm(

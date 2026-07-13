@@ -3,6 +3,7 @@ import {
   structuredAddressFromCompanyRow,
   type StructuredAddress,
 } from '@/lib/address'
+import type { StoredCoordinatesRow } from '@/lib/address-geocoding'
 import {
   buildRoutePlannerData,
   type CrewRoute,
@@ -43,7 +44,8 @@ type RawSchedule = {
   status: string
   client_id: string
   client:
-    | {
+    | ({
+        id?: string
         name: string
         address?: string | null
         address_street?: string | null
@@ -51,16 +53,19 @@ type RawSchedule = {
         address_city?: string | null
         address_state?: string | null
         address_zip?: string | null
-      }
-    | {
-        name: string
-        address?: string | null
-        address_street?: string | null
-        address_unit?: string | null
-        address_city?: string | null
-        address_state?: string | null
-        address_zip?: string | null
-      }[]
+      } & StoredCoordinatesRow)
+    | Array<
+        {
+          id?: string
+          name: string
+          address?: string | null
+          address_street?: string | null
+          address_unit?: string | null
+          address_city?: string | null
+          address_state?: string | null
+          address_zip?: string | null
+        } & StoredCoordinatesRow
+      >
     | null
 }
 
@@ -140,9 +145,17 @@ function toRoutePlannerSchedules(
       crew_id: crew.id,
       client: client
         ? {
-            id: schedule.client_id,
+            id: client.id || schedule.client_id,
             name: client.name,
-            address: getDisplayAddressFromClient(client),
+            address: client.address,
+            address_street: client.address_street,
+            address_unit: client.address_unit,
+            address_city: client.address_city,
+            address_state: client.address_state,
+            address_zip: client.address_zip,
+            latitude: client.latitude,
+            longitude: client.longitude,
+            geocode_address_key: client.geocode_address_key,
           }
         : null,
       crew: { id: crew.id, name: crew.name },
@@ -154,8 +167,10 @@ export async function buildTeamMemberRouteData(input: {
   companyName: string
   companyAddress?: string | null
   companyStructuredAddress?: StructuredAddress | null
+  companyCoordinates?: StoredCoordinatesRow | null
   crew: { id: string; name: string }
   schedules: RouteScheduleInput[]
+  onGeocodesResolved?: Parameters<typeof buildRoutePlannerData>[0]['onGeocodesResolved']
 }): Promise<{
   route: CrewRoute | null
   companyLocation: { longitude: number; latitude: number } | null
@@ -166,8 +181,10 @@ export async function buildTeamMemberRouteData(input: {
     companyName: input.companyName,
     companyAddress: input.companyAddress,
     companyStructuredAddress: input.companyStructuredAddress,
+    companyCoordinates: input.companyCoordinates,
     crews: [input.crew],
     schedules: routeSchedules,
+    onGeocodesResolved: input.onGeocodesResolved,
   })
 
   return {

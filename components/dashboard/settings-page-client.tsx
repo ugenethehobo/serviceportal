@@ -18,11 +18,23 @@ import { PageHeader } from '@/components/ui/page-header'
 import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  MOBILE_NATURAL_HEIGHT_CLASS,
+  MOBILE_PAGE_ROOT_CLASS,
+  MOBILE_SELECT_TRIGGER_CLASS,
+} from '@/lib/mobile-layout'
 import { cn } from '@/lib/utils'
 import {
   Bell,
@@ -488,7 +500,7 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
   const activeMeta = visibleSections.find((section) => section.id === activeSection)
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-x-hidden p-6 max-md:p-4">
+    <div className={MOBILE_PAGE_ROOT_CLASS}>
       <PageHeader
         title="Settings"
         description={
@@ -500,14 +512,38 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
       />
 
       <MainPageCard className="min-h-0 flex-1 overflow-hidden p-0">
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <aside className="max-md:max-w-full shrink-0 border-b lg:flex lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r xl:w-80">
-            <ScrollArea
-              className="w-full lg:min-h-0 lg:flex-1"
-              viewportClassName="scroll-fade-x lg:scroll-fade"
+        <div
+          className={`flex min-h-0 flex-1 flex-col lg:flex-row ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+        >
+          <div className="shrink-0 border-b p-3 lg:hidden">
+            <Select
+              value={activeSection}
+              onValueChange={(value) => setActiveSection(value as SettingsSectionId)}
             >
+              <SelectTrigger className={MOBILE_SELECT_TRIGGER_CLASS}>
+                <SelectValue placeholder="Choose a section" />
+              </SelectTrigger>
+              <SelectContent>
+                {visibleSections.map((section) => (
+                  <SelectItem
+                    key={section.id}
+                    value={section.id}
+                    disabled={section.id === 'integrations' && integrationsLocked}
+                  >
+                    {section.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {activeMeta ? (
+              <p className="mt-2 text-xs text-muted-foreground">{activeMeta.description}</p>
+            ) : null}
+          </div>
+
+          <aside className="hidden shrink-0 border-b lg:flex lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r xl:w-80">
+            <ScrollArea className="w-full lg:min-h-0 lg:flex-1" viewportClassName="scroll-fade">
               <TooltipProvider>
-                <nav className="flex min-w-max gap-1 p-3 max-md:gap-2 max-md:px-2 lg:min-w-0 lg:flex-col">
+                <nav className="flex flex-col gap-1 p-3">
                   {visibleSections.map((section) => (
                     <SettingsSectionButton
                       key={section.id}
@@ -530,6 +566,7 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
           <div
             className={cn(
               'min-h-0 flex-1',
+              MOBILE_NATURAL_HEIGHT_CLASS,
               activeSection !== 'invoice-template' || !isAdmin ? 'hidden' : 'flex flex-col'
             )}
           >
@@ -543,6 +580,7 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
           <div
             className={cn(
               'min-h-0 flex-1',
+              MOBILE_NATURAL_HEIGHT_CLASS,
               activeSection !== 'contract-templates' || !isAdmin ? 'hidden' : 'flex flex-col'
             )}
           >
@@ -556,6 +594,7 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
           <div
             className={cn(
               'min-h-0 flex-1',
+              MOBILE_NATURAL_HEIGHT_CLASS,
               (activeSection === 'invoice-template' || activeSection === 'contract-templates') &&
                 isAdmin
                 ? 'hidden'

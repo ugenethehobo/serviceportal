@@ -53,7 +53,9 @@ export function ServicePackageRequestSelector({
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{pkg.name}</p>
                 {pkg.description ? (
-                  <p className="text-sm text-muted-foreground mt-0.5">{pkg.description}</p>
+                  <p className="whitespace-pre-wrap text-sm text-muted-foreground mt-0.5">
+                    {pkg.description}
+                  </p>
                 ) : null}
                 <p className="text-xs text-muted-foreground mt-1">
                   {formatServicePackageSummary(pkg)}

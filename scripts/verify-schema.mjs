@@ -143,6 +143,22 @@ const checks = [
     label: 'company-logos bucket',
     run: async () => bucketExists('company-logos'),
   },
+  {
+    migration: 'address-geocoding-schema.sql',
+    label: 'clients/companies geocode columns',
+    run: async () =>
+      (await columnExists('clients', 'latitude')) &&
+      (await columnExists('clients', 'longitude')) &&
+      (await columnExists('clients', 'geocode_address_key')) &&
+      (await columnExists('companies', 'latitude')) &&
+      (await columnExists('companies', 'longitude')) &&
+      (await columnExists('companies', 'geocode_address_key')),
+  },
+  {
+    migration: 'stripe-webhook-events-schema.sql',
+    label: 'stripe_webhook_events table',
+    run: async () => tableQueryable('stripe_webhook_events', 'id,source,event_type'),
+  },
 ]
 
 console.log(`Verifying Supabase schema: ${url}\n`)

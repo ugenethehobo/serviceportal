@@ -1,13 +1,17 @@
 import {
   formatAddressForDisplay,
+  getDisplayAddressFromClient,
   hasCompleteStructuredAddress,
   type StructuredAddress,
 } from '@/lib/address'
 import {
-  geocodeAddresses,
-  geocodeStructuredAddress,
-  validateAddressFormat,
-} from '@/lib/geocoding'
+  buildClientGeocodeAddressKey,
+  buildCompanyGeocodeAddressKey,
+  resolveGeocodeResults,
+  type GeocodeResolveEntry,
+  type StoredCoordinatesRow,
+} from '@/lib/address-geocoding'
+import { validateAddressFormat } from '@/lib/geocoding'
 import { getRoadRouteCoordinates } from '@/lib/road-routing'
 
 type RawSchedule = {
@@ -18,8 +22,28 @@ type RawSchedule = {
   status: string
   crew_id: string | null
   client:
-    | { id: string; name: string; address?: string | null }
-    | { id: string; name: string; address?: string | null }[]
+    | ({
+        id: string
+        name: string
+        address?: string | null
+        address_street?: string | null
+        address_unit?: string | null
+        address_city?: string | null
+        address_state?: string | null
+        address_zip?: string | null
+      } & StoredCoordinatesRow)
+    | Array<
+        {
+          id: string
+          name: string
+          address?: string | null
+          address_street?: string | null
+          address_unit?: string | null
+          address_city?: string | null
+          address_state?: string | null
+          address_zip?: string | null
+        } & StoredCoordinatesRow
+      >
     | null
   crew: { id: string; name: string } | { id: string; name: string }[] | null
 }
@@ -90,8 +114,10 @@ export async function buildRoutePlannerData(input: {
   companyName: string
   companyAddress?: string | null
   companyStructuredAddress?: StructuredAddress | null
+  companyCoordinates?: StoredCoordinatesRow | null
   crews: RawCrew[]
   schedules: RawSchedule[]
+  onGeocodesResolved?: (result: Awaited<ReturnType<typeof resolveGeocodeResults>>) => Promise<void>
 }): Promise<RoutePlannerData> {
   const invalidAddresses: InvalidRouteAddress[] = []
   let companyLocation: { longitude: number; latitude: number } | null = null
@@ -99,61 +125,43 @@ export async function buildRoutePlannerData(input: {
   const structuredCompany = input.companyStructuredAddress
   const hasStructuredCompany =
     structuredCompany && hasCompleteStructuredAddress(structuredCompany)
+  const companyDisplayAddress = hasStructuredCompany
+    ? formatAddressForDisplay(structuredCompany)
+    : input.companyAddress?.trim() || ''
+  const companyAddressKey = buildCompanyGeocodeAddressKey({
+    address: input.companyAddress,
+    address_street: structuredCompany?.street,
+    address_unit: structuredCompany?.unit,
+    address_city: structuredCompany?.city,
+    address_state: structuredCompany?.state,
+    address_zip: structuredCompany?.zip,
+  })
+  const geocodeEntries: GeocodeResolveEntry[] = []
 
-  if (hasStructuredCompany) {
-    const displayAddress = formatAddressForDisplay(structuredCompany)
-    const geocodeResult = await geocodeStructuredAddress(structuredCompany)
-
-    if (geocodeResult.success) {
-      companyLocation = {
-        longitude: geocodeResult.longitude,
-        latitude: geocodeResult.latitude,
-      }
-    } else {
-      invalidAddresses.push({
-        id: 'company',
-        label: `${input.companyName} (company)`,
-        address: displayAddress,
-        reason: geocodeResult.reason,
-      })
-    }
+  if (!companyDisplayAddress) {
+    invalidAddresses.push({
+      id: 'company',
+      label: `${input.companyName} (company)`,
+      address: '',
+      reason: 'Company address is not set — complete the form in Settings',
+    })
   } else {
-    const companyAddress = input.companyAddress?.trim()
-    if (!companyAddress) {
+    const formatError = validateAddressFormat(companyDisplayAddress)
+    if (formatError) {
       invalidAddresses.push({
         id: 'company',
         label: `${input.companyName} (company)`,
-        address: '',
-        reason: 'Company address is not set — complete the form in Settings',
+        address: companyDisplayAddress,
+        reason: formatError.reason,
       })
     } else {
-      const formatError = validateAddressFormat(companyAddress)
-      if (formatError) {
-        invalidAddresses.push({
-          id: 'company',
-          label: `${input.companyName} (company)`,
-          address: companyAddress,
-          reason: formatError.reason,
-        })
-      } else {
-        const geocoded = await geocodeAddresses([
-          { id: 'company', address: companyAddress },
-        ])
-        const result = geocoded.get('company')
-        if (result?.success) {
-          companyLocation = {
-            longitude: result.longitude,
-            latitude: result.latitude,
-          }
-        } else {
-          invalidAddresses.push({
-            id: 'company',
-            label: `${input.companyName} (company)`,
-            address: companyAddress,
-            reason: result?.success === false ? result.reason : 'Geocoding failed',
-          })
-        }
-      }
+      geocodeEntries.push({
+        id: 'company',
+        address: companyDisplayAddress,
+        addressKey: companyAddressKey,
+        stored: input.companyCoordinates || undefined,
+        persistTarget: 'company',
+      })
     }
   }
 
@@ -174,6 +182,7 @@ export async function buildRoutePlannerData(input: {
     address: string
     startTime: string
     endTime: string
+    clientId?: string
   }> = []
 
   for (const crew of input.crews) {
@@ -186,7 +195,7 @@ export async function buildRoutePlannerData(input: {
 
     for (const job of jobs) {
       const client = unwrapRelation(job.client)
-      const locationAddress = client?.address?.trim() || ''
+      const locationAddress = client ? getDisplayAddressFromClient(client) : ''
       const geocodeId = `${crew.id}:${job.id}`
 
       if (!locationAddress) {
@@ -212,6 +221,17 @@ export async function buildRoutePlannerData(input: {
         continue
       }
 
+      if (client?.id) {
+        geocodeEntries.push({
+          id: client.id,
+          address: locationAddress,
+          addressKey: buildClientGeocodeAddressKey(client),
+          stored: client,
+          persistTarget: 'client',
+          persistId: client.id,
+        })
+      }
+
       pendingGeocode.push({
         id: geocodeId,
         crewName: crew.name,
@@ -220,13 +240,33 @@ export async function buildRoutePlannerData(input: {
         address: locationAddress,
         startTime: job.start_time,
         endTime: job.end_time,
+        clientId: client?.id,
       })
     }
   }
 
-  const geocodedJobs = await geocodeAddresses(
-    pendingGeocode.map((entry) => ({ id: entry.id, address: entry.address }))
-  )
+  const resolvedGeocodes = await resolveGeocodeResults(geocodeEntries)
+  if (input.onGeocodesResolved) {
+    await input.onGeocodesResolved(resolvedGeocodes)
+  }
+
+  const companyGeocode = resolvedGeocodes.results.get('company')
+  if (companyGeocode?.success) {
+    companyLocation = {
+      longitude: companyGeocode.longitude,
+      latitude: companyGeocode.latitude,
+    }
+  } else if (companyDisplayAddress && geocodeEntries.some((entry) => entry.id === 'company')) {
+    invalidAddresses.push({
+      id: 'company',
+      label: `${input.companyName} (company)`,
+      address: companyDisplayAddress,
+      reason:
+        companyGeocode && !companyGeocode.success
+          ? companyGeocode.reason
+          : 'Geocoding failed',
+    })
+  }
 
   const pendingRoutes: Array<{
     crewId: string
@@ -270,7 +310,9 @@ export async function buildRoutePlannerData(input: {
       const client = unwrapRelation(job.client)
       const geocodeId = `${crew.id}:${job.id}`
       const pending = pendingGeocode.find((entry) => entry.id === geocodeId)
-      const result = geocodedJobs.get(geocodeId)
+      const result = pending?.clientId
+        ? resolvedGeocodes.results.get(pending.clientId)
+        : undefined
 
       if (!pending || !result?.success) {
         if (pending && result && !result.success) {

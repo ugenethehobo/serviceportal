@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { getClientBillingAction } from '@/app/action'
 import { formatCurrency } from '@/lib/billing'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Button } from '@/components/ui/button'
+import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
 import {
   Table,
   TableBody,
@@ -15,6 +16,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  MOBILE_LIST_STACK_CLASS,
+  MOBILE_NATURAL_HEIGHT_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+} from '@/lib/mobile-layout'
 import { toast } from 'sonner'
 import { ExternalLink } from 'lucide-react'
 
@@ -23,6 +29,7 @@ interface ClientBillingPanelProps {
 }
 
 export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
+  const router = useRouter()
   const [billing, setBilling] = useState<{
     summary: { totalCharged: number; totalPaid: number; balanceDue: number }
     jobs: Array<{
@@ -62,14 +69,14 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
   )
 
   return (
-    <div className="flex flex-col gap-6 flex-1 min-h-0">
+    <div className={`flex flex-col gap-6 flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           Clients pay job balances through the client portal. Record cash payments on individual job billing tabs.
         </p>
         <Link
           href="/dashboard/payments"
-          className="text-sm font-medium inline-flex items-center gap-1.5 hover:underline shrink-0"
+          className="text-sm font-medium inline-flex items-center gap-1.5 hover:underline shrink-0 max-md:min-h-11 max-md:items-center"
         >
           View all transactions
           <ExternalLink className="size-3.5" />
@@ -87,50 +94,98 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
       </div>
 
       {jobsWithBilling.length > 0 ? (
-        <ScrollArea className="border rounded-lg flex-1 min-h-0" viewportClassName="scroll-fade">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Charged</TableHead>
-                <TableHead className="text-right">Paid</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-                <TableHead className="w-24" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {jobsWithBilling.map((job) => (
-                <TableRow key={job.scheduleId}>
-                  <TableCell className="font-medium">{job.title}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {new Date(job.startTime).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="capitalize">
+        <>
+          <ScrollArea
+            className={`border rounded-lg flex-1 min-h-0 ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}
+            viewportClassName="scroll-fade"
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Charged</TableHead>
+                  <TableHead className="text-right">Paid</TableHead>
+                  <TableHead className="text-right">Balance</TableHead>
+                  <TableHead className="w-24" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {jobsWithBilling.map((job) => (
+                  <TableRow key={job.scheduleId}>
+                    <TableCell className="font-medium">{job.title}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(job.startTime).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="capitalize">
+                        {job.status.replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">{formatCurrency(job.summary.totalCharged)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(job.summary.totalPaid)}</TableCell>
+                    <TableCell className={`text-right font-medium ${job.summary.balanceDue > 0 ? 'text-orange-600' : ''}`}>
+                      {formatCurrency(job.summary.balanceDue)}
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/dashboard/clients/${clientId}/jobs/${job.scheduleId}?tab=billing`}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+                      >
+                        <ExternalLink className="size-3.5" />
+                        Billing
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+
+          <div className={MOBILE_LIST_STACK_CLASS}>
+            {jobsWithBilling.map((job) => (
+              <MobileListCard
+                key={job.scheduleId}
+                onClick={() =>
+                  router.push(
+                    `/dashboard/clients/${clientId}/jobs/${job.scheduleId}?tab=billing`
+                  )
+                }
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium leading-snug">{job.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {new Date(job.startTime).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="capitalize shrink-0">
                       {job.status.replace('_', ' ')}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">{formatCurrency(job.summary.totalCharged)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(job.summary.totalPaid)}</TableCell>
-                  <TableCell className={`text-right font-medium ${job.summary.balanceDue > 0 ? 'text-orange-600' : ''}`}>
-                    {formatCurrency(job.summary.balanceDue)}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/dashboard/clients/${clientId}/jobs/${job.scheduleId}?tab=billing`}
-                      className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
-                    >
-                      <ExternalLink className="size-3.5" />
-                      Billing
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </ScrollArea>
+                  </div>
+                  <MobileListCardRow
+                    label="Charged"
+                    value={formatCurrency(job.summary.totalCharged)}
+                  />
+                  <MobileListCardRow
+                    label="Paid"
+                    value={formatCurrency(job.summary.totalPaid)}
+                  />
+                  <MobileListCardRow
+                    label="Balance"
+                    value={
+                      <span className={job.summary.balanceDue > 0 ? 'text-orange-600' : undefined}>
+                        {formatCurrency(job.summary.balanceDue)}
+                      </span>
+                    }
+                  />
+                </div>
+              </MobileListCard>
+            ))}
+          </div>
+        </>
       ) : (
         <div className="border border-dashed rounded-lg p-8 text-center text-muted-foreground text-sm flex-1 flex items-center justify-center">
           No billing activity yet. Add line items on individual job billing tabs.

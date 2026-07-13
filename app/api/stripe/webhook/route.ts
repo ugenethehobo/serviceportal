@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { stripe } from '@/lib/stripe'
 import { handleStripeRefund, recordStripePayment } from '@/lib/billing-server'
+import {
+  isDuplicateStripeWebhookEvent,
+  parseStripeWebhookRequest,
+  recordStripeWebhookEvent,
+} from '@/lib/stripe-webhook'
 
 function createSupabaseAdmin() {
   return createClient(
@@ -14,43 +18,47 @@ function createSupabaseAdmin() {
 export async function POST(request: Request) {
   const body = await request.text()
   const signature = request.headers.get('stripe-signature')
+  const parsed = parseStripeWebhookRequest(
+    body,
+    signature,
+    process.env.STRIPE_WEBHOOK_SECRET
+  )
 
-  if (!signature || !process.env.STRIPE_WEBHOOK_SECRET) {
-    return NextResponse.json({ error: 'Webhook not configured' }, { status: 400 })
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: parsed.status })
   }
 
-  let event
+  const supabaseAdmin = createSupabaseAdmin()
+
+  if (await isDuplicateStripeWebhookEvent(supabaseAdmin, parsed.event.id)) {
+    return NextResponse.json({ received: true, duplicate: true })
+  }
+
   try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET)
-  } catch (error: any) {
-    console.error('Webhook signature verification failed:', error.message)
-    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
-  }
+    const event = parsed.event
 
-  if (event.type === 'account.updated') {
-    const account = event.data.object
-    const companyId = account.metadata?.company_id
+    if (event.type === 'account.updated') {
+      const account = event.data.object
+      const companyId = account.metadata?.company_id
 
-    if (companyId) {
-      const supabaseAdmin = createSupabaseAdmin()
-      await supabaseAdmin
-        .from('companies')
-        .update({
-          stripe_charges_enabled: account.charges_enabled ?? false,
-          stripe_onboarding_complete: account.details_submitted ?? false,
-        })
-        .eq('id', companyId)
+      if (companyId) {
+        await supabaseAdmin
+          .from('companies')
+          .update({
+            stripe_charges_enabled: account.charges_enabled ?? false,
+            stripe_onboarding_complete: account.details_submitted ?? false,
+          })
+          .eq('id', companyId)
+      }
     }
-  }
 
-  if (event.type === 'payment_intent.succeeded') {
-    const paymentIntent = event.data.object
-    const scheduleId = paymentIntent.metadata?.schedule_id
-    const clientId = paymentIntent.metadata?.client_id
-    const companyId = paymentIntent.metadata?.company_id
+    if (event.type === 'payment_intent.succeeded') {
+      const paymentIntent = event.data.object
+      const scheduleId = paymentIntent.metadata?.schedule_id
+      const clientId = paymentIntent.metadata?.client_id
+      const companyId = paymentIntent.metadata?.company_id
 
-    if (scheduleId && clientId && companyId) {
-      try {
+      if (scheduleId && clientId && companyId) {
         await recordStripePayment({
           scheduleId,
           clientId,
@@ -58,40 +66,37 @@ export async function POST(request: Request) {
           amount: paymentIntent.amount_received / 100,
           paymentIntentId: paymentIntent.id,
         })
-      } catch (error) {
-        console.error('Failed to record Stripe payment:', error)
-        return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 })
       }
     }
-  }
 
-  if (event.type === 'charge.refunded') {
-    const charge = event.data.object
-    const paymentIntentId =
-      typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
+    if (event.type === 'charge.refunded') {
+      const charge = event.data.object
+      const paymentIntentId =
+        typeof charge.payment_intent === 'string'
+          ? charge.payment_intent
+          : charge.payment_intent?.id
 
-    if (paymentIntentId) {
-      try {
+      if (paymentIntentId) {
         await handleStripeRefund(paymentIntentId, charge.amount_refunded / 100)
-      } catch (error) {
-        console.error('Failed to process Stripe refund:', error)
-        return NextResponse.json({ error: 'Failed to process refund' }, { status: 500 })
       }
     }
-  }
 
-  if (event.type === 'account.application.deauthorized') {
-    const account = event.data.object
-    const supabaseAdmin = createSupabaseAdmin()
-    await supabaseAdmin
-      .from('companies')
-      .update({
-        stripe_account_id: null,
-        stripe_charges_enabled: false,
-        stripe_onboarding_complete: false,
-      })
-      .eq('stripe_account_id', account.id)
-  }
+    if (event.type === 'account.application.deauthorized') {
+      const account = event.data.object
+      await supabaseAdmin
+        .from('companies')
+        .update({
+          stripe_account_id: null,
+          stripe_charges_enabled: false,
+          stripe_onboarding_complete: false,
+        })
+        .eq('stripe_account_id', account.id)
+    }
 
-  return NextResponse.json({ received: true })
+    await recordStripeWebhookEvent(supabaseAdmin, event, 'connect')
+    return NextResponse.json({ received: true })
+  } catch (error) {
+    console.error('Stripe Connect webhook handler failed:', error)
+    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 })
+  }
 }

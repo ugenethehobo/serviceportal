@@ -68,7 +68,12 @@ import { StripeConnectGate } from '@/components/dashboard/stripe-connect-gate'
 import { SearchBar } from '@/components/search-bar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { matchesSearch } from '@/lib/search'
-import { MOBILE_LG_TAB_LIST_CLASS } from '@/lib/mobile-layout'
+import {
+  MOBILE_LG_TAB_LIST_CLASS,
+  MOBILE_NATURAL_HEIGHT_CLASS,
+  MOBILE_SCROLL_VIEWPORT_CLASS,
+} from '@/lib/mobile-layout'
+import { cn } from '@/lib/utils'
 import { useLazyMountedTabs } from '@/hooks/use-lazy-mounted-tabs'
 import type { Estimate } from '@/lib/estimates'
 
@@ -594,7 +599,7 @@ export function ClientDetailPageClient({
     <Tabs
       value={activeTab}
       onValueChange={(value) => handleTabChange(value as ClientDetailTab)}
-      className="flex flex-col h-full min-h-0 p-6 max-md:p-4"
+      className={`flex flex-col h-full min-h-0 p-6 max-md:h-auto max-md:p-4 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
     >
     {/* Header */}
     <div className="mb-6 flex shrink-0 items-center justify-between max-lg:flex-col max-lg:items-stretch max-lg:gap-4 max-md:mb-4">
@@ -659,12 +664,17 @@ export function ClientDetailPageClient({
     </div>
 
       {/* Main Content */}
-      <div className="flex flex-col flex-1 min-h-0 gap-6">
+      <div className={`flex flex-col flex-1 min-h-0 gap-6 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>
         {/* Schedules */}
-        <Card className="flex-[7] flex flex-col p-6 min-h-0 max-md:flex-none max-md:p-4">
+        <Card
+          className={`flex-[7] flex flex-col p-6 min-h-0 max-md:flex-none max-md:p-4 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+        >
           {/* Tab Content Area - Full card is now used for the active page */}
 
-          <TabsContent value="jobs" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+          <TabsContent
+            value="jobs"
+            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+          >
             <>
               {/* Header row for Jobs tab */}
               <div className="flex flex-col gap-3 mb-4 shrink-0">
@@ -700,7 +710,10 @@ export function ClientDetailPageClient({
 
               {/* Jobs List */}
               {visibleSchedules.length > 0 ? (
-                <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+                <ScrollArea
+                  className={`flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+                  viewportClassName={cn('scroll-fade', MOBILE_SCROLL_VIEWPORT_CLASS)}
+                >
                   <div className="space-y-4">
                   {visibleSchedules.map((schedule, index) => (
                     <Fragment key={schedule.id}>
@@ -827,7 +840,10 @@ export function ClientDetailPageClient({
             </>
           </TabsContent>
 
-          <TabsContent value="estimates" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+          <TabsContent
+            value="estimates"
+            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+          >
             {mountedTabs.has('estimates') ? (
               <ClientEstimatesPanel
                 clientId={clientId}
@@ -837,7 +853,10 @@ export function ClientDetailPageClient({
             ) : null}
           </TabsContent>
 
-          <TabsContent value="billing" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+          <TabsContent
+            value="billing"
+            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+          >
             {mountedTabs.has('billing') ? (
               <StripeConnectGate>
                 <ClientBillingPanel clientId={clientId} />
@@ -845,19 +864,28 @@ export function ClientDetailPageClient({
             ) : null}
           </TabsContent>
 
-          <TabsContent value="documents" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+          <TabsContent
+            value="documents"
+            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+          >
             {mountedTabs.has('documents') ? (
               <ClientDocumentsPanel clientId={clientId} refreshKey={documentsRefreshKey} />
             ) : null}
           </TabsContent>
 
-          <TabsContent value="photos" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+          <TabsContent
+            value="photos"
+            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+          >
             {mountedTabs.has('photos') ? (
               <ClientPhotosPanel clientId={clientId} refreshKey={photosRefreshKey} />
             ) : null}
           </TabsContent>
 
-          <TabsContent value="messaging" className="flex flex-col flex-1 min-h-0 mt-0 outline-none">
+          <TabsContent
+            value="messaging"
+            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+          >
             {mountedTabs.has('messaging') ? (
               <ClientMessagingPanel clientId={clientId} clientName={client.name} />
             ) : null}
@@ -874,7 +902,10 @@ export function ClientDetailPageClient({
                 Contact Information
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+            <ScrollArea
+              className={`flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+              viewportClassName={cn('scroll-fade', MOBILE_SCROLL_VIEWPORT_CLASS)}
+            >
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
 
               {[

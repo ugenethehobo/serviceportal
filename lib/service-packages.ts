@@ -24,6 +24,12 @@ export type ServicePackageDraft = {
   active: boolean
 }
 
+/** Trim only leading/trailing whitespace; keep spaces and line breaks inside the text. */
+export function normalizeServicePackageDescription(value: string): string | null {
+  const trimmed = value.replace(/^\s+|\s+$/g, '')
+  return trimmed.length > 0 ? trimmed : null
+}
+
 export function toEditableServicePackage(service?: ServicePackage): ServicePackageDraft {
   return {
     id: service?.id,
@@ -57,7 +63,7 @@ export function normalizeServicePackageDraft(
   return {
     id: draft.id,
     name,
-    description: draft.description.trim() || null,
+    description: normalizeServicePackageDescription(draft.description),
     duration_minutes: Math.min(480, Math.max(15, Math.round(draft.duration_minutes || 60))),
     price_estimate: price != null && !Number.isNaN(price) ? price : null,
     active: draft.active,

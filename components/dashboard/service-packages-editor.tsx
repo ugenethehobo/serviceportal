@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { toEditableServicePackage, type ServicePackageDraft } from '@/lib/service-packages'
 import type { ServicePackage } from '@/lib/service-packages'
@@ -62,11 +63,12 @@ export function ServicePackagesEditor({ packages, onChange }: ServicePackagesEdi
             </div>
             <div className="sm:col-span-2">
               <Label>Description (optional)</Label>
-              <Input
+              <Textarea
                 value={pkg.description}
                 onChange={(event) => updatePackage(index, { description: event.target.value })}
-                className="mt-1"
+                className="mt-1 min-h-[72px]"
                 placeholder="What is included in this package?"
+                rows={3}
               />
             </div>
             <div>

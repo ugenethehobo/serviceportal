@@ -3,6 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe } from '@/lib/stripe'
 import { getSeatLimitForPlan, mapStripeSubscriptionToPlatform } from '@/lib/platform-billing'
 import { markSignupCheckoutPaid } from '@/lib/platform-signup-server'
+import {
+  isDuplicateStripeWebhookEvent,
+  parseStripeWebhookRequest,
+  recordStripeWebhookEvent,
+} from '@/lib/stripe-webhook'
 
 function createSupabaseAdmin() {
   return createClient(
@@ -59,76 +64,81 @@ export async function POST(request: Request) {
   const signature = request.headers.get('stripe-signature')
   const secret =
     process.env.STRIPE_BILLING_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET
+  const parsed = parseStripeWebhookRequest(body, signature, secret)
 
-  if (!signature || !secret) {
-    return NextResponse.json({ error: 'Webhook not configured' }, { status: 400 })
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: parsed.status })
   }
 
-  let event
+  const supabaseAdmin = createSupabaseAdmin()
+
+  if (await isDuplicateStripeWebhookEvent(supabaseAdmin, parsed.event.id)) {
+    return NextResponse.json({ received: true, duplicate: true })
+  }
+
   try {
-    event = stripe.webhooks.constructEvent(body, signature, secret)
-  } catch (error: any) {
-    console.error('Billing webhook signature failed:', error.message)
-    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
-  }
+    const event = parsed.event
 
-  if (
-    event.type === 'customer.subscription.created' ||
-    event.type === 'customer.subscription.updated'
-  ) {
-    await syncCompanySubscription(event.data.object)
-  }
+    if (
+      event.type === 'customer.subscription.created' ||
+      event.type === 'customer.subscription.updated'
+    ) {
+      await syncCompanySubscription(event.data.object)
+    }
 
-  if (event.type === 'customer.subscription.deleted') {
-    const subscription = event.data.object
-    const admin = createSupabaseAdmin()
-    const customerId =
-      typeof subscription.customer === 'string'
-        ? subscription.customer
-        : subscription.customer.id
+    if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object
+      const customerId =
+        typeof subscription.customer === 'string'
+          ? subscription.customer
+          : subscription.customer.id
 
-    await admin
-      .from('companies')
-      .update({
-        subscription_plan: 'trial',
-        subscription_status: 'canceled',
-        stripe_platform_subscription_id: null,
-      })
-      .eq('stripe_platform_customer_id', customerId)
-  }
+      await supabaseAdmin
+        .from('companies')
+        .update({
+          subscription_plan: 'trial',
+          subscription_status: 'canceled',
+          stripe_platform_subscription_id: null,
+        })
+        .eq('stripe_platform_customer_id', customerId)
+    }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object
 
-    if (session.metadata?.signup === 'true') {
-      const plan = session.metadata.plan
-      if (plan === 'basic' || plan === 'pro') {
+      if (session.metadata?.signup === 'true') {
+        const plan = session.metadata.plan
+        if (plan === 'basic' || plan === 'pro') {
+          const subscriptionId =
+            typeof session.subscription === 'string'
+              ? session.subscription
+              : session.subscription?.id || null
+          const customerId =
+            typeof session.customer === 'string'
+              ? session.customer
+              : session.customer?.id || null
+
+          await markSignupCheckoutPaid({
+            sessionId: session.id,
+            customerId,
+            subscriptionId,
+            plan,
+          })
+        }
+      } else if (session.mode === 'subscription' && session.subscription) {
         const subscriptionId =
           typeof session.subscription === 'string'
             ? session.subscription
-            : session.subscription?.id || null
-        const customerId =
-          typeof session.customer === 'string' ? session.customer : session.customer?.id || null
-
-        await markSignupCheckoutPaid({
-          sessionId: session.id,
-          customerId,
-          subscriptionId,
-          plan,
-        })
+            : session.subscription.id
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+        await syncCompanySubscription(subscription)
       }
-      return NextResponse.json({ received: true })
     }
 
-    if (session.mode === 'subscription' && session.subscription) {
-      const subscriptionId =
-        typeof session.subscription === 'string'
-          ? session.subscription
-          : session.subscription.id
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-      await syncCompanySubscription(subscription)
-    }
+    await recordStripeWebhookEvent(supabaseAdmin, event, 'billing')
+    return NextResponse.json({ received: true })
+  } catch (error) {
+    console.error('Billing webhook handler failed:', error)
+    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 })
   }
-
-  return NextResponse.json({ received: true })
 }

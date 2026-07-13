@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { getActiveCrewsHeading } from '@/lib/company-operations'
 import type { DashboardOverviewData } from '@/lib/dashboard-overview'
 import type { DashboardMapData } from '@/lib/dashboard-map'
+import { MOBILE_PAGE_ROOT_CLASS } from '@/lib/mobile-layout'
 
 const LiveCrewLocationsMap = dynamic(
   () =>
@@ -89,7 +90,7 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
     mapData?.mode === 'upcoming_open_days' ? 'Upcoming Job Sites' : "Today's Job Sites"
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 p-6 max-md:gap-3 max-md:p-4">
+    <div className={`${MOBILE_PAGE_ROOT_CLASS} gap-4 max-md:gap-3`}>
       <PageHeader
         title="Dashboard"
         description={

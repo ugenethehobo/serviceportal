@@ -40,6 +40,14 @@ import {
 import { DocumentViewerDialog } from '@/components/dashboard/document-viewer-dialog'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
+import {
+  MOBILE_LIST_STACK_CLASS,
+  MOBILE_NATURAL_HEIGHT_CLASS,
+  MOBILE_SCROLL_VIEWPORT_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+  MOBILE_TOOLBAR_ROW_CLASS,
+} from '@/lib/mobile-layout'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { Banknote, Copy, ExternalLink, FileText, Loader2, Mail, Trash2, User, X, Check } from 'lucide-react'
@@ -286,7 +294,7 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
   )
 
   return (
-    <div className="flex flex-col gap-6 flex-1 min-h-0">
+    <div className={`flex flex-col gap-6 flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <SummaryCard label="Total Charged" value={formatCurrency(summary.totalCharged)} />
         <SummaryCard label="Total Paid" value={formatCurrency(summary.totalPaid)} />
@@ -357,17 +365,20 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
         </div>
       )}
 
-      <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
+      <ScrollArea
+        className={`flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+        viewportClassName={`scroll-fade ${MOBILE_SCROLL_VIEWPORT_CLASS}`}
+      >
         <div className="flex flex-col gap-6">
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <div>
+          <div className={`mb-3 ${MOBILE_TOOLBAR_ROW_CLASS}`}>
+            <div className="min-w-0">
               <h3 className="font-semibold text-lg">Line Items</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Recurring jobs copy charges automatically — edit any item as needed.
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 max-md:w-full max-md:[&_button]:flex-1">
               {billing.listPrice > 0 && billing.lineItems.length === 0 && (
                 <Button variant="outline" size="sm" onClick={openAddFromJobPrice}>
                   Use Job Price ({formatCurrency(billing.listPrice)})
@@ -378,7 +389,8 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
           </div>
 
           {billing.lineItems.length > 0 ? (
-            <div className="border rounded-lg">
+            <>
+            <div className={`border rounded-lg ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -457,6 +469,99 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                 </TableBody>
               </Table>
             </div>
+
+            <div className={MOBILE_LIST_STACK_CLASS}>
+              {billing.lineItems.map((item) =>
+                editingLineId === item.id ? (
+                  <MobileListCard key={item.id}>
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-xs">Description</Label>
+                        <Input
+                          value={lineForm.description}
+                          onChange={(e) =>
+                            setLineForm({ ...lineForm, description: e.target.value })
+                          }
+                          className="mt-1"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">Qty</Label>
+                          <Input
+                            type="number"
+                            value={lineForm.quantity}
+                            onChange={(e) =>
+                              setLineForm({ ...lineForm, quantity: e.target.value })
+                            }
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Unit price</Label>
+                          <Input
+                            type="number"
+                            value={lineForm.unitPrice}
+                            onChange={(e) =>
+                              setLineForm({ ...lineForm, unitPrice: e.target.value })
+                            }
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+                      <MobileListCardRow label="Amount" value={linePreview} />
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="sm" onClick={cancelLineEdit}>
+                          <X className="size-4" />
+                          Cancel
+                        </Button>
+                        <Button size="sm" onClick={handleSaveLine} disabled={isSaving}>
+                          <Check className="size-4" />
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  </MobileListCard>
+                ) : (
+                  <MobileListCard key={item.id}>
+                    <div className="space-y-2">
+                      <p className="font-medium leading-snug">{item.description}</p>
+                      <MobileListCardRow label="Qty" value={item.quantity} />
+                      <MobileListCardRow
+                        label="Unit"
+                        value={formatCurrency(item.unit_price)}
+                      />
+                      <MobileListCardRow label="Amount" value={formatCurrency(item.amount)} />
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEditLine(item)}>
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          onClick={() => handleDeleteLine(item.id)}
+                        >
+                          <Trash2 className="size-3.5" />
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  </MobileListCard>
+                )
+              )}
+              <MobileListCard>
+                <MobileListCardRow
+                  label="Subtotal"
+                  value={
+                    <span className="font-semibold">
+                      {formatCurrency(summary.totalCharged)}
+                    </span>
+                  }
+                />
+              </MobileListCard>
+            </div>
+            </>
           ) : (
             <div className="border border-dashed rounded-lg p-8 text-center text-muted-foreground text-sm">
               No line items yet. Set a job price when creating the job, or add charges below.
@@ -510,14 +615,14 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
         </section>
 
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <div>
+          <div className={`mb-3 ${MOBILE_TOOLBAR_ROW_CLASS}`}>
+            <div className="min-w-0">
               <h3 className="font-semibold text-lg">Payments</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Client portal and Stripe payments appear here automatically.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 max-md:w-full max-md:[&_button]:flex-1">
               <Link
                 href="/dashboard/payments"
                 className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
@@ -539,7 +644,8 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
           </div>
 
           {billing.payments.length > 0 ? (
-            <div className="border rounded-lg">
+            <>
+            <div className={`border rounded-lg ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -593,6 +699,57 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                 </TableBody>
               </Table>
             </div>
+
+            <div className={MOBILE_LIST_STACK_CLASS}>
+              {billing.payments.map((payment) => (
+                <MobileListCard key={payment.id}>
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium capitalize">{payment.method}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {new Date(payment.payment_date + 'T00:00:00').toLocaleDateString()}
+                        </p>
+                      </div>
+                      {payment.source === 'stripe' ? (
+                        <Badge variant="secondary">Client Portal</Badge>
+                      ) : null}
+                    </div>
+                    <MobileListCardRow
+                      label="Amount"
+                      value={formatCurrency(payment.amount)}
+                    />
+                    {payment.notes ? (
+                      <MobileListCardRow label="Notes" value={payment.notes} />
+                    ) : null}
+                    {payment.source !== 'stripe' ? (
+                      <div className="flex justify-end pt-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          onClick={() => handleDeletePayment(payment.id, payment.source)}
+                        >
+                          <Trash2 className="size-3.5" />
+                          Delete
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                </MobileListCard>
+              ))}
+              <MobileListCard>
+                <MobileListCardRow
+                  label="Total paid"
+                  value={
+                    <span className="font-semibold text-green-600">
+                      {formatCurrency(summary.totalPaid)}
+                    </span>
+                  }
+                />
+              </MobileListCard>
+            </div>
+            </>
           ) : (
             <div className="border border-dashed rounded-lg p-8 text-center text-muted-foreground text-sm">
               No payments yet. The client will pay via the client portal, or record cash/check payments here.

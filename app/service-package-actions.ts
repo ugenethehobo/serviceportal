@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@supabase/supabase-js'
 import {
+  normalizeServicePackageDescription,
   normalizeServicePackageDraft,
   type ServicePackage,
 } from '@/lib/service-packages'
@@ -113,7 +114,10 @@ export async function updateServicePackagesAction(
     const payload = {
       company_id: check.companyId,
       name: pkg.name.trim(),
-      description: pkg.description?.trim() || null,
+      description:
+        pkg.description == null
+          ? null
+          : normalizeServicePackageDescription(pkg.description),
       duration_minutes: Math.min(480, Math.max(15, Math.round(pkg.duration_minutes || 60))),
       price_estimate: pkg.price_estimate ?? null,
       active: pkg.active,

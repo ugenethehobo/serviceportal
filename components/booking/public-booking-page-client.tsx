@@ -503,7 +503,9 @@ function ServiceRadioOption({
       <div className="min-w-0">
         <p className="font-medium">{service.name}</p>
         {service.description ? (
-          <p className="text-sm text-muted-foreground mt-0.5">{service.description}</p>
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground mt-0.5">
+            {service.description}
+          </p>
         ) : null}
       </div>
       <div className="text-right text-sm text-muted-foreground shrink-0">

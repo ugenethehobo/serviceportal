@@ -1,6 +1,7 @@
 'use client'
 
 import { Badge } from '@/components/ui/badge'
+import { MOBILE_NATURAL_HEIGHT_CLASS } from '@/lib/mobile-layout'
 import { cn } from '@/lib/utils'
 import {
   getCrewColorClasses,
@@ -35,8 +36,13 @@ export function ScheduleMobileWeekList({
   className,
 }: ScheduleMobileWeekListProps) {
   return (
-    <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3">
+    <div className={cn('flex min-h-0 flex-1 flex-col', MOBILE_NATURAL_HEIGHT_CLASS, className)}>
+      <div
+        className={cn(
+          'min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-3',
+          MOBILE_NATURAL_HEIGHT_CLASS
+        )}
+      >
         <div className="space-y-5">
           {data.days.map((day) => {
             const dayJobs = data.jobs

@@ -35,9 +35,15 @@ const FETCH_OPTIONS: RequestInit = {
   cache: 'no-store',
 }
 
-function normalizeAddressKey(address: string) {
+export function normalizeGeocodeAddressKey(address: string) {
   return address.trim().toLowerCase().replace(/\s+/g, ' ')
 }
+
+function normalizeAddressKey(address: string) {
+  return normalizeGeocodeAddressKey(address)
+}
+
+export const DEFAULT_GEOCODE_CONCURRENCY = 5
 
 function censusZip(zip: string) {
   return zip.split('-')[0].trim()
@@ -308,13 +314,24 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult> {
 }
 
 export async function geocodeAddresses(
-  entries: Array<{ id: string; address: string }>
+  entries: Array<{ id: string; address: string }>,
+  options?: { concurrency?: number }
 ): Promise<Map<string, GeocodeResult>> {
   const results = new Map<string, GeocodeResult>()
+  const concurrency = Math.max(1, options?.concurrency ?? DEFAULT_GEOCODE_CONCURRENCY)
 
-  for (const entry of entries) {
-    const result = await geocodeAddress(entry.address)
-    results.set(entry.id, result)
+  for (let index = 0; index < entries.length; index += concurrency) {
+    const chunk = entries.slice(index, index + concurrency)
+    const chunkResults = await Promise.all(
+      chunk.map(async (entry) => ({
+        id: entry.id,
+        result: await geocodeAddress(entry.address),
+      }))
+    )
+
+    for (const { id, result } of chunkResults) {
+      results.set(id, result)
+    }
   }
 
   return results

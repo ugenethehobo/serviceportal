@@ -26,6 +26,7 @@ import {
   type RoutePlannerData,
   type RouteStop,
 } from '@/lib/route-planner'
+import { MOBILE_PAGE_ROOT_CLASS } from '@/lib/mobile-layout'
 
 function MapBounds({ coordinates }: { coordinates: [number, number][] }) {
   const { map, isLoaded } = useMap()
@@ -188,7 +189,7 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
   const hasWarnings = data.invalidAddresses.length > 0
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
+    <div className={MOBILE_PAGE_ROOT_CLASS}>
       <div className="flex items-center justify-between mb-6 shrink-0 max-md:mb-4 max-md:flex-col max-md:items-start max-md:gap-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">Route Planner</h1>

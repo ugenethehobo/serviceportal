@@ -39,6 +39,11 @@ import {
 import { toast } from 'sonner'
 import { X } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
+import {
+  MOBILE_FULL_WIDTH_BUTTON_CLASS,
+  MOBILE_PAGE_ROOT_CLASS,
+  MOBILE_TAB_LIST_CLASS,
+} from '@/lib/mobile-layout'
 
 interface Profile {
   id: string
@@ -216,7 +221,11 @@ export function CrewsPageClient({
   }
 
   const addCrewButton = (
-    <Button onClick={() => setIsAddModalOpen(true)} disabled={atCrewLimit}>
+    <Button
+      onClick={() => setIsAddModalOpen(true)}
+      disabled={atCrewLimit}
+      className={MOBILE_FULL_WIDTH_BUTTON_CLASS}
+    >
       + Add Crew
     </Button>
   )
@@ -238,7 +247,7 @@ export function CrewsPageClient({
   }
 
   return (
-    <div className="p-6 flex flex-col h-full min-h-0 max-md:p-4">
+    <div className={MOBILE_PAGE_ROOT_CLASS}>
       <PageHeader
         title="Crews & Team"
         description="Manage field crews and team member accounts"
@@ -249,7 +258,7 @@ export function CrewsPageClient({
         onValueChange={setActiveTab}
         className="flex flex-1 flex-col min-h-0 gap-4"
       >
-        <TabsList className="max-md:w-full max-md:justify-start max-md:overflow-x-auto max-md:flex-nowrap">
+        <TabsList className={MOBILE_TAB_LIST_CLASS}>
           <TabsTrigger value="crews">Crews</TabsTrigger>
           <TabsTrigger value="team">Team Members</TabsTrigger>
         </TabsList>

@@ -18,6 +18,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Switch } from '@/components/ui/switch'
+import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
+import {
+  MOBILE_FULL_WIDTH_BUTTON_CLASS,
+  MOBILE_LIST_STACK_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+} from '@/lib/mobile-layout'
 import {
   NOTIFICATION_EVENT_LABELS,
   normalizeInvoiceOverdueOffsets,
@@ -240,7 +246,7 @@ export function NotificationSettings({ embedded = false }: NotificationSettingsP
 
       <div className="space-y-3">
         <Label>Per-event delivery</Label>
-        <div className="rounded-lg border overflow-hidden">
+        <div className={`rounded-lg border overflow-hidden ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}>
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -291,9 +297,63 @@ export function NotificationSettings({ embedded = false }: NotificationSettingsP
             </TableBody>
           </Table>
         </div>
+
+        <div className={MOBILE_LIST_STACK_CLASS}>
+          {EVENT_ORDER.map((event) => {
+            const eventPrefs = preferences.events[event] || {}
+            return (
+              <MobileListCard key={event}>
+                <div className="space-y-3">
+                  <p className="font-medium leading-snug">{NOTIFICATION_EVENT_LABELS[event]}</p>
+                  <MobileListCardRow
+                    label="Email"
+                    value={
+                      <Switch
+                        checked={!!eventPrefs.email}
+                        disabled={!preferences.email_enabled}
+                        onCheckedChange={(checked) =>
+                          updatePreference((current) => ({
+                            ...current,
+                            events: {
+                              ...current.events,
+                              [event]: { ...current.events[event], email: checked },
+                            },
+                          }))
+                        }
+                      />
+                    }
+                  />
+                  <MobileListCardRow
+                    label="SMS"
+                    value={
+                      <Switch
+                        checked={!!eventPrefs.sms}
+                        disabled={!preferences.sms_enabled}
+                        onCheckedChange={(checked) =>
+                          updatePreference((current) => ({
+                            ...current,
+                            events: {
+                              ...current.events,
+                              [event]: { ...current.events[event], sms: checked },
+                            },
+                          }))
+                        }
+                      />
+                    }
+                  />
+                </div>
+              </MobileListCard>
+            )
+          })}
+        </div>
       </div>
 
-      <Button type="button" onClick={handleSave} disabled={isSaving}>
+      <Button
+        type="button"
+        onClick={handleSave}
+        disabled={isSaving}
+        className={MOBILE_FULL_WIDTH_BUTTON_CLASS}
+      >
         {isSaving ? 'Saving…' : 'Save notification settings'}
       </Button>
     </div>

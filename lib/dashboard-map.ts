@@ -5,10 +5,13 @@ import {
   type StructuredAddress,
 } from '@/lib/address'
 import {
-  geocodeAddresses,
-  geocodeStructuredAddress,
-  validateAddressFormat,
-} from '@/lib/geocoding'
+  buildClientGeocodeAddressKey,
+  buildCompanyGeocodeAddressKey,
+  resolveGeocodeResults,
+  type GeocodeResolveEntry,
+  type StoredCoordinatesRow,
+} from '@/lib/address-geocoding'
+import { validateAddressFormat } from '@/lib/geocoding'
 import { formatTimeInTimezone } from '@/lib/timezone'
 
 const TODAY_MAP_JOB_STATUSES = new Set(['scheduled', 'in_progress'])
@@ -21,7 +24,8 @@ type RawSchedule = {
   status: string
   crew_id: string | null
   client:
-    | {
+    | ({
+        id: string
         name: string
         address?: string | null
         address_street?: string | null
@@ -29,16 +33,19 @@ type RawSchedule = {
         address_city?: string | null
         address_state?: string | null
         address_zip?: string | null
-      }
-    | {
-        name: string
-        address?: string | null
-        address_street?: string | null
-        address_unit?: string | null
-        address_city?: string | null
-        address_state?: string | null
-        address_zip?: string | null
-      }[]
+      } & StoredCoordinatesRow)
+    | Array<
+        {
+          id: string
+          name: string
+          address?: string | null
+          address_street?: string | null
+          address_unit?: string | null
+          address_city?: string | null
+          address_state?: string | null
+          address_zip?: string | null
+        } & StoredCoordinatesRow
+      >
     | null
   crew: { id: string; name: string } | { id: string; name: string }[] | null
 }
@@ -141,17 +148,20 @@ export async function buildDashboardMapData(input: {
   companyName: string
   companyAddress?: string | null
   companyStructuredAddress?: StructuredAddress | null
+  companyCoordinates?: StoredCoordinatesRow | null
   schedules: RawSchedule[]
   timezone?: string
   now?: Date
   mode?: DashboardMapMode
   previewRangeLabel?: string
+  onGeocodesResolved?: (result: Awaited<ReturnType<typeof resolveGeocodeResults>>) => Promise<void>
 }): Promise<DashboardMapData> {
   const timezone = input.timezone || 'America/Chicago'
   const invalidAddresses: InvalidMapAddress[] = []
   const markers: MapMarkerData[] = []
   const pendingGeocode: Array<{
     id: string
+    lookupId: string
     kind: 'company' | 'job'
     label: string
     subtitle?: string
@@ -159,59 +169,54 @@ export async function buildDashboardMapData(input: {
     crewId?: string | null
     status?: string
   }> = []
+  const geocodeEntries: GeocodeResolveEntry[] = []
 
   const structuredCompany = input.companyStructuredAddress
   const hasStructuredCompany =
     structuredCompany && hasCompleteStructuredAddress(structuredCompany)
+  const companyDisplayAddress = hasStructuredCompany
+    ? formatAddressForDisplay(structuredCompany)
+    : input.companyAddress?.trim() || ''
+  const companyAddressKey = buildCompanyGeocodeAddressKey({
+    address: input.companyAddress,
+    address_street: structuredCompany?.street,
+    address_unit: structuredCompany?.unit,
+    address_city: structuredCompany?.city,
+    address_state: structuredCompany?.state,
+    address_zip: structuredCompany?.zip,
+  })
 
-  if (hasStructuredCompany) {
-    const displayAddress = formatAddressForDisplay(structuredCompany)
-    const geocodeResult = await geocodeStructuredAddress(structuredCompany)
-
-    if (geocodeResult.success) {
-      markers.push({
+  if (!companyDisplayAddress) {
+    invalidAddresses.push({
+      id: 'company',
+      label: `${input.companyName} (company)`,
+      address: '',
+      reason: 'Company address is not set — complete the form in Settings',
+    })
+  } else {
+    const formatError = validateAddressFormat(companyDisplayAddress)
+    if (formatError) {
+      invalidAddresses.push({
         id: 'company',
+        label: `${input.companyName} (company)`,
+        address: companyDisplayAddress,
+        reason: formatError.reason,
+      })
+    } else {
+      geocodeEntries.push({
+        id: 'company',
+        address: companyDisplayAddress,
+        addressKey: companyAddressKey,
+        stored: input.companyCoordinates || undefined,
+        persistTarget: 'company',
+      })
+      pendingGeocode.push({
+        id: 'company',
+        lookupId: 'company',
         kind: 'company',
         label: input.companyName,
         subtitle: 'Company location',
-        address: displayAddress,
-        longitude: geocodeResult.longitude,
-        latitude: geocodeResult.latitude,
-      })
-    } else {
-      invalidAddresses.push({
-        id: 'company',
-        label: `${input.companyName} (company)`,
-        address: displayAddress,
-        reason: geocodeResult.reason,
-      })
-    }
-  } else {
-    const companyAddress = input.companyAddress?.trim()
-    if (companyAddress) {
-      const formatError = validateAddressFormat(companyAddress)
-      if (formatError) {
-        invalidAddresses.push({
-          id: 'company',
-          label: `${input.companyName} (company)`,
-          address: companyAddress,
-          reason: formatError.reason,
-        })
-      } else {
-        pendingGeocode.push({
-          id: 'company',
-          kind: 'company',
-          label: input.companyName,
-          subtitle: 'Company location',
-          address: companyAddress,
-        })
-      }
-    } else {
-      invalidAddresses.push({
-        id: 'company',
-        label: `${input.companyName} (company)`,
-        address: '',
-        reason: 'Company address is not set — complete the form in Settings',
+        address: companyDisplayAddress,
       })
     }
   }
@@ -249,8 +254,20 @@ export async function buildDashboardMapData(input: {
       continue
     }
 
+    if (client?.id) {
+      geocodeEntries.push({
+        id: client.id,
+        address: locationAddress,
+        addressKey: buildClientGeocodeAddressKey(client),
+        stored: client,
+        persistTarget: 'client',
+        persistId: client.id,
+      })
+    }
+
     pendingGeocode.push({
       id: schedule.id,
+      lookupId: client?.id || schedule.id,
       kind: 'job',
       label,
       subtitle,
@@ -260,12 +277,13 @@ export async function buildDashboardMapData(input: {
     })
   }
 
-  const geocoded = await geocodeAddresses(
-    pendingGeocode.map((entry) => ({ id: entry.id, address: entry.address }))
-  )
+  const resolvedGeocodes = await resolveGeocodeResults(geocodeEntries)
+  if (input.onGeocodesResolved) {
+    await input.onGeocodesResolved(resolvedGeocodes)
+  }
 
   for (const entry of pendingGeocode) {
-    const result = geocoded.get(entry.id)
+    const result = resolvedGeocodes.results.get(entry.lookupId)
     if (!result) continue
 
     if (!result.success) {

@@ -20,6 +20,8 @@ import { MapsNavigateButton } from '@/components/dashboard/maps-navigate-button'
 import { getDisplayAddressFromClient } from '@/lib/address'
 import { Button } from '@/components/ui/button'
 import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
+import { MOBILE_NATURAL_HEIGHT_CLASS } from '@/lib/mobile-layout'
+import { cn } from '@/lib/utils'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -489,11 +491,13 @@ export function JobDetailPageClient({
       onValueChange={(value) =>
         handleTabChange(value as 'details' | 'billing' | 'photos' | 'documents' | 'messaging')
       }
-      className={
+      className={cn(
+        'flex h-full min-h-0 flex-col max-md:h-auto',
+        MOBILE_NATURAL_HEIGHT_CLASS,
         isTeamMember
-          ? 'flex h-full min-h-0 flex-col p-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-6'
-          : 'flex h-full min-h-0 flex-col p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 lg:pb-6'
-      }
+          ? 'p-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-6'
+          : 'p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 lg:pb-6'
+      )}
     >
       <header className="mb-4 shrink-0 sm:mb-6">
         <div className="flex flex-col gap-4 max-lg:gap-3 lg:hidden">
@@ -515,7 +519,13 @@ export function JobDetailPageClient({
       )}
 
       <MainPageCard className="min-h-0 flex-1 overflow-hidden p-4 sm:p-6">
-        <TabsContent value="details" className="mt-0 flex min-h-0 flex-1 flex-col outline-none">
+        <TabsContent
+          value="details"
+          className={cn(
+            'mt-0 flex min-h-0 flex-1 flex-col outline-none',
+            MOBILE_NATURAL_HEIGHT_CLASS
+          )}
+        >
           <MainPageCardScroll className="min-h-0 flex-1">
             {isEditing ? (
               <div className="w-full max-w-2xl lg:max-w-3xl">
@@ -546,21 +556,45 @@ export function JobDetailPageClient({
           </MainPageCardScroll>
         </TabsContent>
 
-        <TabsContent value="billing" className="mt-0 flex min-h-0 flex-1 flex-col outline-none">
+        <TabsContent
+          value="billing"
+          className={cn(
+            'mt-0 flex min-h-0 flex-1 flex-col outline-none',
+            MOBILE_NATURAL_HEIGHT_CLASS
+          )}
+        >
           <StripeConnectGate>
             <JobBillingPanel scheduleId={jobId} clientId={clientId} />
           </StripeConnectGate>
         </TabsContent>
 
-        <TabsContent value="photos" className="mt-0 flex min-h-0 flex-1 flex-col outline-none">
+        <TabsContent
+          value="photos"
+          className={cn(
+            'mt-0 flex min-h-0 flex-1 flex-col outline-none',
+            MOBILE_NATURAL_HEIGHT_CLASS
+          )}
+        >
           <JobPhotosPanel scheduleId={jobId} clientId={clientId} />
         </TabsContent>
 
-        <TabsContent value="documents" className="mt-0 flex min-h-0 flex-1 flex-col outline-none">
+        <TabsContent
+          value="documents"
+          className={cn(
+            'mt-0 flex min-h-0 flex-1 flex-col outline-none',
+            MOBILE_NATURAL_HEIGHT_CLASS
+          )}
+        >
           <JobDocumentsPanel scheduleId={jobId} clientId={clientId} />
         </TabsContent>
 
-        <TabsContent value="messaging" className="mt-0 flex min-h-0 flex-1 flex-col outline-none">
+        <TabsContent
+          value="messaging"
+          className={cn(
+            'mt-0 flex min-h-0 flex-1 flex-col outline-none',
+            MOBILE_NATURAL_HEIGHT_CLASS
+          )}
+        >
           <JobMessagingPanel
             clientId={clientId}
             scheduleId={jobId}

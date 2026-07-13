@@ -41,6 +41,14 @@ import {
   type EstimateStatus,
 } from '@/lib/estimates'
 import { SearchBar } from '@/components/search-bar'
+import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
+import {
+  MOBILE_FULL_WIDTH_BUTTON_CLASS,
+  MOBILE_LIST_STACK_CLASS,
+  MOBILE_NATURAL_HEIGHT_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+  MOBILE_TOOLBAR_ROW_CLASS,
+} from '@/lib/mobile-layout'
 import { matchesSearch } from '@/lib/search'
 import { toast } from 'sonner'
 import { Trash2, ArrowRight, Plus, FileDown, X, Check, AlertTriangle } from 'lucide-react'
@@ -383,19 +391,19 @@ export function ClientEstimatesPanel({
   const linePreview = formatCurrency(calcPreview(lineForm.quantity, lineForm.unitPrice))
 
   return (
-    <div className="flex flex-col gap-4 flex-1 min-h-0">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+    <div className={`flex flex-col gap-4 flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>
+      <div className={`shrink-0 ${MOBILE_TOOLBAR_ROW_CLASS}`}>
         <SearchBar
           value={estimateSearchQuery}
           onChange={setEstimateSearchQuery}
           placeholder="Search estimates by title, number, or status..."
-          className="flex-1 max-w-md"
+          className="flex-1 max-w-md max-md:max-w-none"
         />
-        <div className="flex items-center gap-3 sm:ml-auto">
+        <div className="flex items-center gap-3 sm:ml-auto max-md:w-full">
           <p className="text-sm text-muted-foreground hidden lg:block">
             Changes save automatically.
           </p>
-          <Button size="sm" onClick={openCreate}>
+          <Button size="sm" onClick={openCreate} className={MOBILE_FULL_WIDTH_BUTTON_CLASS}>
             <Plus className="size-4" />
             New Estimate
           </Button>
@@ -404,43 +412,71 @@ export function ClientEstimatesPanel({
 
       {estimates.length > 0 ? (
         filteredEstimates.length > 0 ? (
-        <ScrollArea className="border rounded-lg flex-1 min-h-0" viewportClassName="scroll-fade">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Estimate</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredEstimates.map((estimate) => (
-                <TableRow
-                  key={estimate.id}
-                  className="cursor-pointer hover:bg-muted/30"
-                  onClick={() => openEstimate(estimate)}
-                >
-                  <TableCell>
-                    <div className="font-medium">{estimate.title}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatEstimateNumber(estimate.id, estimate.created_at)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={estimate.status} />
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {new Date(estimate.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(estimate.total)}
-                  </TableCell>
+        <>
+          <ScrollArea
+            className={`border rounded-lg flex-1 min-h-0 ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}
+            viewportClassName="scroll-fade"
+          >
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Estimate</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </ScrollArea>
+              </TableHeader>
+              <TableBody>
+                {filteredEstimates.map((estimate) => (
+                  <TableRow
+                    key={estimate.id}
+                    className="cursor-pointer hover:bg-muted/30"
+                    onClick={() => openEstimate(estimate)}
+                  >
+                    <TableCell>
+                      <div className="font-medium">{estimate.title}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatEstimateNumber(estimate.id, estimate.created_at)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={estimate.status} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(estimate.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(estimate.total)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+
+          <div className={MOBILE_LIST_STACK_CLASS}>
+            {filteredEstimates.map((estimate) => (
+              <MobileListCard key={estimate.id} onClick={() => openEstimate(estimate)}>
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium leading-snug">{estimate.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {formatEstimateNumber(estimate.id, estimate.created_at)}
+                      </p>
+                    </div>
+                    <StatusBadge status={estimate.status} />
+                  </div>
+                  <MobileListCardRow
+                    label="Date"
+                    value={new Date(estimate.created_at).toLocaleDateString()}
+                  />
+                  <MobileListCardRow label="Total" value={formatCurrency(estimate.total)} />
+                </div>
+              </MobileListCard>
+            ))}
+          </div>
+        </>
         ) : (
           <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg">
             <p className="text-muted-foreground text-sm">No estimates match your search.</p>
