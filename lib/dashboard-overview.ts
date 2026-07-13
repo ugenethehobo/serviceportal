@@ -1,3 +1,4 @@
+import type { ActivityFeedItem } from '@/lib/activity-feed'
 import { formatMinutesAsTime, type BusinessHours } from '@/lib/business-hours'
 import { getMinutesFromMidnightInTimezone, formatTimeInTimezone } from '@/lib/timezone'
 
@@ -214,4 +215,5 @@ export type DashboardOverviewData = {
   closedDayLabel?: string
   monthlyKpis?: DashboardMonthlyKpis
   isSoloBusiness?: boolean
+  activity: ActivityFeedItem[]
 }

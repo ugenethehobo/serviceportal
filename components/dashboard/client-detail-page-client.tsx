@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Fragment } from 'react'
 import { Button } from "@/components/ui/button"
@@ -64,6 +64,7 @@ import { ClientDocumentsPanel } from '@/components/dashboard/client-documents-pa
 import { ClientPhotosPanel } from '@/components/dashboard/client-photos-panel'
 import { ClientMessagingPanel } from '@/components/dashboard/client-messaging-panel'
 import { ClientPortalAccess } from '@/components/dashboard/client-portal-access'
+import { StaffActivityCard } from '@/components/dashboard/staff-activity-card'
 import { StripeConnectGate } from '@/components/dashboard/stripe-connect-gate'
 import { SearchBar } from '@/components/search-bar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -76,6 +77,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useLazyMountedTabs } from '@/hooks/use-lazy-mounted-tabs'
 import type { Estimate } from '@/lib/estimates'
+import type { ActivityFeedItem } from '@/lib/activity-feed'
 
 type ClientDetailTab =
   | 'jobs'
@@ -102,12 +104,27 @@ interface Client {
   created_at: string
 }
 
+const CLIENT_DETAIL_TABS: ClientDetailTab[] = [
+  'jobs',
+  'estimates',
+  'billing',
+  'documents',
+  'photos',
+  'messaging',
+]
+
+function isClientDetailTab(value: string | null): value is ClientDetailTab {
+  return Boolean(value && CLIENT_DETAIL_TABS.includes(value as ClientDetailTab))
+}
+
 type ClientDetailPageClientProps = {
   clientId: string
   initialClient: Client
   initialSchedules: any[]
   initialIsSoloBusiness: boolean
   initialSoloCrewId: string | null
+  initialActivity: ActivityFeedItem[]
+  initialTimezone: string
 }
 
 export function ClientDetailPageClient({
@@ -116,8 +133,11 @@ export function ClientDetailPageClient({
   initialSchedules,
   initialIsSoloBusiness,
   initialSoloCrewId,
+  initialActivity,
+  initialTimezone,
 }: ClientDetailPageClientProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
   const [client, setClient] = useState<Client | null>(initialClient)
@@ -140,8 +160,18 @@ export function ClientDetailPageClient({
   const [showArchived, setShowArchived] = useState(false)
   const [jobSearchQuery, setJobSearchQuery] = useState('')
 
-  const [activeTab, setActiveTab] = useState<ClientDetailTab>('jobs')
-  const { mountedTabs, mountTab } = useLazyMountedTabs(activeTab, 'jobs')
+  const tabFromUrl = searchParams.get('tab')
+  const initialTab = isClientDetailTab(tabFromUrl) ? tabFromUrl : 'jobs'
+  const [activeTab, setActiveTab] = useState<ClientDetailTab>(initialTab)
+  const { mountedTabs, mountTab } = useLazyMountedTabs(activeTab, initialTab)
+  const [activity, setActivity] = useState(initialActivity)
+
+  useEffect(() => {
+    if (isClientDetailTab(tabFromUrl) && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl)
+      mountTab(tabFromUrl)
+    }
+  }, [tabFromUrl, activeTab, mountTab])
 
   const handleTabChange = (tab: ClientDetailTab) => {
     setActiveTab(tab)
@@ -207,6 +237,7 @@ export function ClientDetailPageClient({
       setSchedules(result.data.schedules)
       setIsSoloBusiness(result.data.isSoloBusiness)
       setSoloCrewId(result.data.soloCrewId)
+      setActivity(result.data.activity)
     } else {
       console.error('Error refreshing client:', result.error)
     }
@@ -662,6 +693,12 @@ export function ClientDetailPageClient({
         </Button>
       </div>
     </div>
+
+      <StaffActivityCard
+        items={activity}
+        timezone={initialTimezone}
+        variant="client"
+      />
 
       {/* Main Content */}
       <div className={`flex flex-col flex-1 min-h-0 gap-6 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>

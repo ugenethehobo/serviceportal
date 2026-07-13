@@ -1,5 +1,17 @@
 import { formatCurrency } from '@/lib/billing'
+import {
+  sortActivityItems,
+  type ActivityFeedItem,
+  type ActivityPeriod,
+} from '@/lib/activity-feed'
 import { isJobBillableForClient, type PortalJob } from '@/lib/portal-jobs'
+
+export type { ActivityPeriod as PortalActivityPeriod }
+export {
+  ACTIVITY_PERIOD_LABELS as PORTAL_ACTIVITY_PERIOD_LABELS,
+  filterActivityByPeriod,
+  formatActivityWhen as formatPortalActivityWhen,
+} from '@/lib/activity-feed'
 
 export type PortalActivityType =
   | 'estimate_review'
@@ -9,14 +21,8 @@ export type PortalActivityType =
   | 'payment_received'
   | 'visit_upcoming'
 
-export type PortalActivityItem = {
-  id: string
+export type PortalActivityItem = ActivityFeedItem & {
   type: PortalActivityType
-  title: string
-  description: string
-  href: string
-  occurredAt: string
-  urgent?: boolean
 }
 
 type RawEstimate = {
@@ -55,53 +61,6 @@ type ScheduleMeta = {
   title: string
   status: string
   start_time: string
-}
-
-export type PortalActivityPeriod = '1w' | '2w' | '30d' | '60d' | 'all'
-
-export const PORTAL_ACTIVITY_PERIOD_LABELS: Record<PortalActivityPeriod, string> = {
-  '1w': '1 week',
-  '2w': '2 weeks',
-  '30d': '30 days',
-  '60d': '60 days',
-  all: 'All time',
-}
-
-const PERIOD_DAYS: Record<Exclude<PortalActivityPeriod, 'all'>, number> = {
-  '1w': 7,
-  '2w': 14,
-  '30d': 30,
-  '60d': 60,
-}
-
-function daysAgoIso(days: number) {
-  const date = new Date()
-  date.setDate(date.getDate() - days)
-  return date.toISOString()
-}
-
-function formatActivityWhen(iso: string, timezone: string) {
-  const date = new Date(iso)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 0) {
-    return date.toLocaleTimeString([], {
-      timeZone: timezone,
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-  }
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) {
-    return date.toLocaleDateString([], { timeZone: timezone, weekday: 'short' })
-  }
-  return date.toLocaleDateString([], {
-    timeZone: timezone,
-    month: 'short',
-    day: 'numeric',
-  })
 }
 
 export function buildPortalActivity(input: {
@@ -212,28 +171,5 @@ export function buildPortalActivity(input: {
     }
   }
 
-  return items
-    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
-    .slice(0, input.limit ?? 50)
-}
-
-export function filterActivityByPeriod(
-  items: PortalActivityItem[],
-  period: PortalActivityPeriod,
-  now = new Date()
-) {
-  if (period === 'all') return items
-
-  const days = PERIOD_DAYS[period]
-  const cutoff = new Date(now)
-  cutoff.setDate(cutoff.getDate() - days)
-
-  return items.filter((item) => {
-    if (item.urgent) return true
-    return new Date(item.occurredAt).getTime() >= cutoff.getTime()
-  })
-}
-
-export function formatPortalActivityWhen(iso: string, timezone: string) {
-  return formatActivityWhen(iso, timezone)
+  return sortActivityItems(items, input.limit ?? 50) as PortalActivityItem[]
 }

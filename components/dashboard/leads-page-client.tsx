@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Archive,
   ArrowRight,
@@ -21,11 +21,9 @@ import {
   MOBILE_TOOLBAR_ROW_CLASS,
 } from '@/lib/mobile-layout'
 import {
-  addLeadActivityAction,
   archiveLeadAction,
   convertLeadToClientAction,
   createLeadAction,
-  getLeadActivitiesAction,
   getLeadsAction,
   restoreLeadAction,
   updateLeadAction,
@@ -57,12 +55,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
-  Sheet,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -87,7 +84,6 @@ import {
   sortLeadsByPriority,
   toDatetimeLocalValue,
   type Lead,
-  type LeadActivity,
   type LeadPipelineStatus,
   type LeadPriority,
   type LeadSource,
@@ -192,20 +188,19 @@ function LeadKanbanCard({
 
 export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | LeadStatus>('all')
   const [showArchived, setShowArchived] = useState(false)
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list')
-  const [sheetOpen, setSheetOpen] = useState(false)
-  const [sheetMode, setSheetMode] = useState<'create' | 'edit'>('create')
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create')
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [form, setForm] = useState<LeadFormState>(emptyLeadForm())
   const [leadAddress, setLeadAddress] = useState<StructuredAddress>(emptyStructuredAddress())
   const [addressErrors, setAddressErrors] = useState<StructuredAddressErrors>({})
-  const [activities, setActivities] = useState<LeadActivity[]>([])
-  const [activityNote, setActivityNote] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null)
 
@@ -270,31 +265,33 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
     return map
   }, [filteredLeads])
 
-  const openCreateSheet = () => {
-    setSheetMode('create')
+  const openCreateDialog = () => {
+    setDialogMode('create')
     setSelectedLead(null)
     setForm(emptyLeadForm())
     setLeadAddress(emptyStructuredAddress())
     setAddressErrors({})
-    setActivities([])
-    setActivityNote('')
-    setSheetOpen(true)
+    setDialogOpen(true)
   }
 
-  const openEditSheet = async (lead: Lead) => {
-    setSheetMode('edit')
+  const openEditDialog = (lead: Lead) => {
+    setDialogMode('edit')
     setSelectedLead(lead)
     setForm(leadToForm(lead))
     setLeadAddress(structuredAddressFromRow(lead))
     setAddressErrors({})
-    setActivityNote('')
-    setSheetOpen(true)
-
-    const result = await getLeadActivitiesAction(lead.id)
-    if (result.success) {
-      setActivities(result.data)
-    }
+    setDialogOpen(true)
   }
+
+  useEffect(() => {
+    const leadId = searchParams.get('lead')
+    if (!leadId || dialogOpen) return
+
+    const lead = leads.find((item) => item.id === leadId)
+    if (lead) {
+      void openEditDialog(lead)
+    }
+  }, [searchParams, leads, dialogOpen])
 
   const handleSave = async () => {
     if (!form.name.trim()) {
@@ -330,7 +327,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
     }
 
     const result =
-      sheetMode === 'create'
+      dialogMode === 'create'
         ? await createLeadAction(payload)
         : await updateLeadAction({ id: selectedLead!.id, ...payload })
 
@@ -341,8 +338,8 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
       return
     }
 
-    toast.success(sheetMode === 'create' ? 'Lead created' : 'Lead updated')
-    setSheetOpen(false)
+    toast.success(dialogMode === 'create' ? 'Lead created' : 'Lead updated')
+    setDialogOpen(false)
     fetchLeads()
   }
 
@@ -369,7 +366,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
       return
     }
     toast.success('Lead archived')
-    setSheetOpen(false)
+    setDialogOpen(false)
     fetchLeads()
   }
 
@@ -381,7 +378,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
       return
     }
     toast.success('Lead restored')
-    setSheetOpen(false)
+    setDialogOpen(false)
     fetchLeads()
   }
 
@@ -399,22 +396,8 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
     toast.success(
       result.alreadyConverted ? 'Lead already converted' : 'Lead converted to client'
     )
-    setSheetOpen(false)
+    setDialogOpen(false)
     router.push(`/dashboard/clients/${result.clientId}`)
-  }
-
-  const handleAddNote = async () => {
-    if (!selectedLead || !activityNote.trim()) return
-    const result = await addLeadActivityAction(selectedLead.id, activityNote)
-    if (!result.success) {
-      toast.error(result.error)
-      return
-    }
-    setActivityNote('')
-    const activitiesResult = await getLeadActivitiesAction(selectedLead.id)
-    if (activitiesResult.success) {
-      setActivities(activitiesResult.data)
-    }
   }
 
   return (
@@ -426,7 +409,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
             Track prospects, follow up on time, and convert them to clients
           </p>
         </div>
-        <Button onClick={openCreateSheet} className="max-md:w-full max-md:min-h-11">
+        <Button onClick={openCreateDialog} className="max-md:w-full max-md:min-h-11">
           <Plus className="size-4" />
           Add Lead
         </Button>
@@ -520,7 +503,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
                   {filteredLeads.map((lead) => (
                     <TableRow
                       key={lead.id}
-                      onClick={() => openEditSheet(lead)}
+                      onClick={() => openEditDialog(lead)}
                       className="cursor-pointer"
                     >
                       <TableCell className="px-3">
@@ -551,7 +534,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
             </div>
             <div className={MOBILE_LIST_STACK_CLASS}>
               {filteredLeads.map((lead) => (
-                <MobileListCard key={lead.id} onClick={() => openEditSheet(lead)}>
+                <MobileListCard key={lead.id} onClick={() => openEditDialog(lead)}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h3 className="font-semibold">{lead.name}</h3>
@@ -608,7 +591,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
                       <LeadKanbanCard
                         key={lead.id}
                         lead={lead}
-                        onOpen={openEditSheet}
+                        onOpen={openEditDialog}
                         onDragStart={setDraggedLeadId}
                       />
                     ))}
@@ -620,13 +603,13 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
         )}
       </MainPageCard>
 
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-lg flex flex-col p-0 gap-0">
-          <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
-            <SheetTitle>
-              {sheetMode === 'create' ? 'New Lead' : selectedLead?.name || 'Lead'}
-            </SheetTitle>
-          </SheetHeader>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="!max-w-lg max-h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+            <DialogTitle>
+              {dialogMode === 'create' ? 'New Lead' : selectedLead?.name || 'Lead'}
+            </DialogTitle>
+          </DialogHeader>
 
           <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
             <div className="px-6 py-5 space-y-5">
@@ -778,46 +761,12 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
                   placeholder="Scope, referral details, conversation notes..."
                 />
               </div>
-
-              {sheetMode === 'edit' && (
-                <div>
-                  <Label className="mb-2 block">Activity</Label>
-                  <div className="space-y-3">
-                    <div className="flex gap-2">
-                      <Input
-                        value={activityNote}
-                        onChange={(e) => setActivityNote(e.target.value)}
-                        placeholder="Add a note..."
-                      />
-                      <Button type="button" variant="outline" onClick={handleAddNote}>
-                        Add
-                      </Button>
-                    </div>
-                    {activities.length > 0 ? (
-                      <ul className="space-y-2 text-sm">
-                        {activities.map((activity) => (
-                          <li key={activity.id} className="rounded-md border px-3 py-2">
-                            <div className="text-xs text-muted-foreground">
-                              {new Date(activity.created_at).toLocaleString()}
-                              {activity.creator_name ? ` · ${activity.creator_name}` : ''}
-                            </div>
-                            <div className="mt-0.5">{activity.body}</div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No activity yet.</p>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           </ScrollArea>
 
-          <SheetFooter className="px-6 py-4 border-t shrink-0">
-            <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full px-6 py-4 border-t shrink-0">
               <div className="flex flex-wrap gap-2">
-                {sheetMode === 'edit' && selectedLead && (
+                {dialogMode === 'edit' && selectedLead && (
                   <>
                     {selectedLead.status === 'archived' ? (
                       <Button variant="outline" size="sm" onClick={handleRestore}>
@@ -851,17 +800,16 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
                 )}
               </div>
               <div className="flex gap-2 ml-auto">
-                <Button variant="outline" onClick={() => setSheetOpen(false)}>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>
                   Cancel
                 </Button>
                 <Button onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? 'Saving...' : sheetMode === 'create' ? 'Create Lead' : 'Save'}
+                  {isSaving ? 'Saving...' : dialogMode === 'create' ? 'Create Lead' : 'Save'}
                 </Button>
               </div>
             </div>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

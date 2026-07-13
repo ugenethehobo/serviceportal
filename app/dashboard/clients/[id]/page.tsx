@@ -31,6 +31,8 @@ export default async function ClientDetailPage({
       initialSchedules={result.data.schedules}
       initialIsSoloBusiness={result.data.isSoloBusiness}
       initialSoloCrewId={result.data.soloCrewId}
+      initialActivity={result.data.activity}
+      initialTimezone={result.data.timezone}
     />
   )
 }

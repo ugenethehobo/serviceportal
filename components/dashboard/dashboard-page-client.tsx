@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useState } from 'react'
 import { getDashboardMapDataAction, getDashboardOverviewAction } from '@/app/action'
 import { ActiveCrewsToday } from '@/components/dashboard/active-crews-today'
+import { DashboardActivityInbox } from '@/components/dashboard/dashboard-activity-inbox'
 import { DashboardMonthKpis } from '@/components/dashboard/dashboard-month-kpis'
 import { JobsTimeline } from '@/components/dashboard/jobs-timeline'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -99,9 +100,14 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
             : 'Live crew activity, today\'s schedule, and job site locations.'
         }
         actions={
-          isRefreshing ? (
-            <span className="text-xs text-muted-foreground">Updating…</span>
-          ) : null
+          <>
+            <DashboardActivityInbox items={data.activity} timezone={data.timezone} />
+            {isRefreshing ? (
+              <span className="text-xs text-muted-foreground max-md:text-center">
+                Updating…
+              </span>
+            ) : null}
+          </>
         }
       />
 

@@ -1,0 +1,72 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { Bell } from 'lucide-react'
+import { StaffActivityCard } from '@/components/dashboard/staff-activity-card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import type { ActivityFeedItem } from '@/lib/activity-feed'
+
+type DashboardActivityInboxProps = {
+  items: ActivityFeedItem[]
+  timezone: string
+}
+
+export function DashboardActivityInbox({ items, timezone }: DashboardActivityInboxProps) {
+  const [open, setOpen] = useState(false)
+
+  const urgentCount = useMemo(
+    () => items.filter((item) => item.urgent).length,
+    [items]
+  )
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant={urgentCount > 0 ? 'default' : 'outline'}
+        size="sm"
+        className="gap-2"
+        onClick={() => setOpen(true)}
+      >
+        <Bell className="size-4" />
+        Activity
+        {urgentCount > 0 ? (
+          <Badge
+            variant="secondary"
+            className="h-5 min-w-5 rounded-full px-1.5 text-[10px] font-semibold"
+          >
+            {urgentCount > 99 ? '99+' : urgentCount}
+          </Badge>
+        ) : null}
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="!max-w-md max-h-[90vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="border-b px-6 py-5 text-left shrink-0">
+            <DialogTitle className="text-lg font-semibold">Needs attention</DialogTitle>
+            <DialogDescription className="text-sm">
+              Payments, contracts, estimates, leads, and client messages across your business.
+            </DialogDescription>
+          </DialogHeader>
+
+          <StaffActivityCard
+            items={items}
+            timezone={timezone}
+            variant="company"
+            embedded
+            showHeader={false}
+            listClassName="min-h-0 flex-1"
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}

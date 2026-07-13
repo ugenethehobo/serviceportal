@@ -4643,6 +4643,17 @@ export async function getClientDetailAction(clientId: string) {
 
     const { getCompanySoloContext } = await import('@/lib/solo-business-server')
     const soloContext = await getCompanySoloContext(check.companyId)
+    const { fetchClientActivityForStaff } = await import('@/lib/staff-activity-server')
+    const { data: company } = await supabaseAdmin
+      .from('companies')
+      .select('timezone')
+      .eq('id', check.companyId)
+      .single()
+    const activity = await fetchClientActivityForStaff(
+      supabaseAdmin,
+      check.companyId,
+      clientId
+    )
 
     return {
       success: true as const,
@@ -4651,6 +4662,8 @@ export async function getClientDetailAction(clientId: string) {
         schedules: schedulesWithConflicts,
         isSoloBusiness: soloContext.isSoloBusiness,
         soloCrewId: soloContext.soloCrewId,
+        activity,
+        timezone: company?.timezone || 'America/Chicago',
       },
     }
   } catch (error: any) {
@@ -5517,6 +5530,8 @@ export async function getDashboardOverviewAction(): Promise<
     )
     const now = new Date()
     const closedDayToday = isClosedDayToday(timezone, businessHours, now)
+    const { fetchCompanyActivity } = await import('@/lib/staff-activity-server')
+    const activity = await fetchCompanyActivity(supabaseAdmin, companyId, now)
 
     if (closedDayToday) {
       const { getCompanySoloContext } = await import('@/lib/solo-business-server')
@@ -5547,6 +5562,7 @@ export async function getDashboardOverviewAction(): Promise<
           closedDayLabel: weekday,
           monthlyKpis,
           isSoloBusiness: soloContext.isSoloBusiness,
+          activity,
         },
       }
     }
@@ -5651,6 +5667,7 @@ export async function getDashboardOverviewAction(): Promise<
         timelineMode,
         timelineDateLabel: formatCompanyDateLabel(timezone, now, timelineDayOffset),
         isSoloBusiness: soloContext.isSoloBusiness,
+        activity,
       },
     }
   } catch (error: any) {
