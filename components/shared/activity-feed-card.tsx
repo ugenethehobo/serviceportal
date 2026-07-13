@@ -36,6 +36,8 @@ type ActivityFeedCardProps = {
   /** Override scroll region height; defaults to max-h-72 for standalone cards. */
   listClassName?: string
   showHeader?: boolean
+  /** Called when a feed link is clicked (e.g. close a parent dialog before navigation). */
+  onItemNavigate?: () => void
 }
 
 export function ActivityFeedCard({
@@ -49,6 +51,7 @@ export function ActivityFeedCard({
   embedded = false,
   listClassName,
   showHeader = true,
+  onItemNavigate,
 }: ActivityFeedCardProps) {
   const [period, setPeriod] = useState<ActivityPeriod>(defaultPeriod)
 
@@ -109,6 +112,7 @@ export function ActivityFeedCard({
           <li key={item.id} className="min-w-0">
             <Link
               href={item.href}
+              onClick={() => onItemNavigate?.()}
               className={cn(
                 'flex w-full min-w-0 transition-colors hover:bg-muted/40',
                 embedded

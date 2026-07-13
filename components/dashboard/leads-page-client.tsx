@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Archive,
@@ -193,6 +193,7 @@ function LeadKanbanCard({
 export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const openedLeadFromUrlRef = useRef<string | null>(null)
   const [leads, setLeads] = useState<Lead[]>(initialLeads)
   const [isLoading, setIsLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -287,15 +288,38 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
     setDialogOpen(true)
   }
 
+  const clearLeadDeepLinkFromUrl = useCallback(() => {
+    if (!searchParams.get('lead')) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('lead')
+    const query = params.toString()
+    router.replace(query ? `/dashboard/leads?${query}` : '/dashboard/leads', { scroll: false })
+  }, [router, searchParams])
+
+  const handleDialogOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      setDialogOpen(nextOpen)
+      if (!nextOpen) {
+        clearLeadDeepLinkFromUrl()
+      }
+    },
+    [clearLeadDeepLinkFromUrl]
+  )
+
   useEffect(() => {
     const leadId = searchParams.get('lead')
-    if (!leadId || dialogOpen) return
+    if (!leadId) {
+      openedLeadFromUrlRef.current = null
+      return
+    }
+    if (openedLeadFromUrlRef.current === leadId) return
 
     const lead = leads.find((item) => item.id === leadId)
-    if (lead) {
-      void openEditDialog(lead)
-    }
-  }, [searchParams, leads, dialogOpen])
+    if (!lead) return
+
+    openedLeadFromUrlRef.current = leadId
+    openEditDialog(lead)
+  }, [searchParams, leads])
 
   const handleSave = async () => {
     if (!form.name.trim()) {
@@ -343,7 +367,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
     }
 
     toast.success(dialogMode === 'create' ? 'Lead created' : 'Lead updated')
-    setDialogOpen(false)
+    handleDialogOpenChange(false)
     fetchLeads()
   }
 
@@ -370,7 +394,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
       return
     }
     toast.success('Lead archived')
-    setDialogOpen(false)
+    handleDialogOpenChange(false)
     fetchLeads()
   }
 
@@ -382,7 +406,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
       return
     }
     toast.success('Lead restored')
-    setDialogOpen(false)
+    handleDialogOpenChange(false)
     fetchLeads()
   }
 
@@ -400,7 +424,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
     toast.success(
       result.alreadyConverted ? 'Lead already converted' : 'Lead converted to client'
     )
-    setDialogOpen(false)
+    handleDialogOpenChange(false)
     router.push(`/dashboard/clients/${result.clientId}`)
   }
 
@@ -607,7 +631,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
         )}
       </MainPageCard>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className={SCROLLABLE_MODAL_SHELL_LG}>
           <DialogHeader
             className={`border-b px-6 pt-5 pb-4 ${SCROLLABLE_MODAL_HEADER_CLASS}`}
@@ -809,7 +833,7 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
                 <Button
                   variant="outline"
                   className={MOBILE_FULL_WIDTH_BUTTON_CLASS}
-                  onClick={() => setDialogOpen(false)}
+                  onClick={() => handleDialogOpenChange(false)}
                 >
                   Cancel
                 </Button>

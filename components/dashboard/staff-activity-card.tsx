@@ -34,6 +34,7 @@ type StaffActivityCardProps = {
   embedded?: boolean
   showHeader?: boolean
   listClassName?: string
+  onItemNavigate?: () => void
 }
 
 export function StaffActivityCard({
@@ -43,6 +44,7 @@ export function StaffActivityCard({
   embedded = false,
   showHeader = true,
   listClassName,
+  onItemNavigate,
 }: StaffActivityCardProps) {
   return (
     <ActivityFeedCard
@@ -63,6 +65,7 @@ export function StaffActivityCard({
       embedded={embedded}
       showHeader={showHeader}
       listClassName={listClassName}
+      onItemNavigate={onItemNavigate}
     />
   )
 }

@@ -70,6 +70,7 @@ export function DashboardActivityInbox({ items, timezone }: DashboardActivityInb
             embedded
             showHeader={false}
             listClassName="min-h-0 flex-1"
+            onItemNavigate={() => setOpen(false)}
           />
         </DialogContent>
       </Dialog>
