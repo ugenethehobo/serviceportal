@@ -26,7 +26,8 @@ import {
   type RoutePlannerData,
   type RouteStop,
 } from '@/lib/route-planner'
-import { MOBILE_PAGE_ROOT_CLASS } from '@/lib/mobile-layout'
+import { MOBILE_MAP_MIN_HEIGHT_CLASS, MOBILE_PAGE_ROOT_CLASS } from '@/lib/mobile-layout'
+import { cn } from '@/lib/utils'
 
 function MapBounds({ coordinates }: { coordinates: [number, number][] }) {
   const { map, isLoaded } = useMap()
@@ -203,7 +204,7 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
       </div>
 
       <MainPageCard className="gap-0 overflow-hidden p-0">
-        <div className="flex-1 relative min-h-0 isolate">
+        <div className={cn('relative isolate flex-1 min-h-0', MOBILE_MAP_MIN_HEIGHT_CLASS)}>
           {error ? (
             <div className="h-full flex items-center justify-center">
               <p className="text-sm text-muted-foreground">{error}</p>

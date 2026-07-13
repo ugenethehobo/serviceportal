@@ -13,6 +13,8 @@ import {
   useMap,
 } from '@/components/ui/map'
 import type { DashboardMapData } from '@/lib/dashboard-map'
+import { MOBILE_MAP_MIN_HEIGHT_CLASS } from '@/lib/mobile-layout'
+import { cn } from '@/lib/utils'
 
 const CREW_MARKER_COLORS = [
   'bg-blue-500 ring-blue-500/20',
@@ -93,9 +95,16 @@ export function LiveCrewLocationsMap({
     return colors
   }, [data?.markers])
 
+  const mapSurfaceClass = cn('w-full flex-1 min-h-0', MOBILE_MAP_MIN_HEIGHT_CLASS)
+
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center rounded-lg border bg-muted/20">
+      <div
+        className={cn(
+          mapSurfaceClass,
+          'flex items-center justify-center rounded-lg border bg-muted/20'
+        )}
+      >
         <p className="text-sm text-muted-foreground">Loading job sites…</p>
       </div>
     )
@@ -103,7 +112,12 @@ export function LiveCrewLocationsMap({
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed">
+      <div
+        className={cn(
+          mapSurfaceClass,
+          'flex items-center justify-center rounded-lg border border-dashed'
+        )}
+      >
         <p className="text-sm text-muted-foreground">{error}</p>
       </div>
     )
@@ -111,7 +125,12 @@ export function LiveCrewLocationsMap({
 
   if (!data) {
     return (
-      <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed">
+      <div
+        className={cn(
+          mapSurfaceClass,
+          'flex items-center justify-center rounded-lg border border-dashed'
+        )}
+      >
         <p className="text-sm text-muted-foreground">Map data unavailable.</p>
       </div>
     )
@@ -122,7 +141,7 @@ export function LiveCrewLocationsMap({
   const hasWarnings = data.invalidAddresses.length > 0
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 gap-2">
+    <div className={cn('flex flex-1 flex-col min-h-0 gap-2', MOBILE_MAP_MIN_HEIGHT_CLASS)}>
       {hasWarnings && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 shrink-0">
           <div className="flex items-start gap-2">
@@ -154,9 +173,14 @@ export function LiveCrewLocationsMap({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 rounded-lg border overflow-hidden relative">
+      <div
+        className={cn(
+          'relative flex-1 min-h-0 overflow-hidden rounded-lg border',
+          MOBILE_MAP_MIN_HEIGHT_CLASS
+        )}
+      >
         {hasMarkers ? (
-          <Map center={[-98.5795, 39.8283]} zoom={4} className="h-full w-full">
+          <Map center={[-98.5795, 39.8283]} zoom={4} className="h-full min-h-[240px] w-full">
             <MapBounds coordinates={coordinates} />
             <MapControls showZoom position="bottom-right" />
 

@@ -169,7 +169,7 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
         )}
       </MainPageCard>
 
-      <MainPageCard className="min-h-0 flex-[7] p-4 shadow-sm max-md:flex-none max-md:min-h-[45vh]">
+      <MainPageCard className="min-h-0 flex-[7] p-4 shadow-sm max-md:flex-none">
         <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-tight">{mapTitle}</h2>

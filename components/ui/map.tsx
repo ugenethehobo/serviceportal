@@ -304,6 +304,22 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Re-measure when the container resizes (mobile layout / orientation changes).
+  useEffect(() => {
+    if (!mapInstance || !containerRef.current) return;
+
+    const resizeMap = () => {
+      mapInstance.resize();
+    };
+
+    resizeMap();
+
+    const observer = new ResizeObserver(resizeMap);
+    observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, [mapInstance]);
+
   // Sync controlled viewport to map
   useEffect(() => {
     if (!mapInstance || !isControlled || !viewport) return;

@@ -44,3 +44,6 @@ export const MOBILE_FULL_WIDTH_BUTTON_CLASS = 'max-md:w-full max-md:min-h-11'
 /** Page title row that stacks on narrow screens */
 export const MOBILE_HEADER_STACK_CLASS =
   'flex items-center justify-between max-md:flex-col max-md:items-stretch max-md:gap-3'
+
+/** MapLibre surfaces need a concrete height on phones when parents use natural document flow. */
+export const MOBILE_MAP_MIN_HEIGHT_CLASS = 'max-md:min-h-[42vh]'
