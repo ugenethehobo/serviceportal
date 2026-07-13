@@ -13,7 +13,10 @@ import {
   useMap,
 } from '@/components/ui/map'
 import type { DashboardMapData } from '@/lib/dashboard-map'
-import { MOBILE_MAP_MIN_HEIGHT_CLASS } from '@/lib/mobile-layout'
+import {
+  DESKTOP_MAP_SURFACE_CLASS,
+  MOBILE_MAP_MIN_HEIGHT_CLASS,
+} from '@/lib/mobile-layout'
 import { cn } from '@/lib/utils'
 
 const CREW_MARKER_COLORS = [
@@ -25,6 +28,12 @@ const CREW_MARKER_COLORS = [
 ]
 
 const DEFAULT_JOB_MARKER_COLOR = 'bg-slate-500 ring-slate-500/20'
+
+const MAP_FRAME_CLASS = cn(
+  'relative isolate w-full overflow-hidden rounded-lg border',
+  DESKTOP_MAP_SURFACE_CLASS,
+  MOBILE_MAP_MIN_HEIGHT_CLASS
+)
 
 function MapBounds({ coordinates }: { coordinates: [number, number][] }) {
   const { map, isLoaded } = useMap()
@@ -95,57 +104,16 @@ export function LiveCrewLocationsMap({
     return colors
   }, [data?.markers])
 
-  const mapSurfaceClass = cn('w-full flex-1 min-h-0', MOBILE_MAP_MIN_HEIGHT_CLASS)
-
-  if (isLoading) {
-    return (
-      <div
-        className={cn(
-          mapSurfaceClass,
-          'flex items-center justify-center rounded-lg border bg-muted/20'
-        )}
-      >
-        <p className="text-sm text-muted-foreground">Loading job sites…</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div
-        className={cn(
-          mapSurfaceClass,
-          'flex items-center justify-center rounded-lg border border-dashed'
-        )}
-      >
-        <p className="text-sm text-muted-foreground">{error}</p>
-      </div>
-    )
-  }
-
-  if (!data) {
-    return (
-      <div
-        className={cn(
-          mapSurfaceClass,
-          'flex items-center justify-center rounded-lg border border-dashed'
-        )}
-      >
-        <p className="text-sm text-muted-foreground">Map data unavailable.</p>
-      </div>
-    )
-  }
-
-  const isUpcomingPreview = data.mode === 'upcoming_open_days'
-  const hasMarkers = data.markers.length > 0
-  const hasWarnings = data.invalidAddresses.length > 0
+  const isUpcomingPreview = data?.mode === 'upcoming_open_days'
+  const hasMarkers = (data?.markers.length ?? 0) > 0
+  const hasWarnings = (data?.invalidAddresses.length ?? 0) > 0
 
   return (
-    <div className={cn('flex flex-1 flex-col min-h-0 gap-2', MOBILE_MAP_MIN_HEIGHT_CLASS)}>
-      {hasWarnings && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 shrink-0">
+    <div className="flex w-full flex-col gap-2 md:min-h-0 md:flex-1">
+      {hasWarnings && !isLoading && !error && data ? (
+        <div className="shrink-0 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
             <div className="min-w-0 text-xs">
               <p className="font-medium text-amber-900 dark:text-amber-200">
                 {data.invalidAddresses.length === 1
@@ -171,69 +139,78 @@ export function LiveCrewLocationsMap({
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      <div
-        className={cn(
-          'relative flex-1 min-h-0 overflow-hidden rounded-lg border',
-          MOBILE_MAP_MIN_HEIGHT_CLASS
-        )}
-      >
-        {hasMarkers ? (
-          <Map center={[-98.5795, 39.8283]} zoom={4} className="h-full min-h-[240px] w-full">
-            <MapBounds coordinates={coordinates} />
-            <MapControls showZoom position="bottom-right" />
+      <div className={MAP_FRAME_CLASS}>
+        {isLoading ? (
+          <div className="flex h-full items-center justify-center bg-muted/20">
+            <p className="text-sm text-muted-foreground">Loading job sites…</p>
+          </div>
+        ) : error ? (
+          <div className="flex h-full items-center justify-center border-dashed">
+            <p className="text-sm text-muted-foreground">{error}</p>
+          </div>
+        ) : !data ? (
+          <div className="flex h-full items-center justify-center border-dashed">
+            <p className="text-sm text-muted-foreground">Map data unavailable.</p>
+          </div>
+        ) : hasMarkers ? (
+          <div className="absolute inset-0">
+            <Map center={[-98.5795, 39.8283]} zoom={4} className="h-full w-full">
+              <MapBounds coordinates={coordinates} />
+              <MapControls showZoom position="bottom-right" />
 
-            {data.markers.map((marker) => {
-              const isCompany = marker.kind === 'company'
-              const isInProgress = marker.kind === 'job' && marker.status === 'in_progress'
-              const crewColor =
-                marker.crewId && crewColorMap.get(marker.crewId)
-                  ? crewColorMap.get(marker.crewId)
-                  : DEFAULT_JOB_MARKER_COLOR
+              {data.markers.map((marker) => {
+                const isCompany = marker.kind === 'company'
+                const isInProgress = marker.kind === 'job' && marker.status === 'in_progress'
+                const crewColor =
+                  marker.crewId && crewColorMap.get(marker.crewId)
+                    ? crewColorMap.get(marker.crewId)
+                    : DEFAULT_JOB_MARKER_COLOR
 
-              return (
-                <MapMarker
-                  key={marker.id}
-                  longitude={marker.longitude}
-                  latitude={marker.latitude}
-                >
-                  <MarkerContent className="flex items-center justify-center">
-                    {isCompany ? (
-                      <div className="flex size-8 items-center justify-center rounded-full border-2 border-white bg-violet-600 text-white shadow-lg ring-4 ring-violet-500/20">
-                        <Building2 className="size-4" />
-                      </div>
-                    ) : (
-                      <div
-                        className={`rounded-full border-2 border-white shadow-lg ring-4 ${crewColor} ${
-                          isInProgress ? 'size-5' : 'size-4'
-                        }`}
-                      />
-                    )}
-                  </MarkerContent>
-                  <MarkerLabel position="top">{marker.label}</MarkerLabel>
-                  <MarkerTooltip>
-                    <div className="space-y-0.5">
-                      <div className="font-medium">{marker.label}</div>
-                      {marker.subtitle && (
-                        <div className="text-background/80">{marker.subtitle}</div>
+                return (
+                  <MapMarker
+                    key={marker.id}
+                    longitude={marker.longitude}
+                    latitude={marker.latitude}
+                  >
+                    <MarkerContent className="flex items-center justify-center">
+                      {isCompany ? (
+                        <div className="flex size-8 items-center justify-center rounded-full border-2 border-white bg-violet-600 text-white shadow-lg ring-4 ring-violet-500/20">
+                          <Building2 className="size-4" />
+                        </div>
+                      ) : (
+                        <div
+                          className={`rounded-full border-2 border-white shadow-lg ring-4 ${crewColor} ${
+                            isInProgress ? 'size-5' : 'size-4'
+                          }`}
+                        />
                       )}
-                      <div className="text-background/70">{marker.address}</div>
-                    </div>
-                  </MarkerTooltip>
-                </MapMarker>
-              )
-            })}
-          </Map>
+                    </MarkerContent>
+                    <MarkerLabel position="top">{marker.label}</MarkerLabel>
+                    <MarkerTooltip>
+                      <div className="space-y-0.5">
+                        <div className="font-medium">{marker.label}</div>
+                        {marker.subtitle && (
+                          <div className="text-background/80">{marker.subtitle}</div>
+                        )}
+                        <div className="text-background/70">{marker.address}</div>
+                      </div>
+                    </MarkerTooltip>
+                  </MapMarker>
+                )
+              })}
+            </Map>
+          </div>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center bg-muted/20 px-4 text-center">
-            <MapPin className="size-8 text-muted-foreground/60 mb-2" />
+          <div className="flex h-full flex-col items-center justify-center bg-muted/20 px-4 text-center">
+            <MapPin className="mb-2 size-8 text-muted-foreground/60" />
             <p className="text-sm text-muted-foreground">
               {isUpcomingPreview
                 ? 'No upcoming job sites in the next open days.'
                 : 'No job sites to show for today yet.'}
             </p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
               {isUpcomingPreview
                 ? data.previewRangeLabel
                   ? `No scheduled jobs with addresses between ${data.previewRangeLabel}.`
@@ -242,7 +219,7 @@ export function LiveCrewLocationsMap({
             </p>
             <Link
               href="/dashboard/settings"
-              className="text-xs text-primary hover:underline mt-2"
+              className="mt-2 text-xs text-primary hover:underline"
             >
               Open Settings
             </Link>

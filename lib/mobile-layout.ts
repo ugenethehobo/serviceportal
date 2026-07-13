@@ -45,8 +45,26 @@ export const MOBILE_FULL_WIDTH_BUTTON_CLASS = 'max-md:w-full max-md:min-h-11'
 export const MOBILE_HEADER_STACK_CLASS =
   'flex items-center justify-between max-md:flex-col max-md:items-stretch max-md:gap-3'
 
-/** MapLibre surfaces need a concrete height on phones when parents use natural document flow. */
-export const MOBILE_MAP_MIN_HEIGHT_CLASS = 'max-md:min-h-[42vh]'
+/**
+ * MapLibre on phones: explicit height + no flex growth/shrink.
+ * flex-1/min-h-0 on map surfaces collapses to 0px when ancestors use natural (h-auto) flow.
+ */
+export const MOBILE_MAP_MIN_HEIGHT_CLASS =
+  'max-md:h-[42vh] max-md:min-h-[42vh] max-md:flex-none max-md:shrink-0'
+
+/** Desktop map surfaces inside flex cards */
+export const DESKTOP_MAP_SURFACE_CLASS = 'min-h-[240px] md:flex-1 md:min-h-0'
+
+/**
+ * Route planner on phones: fill the dashboard main column (pair with scroll-main flex col).
+ * Desktop layout is unchanged — only max-md utilities.
+ */
+export const ROUTE_PLANNER_MOBILE_PAGE_CLASS =
+  'max-md:flex-1 max-md:min-h-0 max-md:overflow-hidden max-md:gap-2 max-md:p-3 max-md:pb-2 max-md:!h-auto'
+
+/** Route planner map — full height on phones, not the dashboard 42vh cap. */
+export const ROUTE_PLANNER_MOBILE_MAP_CLASS =
+  'max-md:h-full max-md:min-h-0 max-md:flex-1 max-md:shrink-0'
 
 /** Dialog shell: top-anchored on phones, vertically scrollable body, no horizontal bleed. */
 const SCROLLABLE_MODAL_SHELL_BASE =

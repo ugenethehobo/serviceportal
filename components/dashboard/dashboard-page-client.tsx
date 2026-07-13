@@ -13,7 +13,8 @@ import { PageHeader } from '@/components/ui/page-header'
 import { getActiveCrewsHeading } from '@/lib/company-operations'
 import type { DashboardOverviewData } from '@/lib/dashboard-overview'
 import type { DashboardMapData } from '@/lib/dashboard-map'
-import { MOBILE_PAGE_ROOT_CLASS } from '@/lib/mobile-layout'
+import { MOBILE_MAP_MIN_HEIGHT_CLASS, MOBILE_PAGE_ROOT_CLASS } from '@/lib/mobile-layout'
+import { cn } from '@/lib/utils'
 
 const LiveCrewLocationsMap = dynamic(
   () =>
@@ -22,7 +23,11 @@ const LiveCrewLocationsMap = dynamic(
     })),
   {
     ssr: false,
-    loading: () => <Skeleton className="h-full min-h-[240px] w-full rounded-lg" />,
+    loading: () => (
+      <Skeleton
+        className={cn('w-full rounded-lg min-h-[240px]', MOBILE_MAP_MIN_HEIGHT_CLASS)}
+      />
+    ),
   }
 )
 
@@ -175,7 +180,7 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
         )}
       </MainPageCard>
 
-      <MainPageCard className="min-h-0 flex-[7] p-4 shadow-sm max-md:flex-none">
+      <MainPageCard className="min-h-0 flex-[7] p-4 shadow-sm max-md:flex-none max-md:overflow-visible">
         <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-tight">{mapTitle}</h2>
