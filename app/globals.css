@@ -157,6 +157,22 @@ body.has-app-background {
   background: transparent !important;
 }
 
+/* Mobile Safari: extend document canvas so browser chrome doesn't show white gaps. */
+@media (max-width: 767px) {
+  html,
+  body {
+    min-height: 100lvh;
+  }
+
+  html {
+    background-color: var(--background);
+  }
+
+  html[data-app-background] {
+    background-color: var(--background);
+  }
+}
+
 @keyframes landing-ken-burns {
   from {
     transform: scale(1.04);

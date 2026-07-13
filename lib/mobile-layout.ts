@@ -66,6 +66,12 @@ export const ROUTE_PLANNER_MOBILE_PAGE_CLASS =
 export const ROUTE_PLANNER_MOBILE_MAP_CLASS =
   'max-md:h-full max-md:min-h-0 max-md:flex-1 max-md:shrink-0'
 
+/**
+ * Fixed background layers on phones — use 100lvh so iOS Safari toolbar gaps
+ * pick up theme/wallpaper instead of the default white browser canvas.
+ */
+export const IOS_VIEWPORT_BLEED_HEIGHT_CLASS = 'max-md:h-[100lvh] max-md:min-h-[100lvh]'
+
 /** Dialog shell: top-anchored on phones, vertically scrollable body, no horizontal bleed. */
 const SCROLLABLE_MODAL_SHELL_BASE =
   'flex w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 ' +

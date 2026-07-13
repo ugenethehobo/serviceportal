@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ServicePortal",
   description: "A full CRM built for small businesses",
+};
+
+/** Lets fixed backgrounds paint edge-to-edge on notched iOS Safari. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f4f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#18181b" },
+  ],
 };
 
 export default async function RootLayout({

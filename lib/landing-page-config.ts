@@ -7,7 +7,7 @@
  * Mobile product tour uses optional `mobileImage` per chapter (portrait PNGs in `public/landing/`).
  */
 
-export const SERVICE_PORTAL_VERSION = '0.0.45'
+export const SERVICE_PORTAL_VERSION = '0.0.46'
 
 export type LandingProductScreenshot = {
   src: string
