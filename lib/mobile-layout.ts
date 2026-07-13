@@ -47,3 +47,20 @@ export const MOBILE_HEADER_STACK_CLASS =
 
 /** MapLibre surfaces need a concrete height on phones when parents use natural document flow. */
 export const MOBILE_MAP_MIN_HEIGHT_CLASS = 'max-md:min-h-[42vh]'
+
+/** Dialog shell: top-anchored on phones, vertically scrollable body, no horizontal bleed. */
+const SCROLLABLE_MODAL_SHELL_BASE =
+  'flex w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden p-0 ' +
+  'max-h-[calc(100dvh-2rem)] max-md:top-[max(1rem,env(safe-area-inset-top))] max-md:!translate-y-0 ' +
+  'sm:max-h-[min(85dvh,36rem)]'
+
+export const SCROLLABLE_MODAL_SHELL_MD = `${SCROLLABLE_MODAL_SHELL_BASE} !max-w-md`
+
+export const SCROLLABLE_MODAL_SHELL_LG = `${SCROLLABLE_MODAL_SHELL_BASE} !max-w-lg`
+
+/** Native scroll region inside a flex modal shell (replaces ScrollArea in dialogs). */
+export const SCROLLABLE_MODAL_BODY_CLASS =
+  'min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain scroll-fade'
+
+/** Tighter dialog header padding on phones. */
+export const SCROLLABLE_MODAL_HEADER_CLASS = 'shrink-0 max-md:px-4 max-md:py-3.5'

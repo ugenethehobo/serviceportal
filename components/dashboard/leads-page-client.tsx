@@ -13,12 +13,16 @@ import {
 import { toast } from 'sonner'
 import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
 import {
+  MOBILE_FULL_WIDTH_BUTTON_CLASS,
   MOBILE_LIST_STACK_CLASS,
   MOBILE_PAGE_ROOT_CLASS,
   MOBILE_SELECT_TRIGGER_CLASS,
   MOBILE_TAB_LIST_CLASS,
   MOBILE_TABLE_DESKTOP_ONLY_CLASS,
   MOBILE_TOOLBAR_ROW_CLASS,
+  SCROLLABLE_MODAL_BODY_CLASS,
+  SCROLLABLE_MODAL_HEADER_CLASS,
+  SCROLLABLE_MODAL_SHELL_LG,
 } from '@/lib/mobile-layout'
 import {
   archiveLeadAction,
@@ -38,7 +42,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DateTimePicker } from '@/components/ui/datetime-picker'
 import { Textarea } from '@/components/ui/textarea'
-import { ScrollArea } from '@/components/ui/scroll-area'
+
 import {
   Select,
   SelectContent,
@@ -604,15 +608,17 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
       </MainPageCard>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="!max-w-lg max-h-[90vh] flex flex-col p-0 gap-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+        <DialogContent className={SCROLLABLE_MODAL_SHELL_LG}>
+          <DialogHeader
+            className={`border-b px-6 pt-5 pb-4 ${SCROLLABLE_MODAL_HEADER_CLASS}`}
+          >
             <DialogTitle>
               {dialogMode === 'create' ? 'New Lead' : selectedLead?.name || 'Lead'}
             </DialogTitle>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 min-h-0" viewportClassName="scroll-fade">
-            <div className="px-6 py-5 space-y-5">
+          <div className={SCROLLABLE_MODAL_BODY_CLASS}>
+            <div className="space-y-5 px-4 py-5 max-md:px-4 sm:px-6">
               <div>
                 <Label>Business / lead name *</Label>
                 <Input
@@ -762,10 +768,10 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
                 />
               </div>
             </div>
-          </ScrollArea>
+          </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 w-full px-6 py-4 border-t shrink-0">
-              <div className="flex flex-wrap gap-2">
+          <div className="flex w-full shrink-0 flex-col gap-3 border-t px-4 py-4 max-md:px-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6">
+              <div className="flex flex-wrap gap-2 max-md:w-full">
                 {dialogMode === 'edit' && selectedLead && (
                   <>
                     {selectedLead.status === 'archived' ? (
@@ -799,11 +805,19 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
                   </>
                 )}
               </div>
-              <div className="flex gap-2 ml-auto">
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              <div className="flex gap-2 max-md:w-full sm:ml-auto">
+                <Button
+                  variant="outline"
+                  className={MOBILE_FULL_WIDTH_BUTTON_CLASS}
+                  onClick={() => setDialogOpen(false)}
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleSave} disabled={isSaving}>
+                <Button
+                  className={MOBILE_FULL_WIDTH_BUTTON_CLASS}
+                  onClick={handleSave}
+                  disabled={isSaving}
+                >
                   {isSaving ? 'Saving...' : dialogMode === 'create' ? 'Create Lead' : 'Save'}
                 </Button>
               </div>

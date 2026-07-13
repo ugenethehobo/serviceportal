@@ -13,6 +13,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { ActivityFeedItem } from '@/lib/activity-feed'
+import {
+  SCROLLABLE_MODAL_HEADER_CLASS,
+  SCROLLABLE_MODAL_SHELL_MD,
+} from '@/lib/mobile-layout'
 
 type DashboardActivityInboxProps = {
   items: ActivityFeedItem[]
@@ -49,8 +53,10 @@ export function DashboardActivityInbox({ items, timezone }: DashboardActivityInb
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="!max-w-md max-h-[90vh] flex flex-col p-0 gap-0">
-          <DialogHeader className="border-b px-6 py-5 text-left shrink-0">
+        <DialogContent className={SCROLLABLE_MODAL_SHELL_MD}>
+          <DialogHeader
+            className={`border-b px-6 py-4 text-left ${SCROLLABLE_MODAL_HEADER_CLASS}`}
+          >
             <DialogTitle className="text-lg font-semibold">Needs attention</DialogTitle>
             <DialogDescription className="text-sm">
               Payments, contracts, estimates, leads, and client messages across your business.
