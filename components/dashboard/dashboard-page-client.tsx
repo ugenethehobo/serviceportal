@@ -116,10 +116,10 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
         }
       />
 
-      <MainPageCard className="min-h-0 flex-[3] p-4 shadow-sm max-md:flex-none">
+      <MainPageCard className="min-h-0 flex-[3] overflow-visible p-4 shadow-sm max-md:flex-none">
         {isClosedDay && data.monthlyKpis ? (
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-hidden lg:grid-cols-5">
-            <div className="flex min-h-0 flex-col border-border/70 lg:col-span-2 lg:border-r lg:pr-6">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-5">
+            <div className="flex min-h-0 flex-col overflow-hidden border-border/70 lg:col-span-2 lg:border-r lg:pr-6">
               <div className="mb-3 flex shrink-0 items-center justify-between border-b pb-2">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold tracking-tight">Revenue this month</h2>
@@ -131,7 +131,7 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
               <DashboardMonthKpis kpis={data.monthlyKpis} variant="revenue" />
             </div>
 
-            <div className="flex min-h-0 flex-col max-md:min-h-[200px] lg:col-span-3 lg:pl-6">
+            <div className="flex min-h-0 flex-col overflow-visible max-md:min-h-[200px] lg:col-span-3 lg:pl-6">
               <div className="mb-3 flex shrink-0 items-center justify-between gap-3 border-b pb-2">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold tracking-tight">Activity this month</h2>
@@ -144,8 +144,8 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
             </div>
           </div>
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-hidden lg:grid-cols-5">
-            <div className="flex min-h-0 flex-col border-border/70 lg:col-span-2 lg:border-r lg:pr-6">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-5">
+            <div className="flex min-h-0 flex-col overflow-hidden border-border/70 lg:col-span-2 lg:border-r lg:pr-6">
               <div className="mb-3 flex shrink-0 items-center justify-between border-b pb-2">
                 <h2 className="text-lg font-semibold tracking-tight">
                   {getActiveCrewsHeading(Boolean(data.isSoloBusiness))}
@@ -154,7 +154,7 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
               <ActiveCrewsToday crews={data.crews} isSoloBusiness={data.isSoloBusiness} />
             </div>
 
-            <div className="flex min-h-0 flex-col max-md:min-h-[200px] lg:col-span-3 lg:pl-6">
+            <div className="flex min-h-0 flex-col overflow-visible max-md:min-h-[200px] lg:col-span-3 lg:pl-6">
               <div className="mb-3 flex shrink-0 items-center justify-between gap-3 border-b pb-2">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold tracking-tight">{timelineTitle}</h2>

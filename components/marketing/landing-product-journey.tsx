@@ -264,9 +264,9 @@ export function LandingProductJourney({ sections }: LandingProductJourneyProps) 
             Product tour
           </p>
           <h2 className="mx-auto mt-3 max-w-3xl text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
-            Six chapters. One platform.
+            Features, Consolidated.
             <span className="block text-muted-foreground">
-              Scroll to explore each capability.
+              Maximum Value.
             </span>
           </h2>
         </LandingScrollReveal>

@@ -37,14 +37,14 @@ export function LandingPricingBand({ plans, releaseMode }: LandingPricingBandPro
               isBeta ? 'text-[#FF4F00]' : 'text-white/50'
             )}
           >
-            {isBeta ? 'Beta pricing' : 'Pricing'}
+            {isBeta ? 'Pricing' : 'Pricing'}
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-5xl md:text-6xl">
             Pick your deployment.
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base text-white/55 sm:text-lg">
             {isBeta
-              ? 'Request beta access to get started — or subscribe now to support the product while we&apos;re in beta.'
+              ? 'Request beta access to get started — or subscribe now to support the product while we are in beta.'
               : `${PLATFORM_TRIAL_DAYS}-day free trial on every plan. Scale when your crews do.`}
           </p>
         </LandingScrollReveal>

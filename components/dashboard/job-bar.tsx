@@ -51,7 +51,8 @@ export function JobBar({
   if (clippedDuration <= 0) return null
 
   const leftPercent = minutesToTimelinePercent(clippedStart, businessHours)
-  const widthPercent = minutesToTimelinePercent(clippedStart + clippedDuration, businessHours) - leftPercent
+  const widthPercent =
+    minutesToTimelinePercent(clippedStart + clippedDuration, businessHours) - leftPercent
   const topOffset = lane * (laneHeight + laneGap)
 
   const startTime = formatMinutesLabel(startMinutes)
@@ -65,7 +66,7 @@ export function JobBar({
 
   return (
     <div
-      className="absolute"
+      className="absolute z-[1] overflow-visible hover:z-30"
       style={{
         left: `${leftPercent}%`,
         width: `${Math.max(widthPercent, 1.5)}%`,
@@ -78,11 +79,14 @@ export function JobBar({
           render={
             <Link
               href={`/dashboard/clients/${clientId}/jobs/${jobId}`}
-              className="h-full w-full rounded-md border bg-background flex items-center px-3 shadow-sm text-xs cursor-pointer hover:bg-accent transition-colors"
+              className="relative block h-full w-full overflow-visible rounded-md border bg-background shadow-sm cursor-pointer hover:bg-accent transition-colors"
+              aria-label={title}
             />
           }
         >
-          <span className="font-medium truncate">{title}</span>
+          <span className="pointer-events-none absolute left-1.5 top-1/2 z-10 max-w-none -translate-y-1/2 whitespace-nowrap rounded-sm bg-primary px-1.5 py-0.5 text-xs font-medium text-primary-foreground shadow-sm ring-1 ring-primary/40">
+            {title}
+          </span>
         </HoverCardTrigger>
 
         <HoverCardContent

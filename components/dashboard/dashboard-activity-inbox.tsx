@@ -35,16 +35,16 @@ export function DashboardActivityInbox({ items, timezone }: DashboardActivityInb
     <>
       <Button
         type="button"
-        variant={urgentCount > 0 ? 'default' : 'outline'}
+        variant="outline"
         size="sm"
-        className="gap-2"
+        className="gap-2 md:h-8 md:px-3.5"
         onClick={() => setOpen(true)}
       >
         <Bell className="size-4" />
         Activity
         {urgentCount > 0 ? (
           <Badge
-            variant="secondary"
+            variant="default"
             className="h-5 min-w-5 rounded-full px-1.5 text-[10px] font-semibold"
           >
             {urgentCount > 99 ? '99+' : urgentCount}
