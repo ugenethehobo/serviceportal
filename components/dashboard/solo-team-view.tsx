@@ -6,7 +6,12 @@ import { TeamPageClient, TeamPageSkeleton } from '@/components/dashboard/team-pa
 import { Card } from '@/components/ui/card'
 import type { TeamMemberDashboardData } from '@/lib/team-dashboard'
 
-export function SoloTeamView() {
+type SoloTeamViewProps = {
+  /** When true, omit page chrome (parent workspace shell owns header/nav). */
+  embedded?: boolean
+}
+
+export function SoloTeamView({ embedded = false }: SoloTeamViewProps) {
   const [data, setData] = useState<TeamMemberDashboardData | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -24,7 +29,7 @@ export function SoloTeamView() {
 
   if (!data && !error) {
     return (
-      <div className="h-full min-h-0 flex flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         <TeamPageSkeleton />
       </div>
     )
@@ -32,13 +37,17 @@ export function SoloTeamView() {
 
   if (error || !data) {
     return (
-      <div className="h-full flex items-center justify-center p-6">
+      <div className="flex h-full items-center justify-center p-6">
         <Card className="max-w-md p-8 text-center">
-          <p className="text-sm text-muted-foreground">{error || 'Unable to load your schedule.'}</p>
+          <p className="text-sm text-muted-foreground">
+            {error || 'Unable to load your schedule.'}
+          </p>
         </Card>
       </div>
     )
   }
 
-  return <TeamPageClient initialData={data} variant="solo_owner" />
+  return (
+    <TeamPageClient initialData={data} variant="solo_owner" embedded={embedded} />
+  )
 }

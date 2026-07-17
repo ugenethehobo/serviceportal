@@ -1703,6 +1703,21 @@ async function verifyScheduleCompanyAccess(scheduleId: string, clientId: string)
     return { ok: false as const, error: 'Job not found' }
   }
 
+  // Crew ACL: team members may only open jobs assigned to their crew
+  if (check.session.profile.role === 'team_member') {
+    const supabaseAdmin = createSupabaseAdmin()
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('crew_id')
+      .eq('id', check.userId)
+      .maybeSingle()
+
+    const { canTeamMemberAccessCrewJob } = await import('@/lib/field-job-access')
+    if (!canTeamMemberAccessCrewJob(schedule.crew_id, profile?.crew_id ?? null)) {
+      return { ok: false as const, error: 'Job not found' }
+    }
+  }
+
   return { ...check, schedule, companyId }
 }
 

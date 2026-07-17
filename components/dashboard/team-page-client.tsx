@@ -1,8 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { getTeamMemberDashboardAction } from '@/app/action'
+import {
+  completeFieldJobAction,
+  startFieldJobAction,
+} from '@/app/field-job-actions'
+import { optimizeCrewDayRouteAction } from '@/app/route-optimize-actions'
 import { JobStatusBadge } from '@/components/dashboard/job-status-badge'
 import { MapsNavigateButton } from '@/components/dashboard/maps-navigate-button'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +27,10 @@ import {
 
 import { Skeleton } from '@/components/ui/skeleton'
 import {
+  getAvailableFieldJobAction,
+  getFieldJobActionLabel,
+} from '@/lib/field-job-access'
+import {
   formatRouteDistance,
   formatRouteDuration,
 } from '@/lib/road-routing'
@@ -32,13 +41,23 @@ import {
 } from '@/lib/route-planner'
 import type { TeamMemberDashboardData } from '@/lib/team-dashboard'
 import {
+  MOBILE_FULL_WIDTH_BUTTON_CLASS,
+  MOBILE_MAP_MIN_HEIGHT_CLASS,
+} from '@/lib/mobile-layout'
+import {
   AlertTriangle,
   Building2,
   CalendarDays,
+  CheckCircle2,
   List,
+  Loader2,
   MapPin,
   Map as MapIcon,
+  Play,
+  Route,
 } from 'lucide-react'
+import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 type ViewMode = 'list' | 'map'
 type TeamPageVariant = 'team_member' | 'solo_owner'
@@ -46,6 +65,8 @@ type TeamPageVariant = 'team_member' | 'solo_owner'
 interface TeamPageClientProps {
   initialData: TeamMemberDashboardData
   variant?: TeamPageVariant
+  /** When true, omit page-level title chrome (parent owns header/tabs). */
+  embedded?: boolean
 }
 
 function MapBounds({ coordinates }: { coordinates: [number, number][] }) {
@@ -149,10 +170,31 @@ function TeamRouteStopMarker({
 function TeamJobCard({
   job,
   stopOrder,
+  onStatusChanged,
 }: {
   job: TeamMemberDashboardData['jobs'][number]
   stopOrder?: number
+  onStatusChanged: () => void
 }) {
+  const [pending, startTransition] = useTransition()
+  const fieldAction = getAvailableFieldJobAction(job.status)
+
+  function runFieldAction() {
+    if (!fieldAction) return
+    startTransition(async () => {
+      const result =
+        fieldAction === 'start'
+          ? await startFieldJobAction(job.id, job.clientId)
+          : await completeFieldJobAction(job.id, job.clientId)
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      toast.success(result.message)
+      onStatusChanged()
+    })
+  }
+
   return (
     <Card className="p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -183,10 +225,31 @@ function TeamJobCard({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col sm:flex-row gap-2">
+      {fieldAction ? (
+        <div className="mt-4">
+          <Button
+            type="button"
+            size="lg"
+            className={cn('w-full', MOBILE_FULL_WIDTH_BUTTON_CLASS)}
+            disabled={pending}
+            onClick={runFieldAction}
+          >
+            {pending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : fieldAction === 'start' ? (
+              <Play className="size-4" />
+            ) : (
+              <CheckCircle2 className="size-4" />
+            )}
+            {pending ? 'Updating…' : getFieldJobActionLabel(fieldAction)}
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-col sm:flex-row gap-2">
         <MapsNavigateButton
           address={job.address}
-          className="w-full sm:flex-1"
+          className={cn('w-full sm:flex-1', MOBILE_FULL_WIDTH_BUTTON_CLASS)}
           size="lg"
         />
         <Link
@@ -194,7 +257,7 @@ function TeamJobCard({
           className={buttonVariants({
             variant: 'outline',
             size: 'lg',
-            className: 'w-full sm:flex-1',
+            className: cn('w-full sm:flex-1', MOBILE_FULL_WIDTH_BUTTON_CLASS),
           })}
         >
           View job
@@ -211,12 +274,14 @@ function TeamJobCard({
 export function TeamPageClient({
   initialData,
   variant = 'team_member',
+  embedded = false,
 }: TeamPageClientProps) {
   const isSoloOwner = variant === 'solo_owner'
   const [data, setData] = useState(initialData)
   const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
+  const [isOptimizing, startOptimize] = useTransition()
 
   const refresh = useCallback(async () => {
     setIsRefreshing(true)
@@ -229,6 +294,41 @@ export function TeamPageClient({
     }
     setIsRefreshing(false)
   }, [])
+
+  const scheduledJobCount = useMemo(
+    () => data.jobs.filter((job) => job.status === 'scheduled').length,
+    [data.jobs]
+  )
+  const canOptimizeRoute =
+    Boolean(data.crewId) && data.hasCrew && scheduledJobCount >= 2
+
+  function handleOptimizeRoute() {
+    if (!data.crewId || isOptimizing) return
+    startOptimize(async () => {
+      const result = await optimizeCrewDayRouteAction({
+        crewId: data.crewId!,
+        dayOffset: 0,
+      })
+      if (!result.success) {
+        toast.error(result.error)
+        return
+      }
+      if (result.updatedCount === 0) {
+        toast.success(
+          result.usedRoadOptimization
+            ? 'Route order is already optimal'
+            : 'Visit order looks good — no time changes needed'
+        )
+      } else {
+        toast.success(
+          result.usedRoadOptimization
+            ? `Optimized route · updated ${result.updatedCount} job${result.updatedCount === 1 ? '' : 's'}`
+            : `Reordered stops · updated ${result.updatedCount} job${result.updatedCount === 1 ? '' : 's'}`
+        )
+      }
+      await refresh()
+    })
+  }
 
   useEffect(() => {
     const interval = setInterval(refresh, 60_000)
@@ -259,13 +359,28 @@ export function TeamPageClient({
 
   const driveDistance = formatRouteDistance(data.route?.distanceMeters ?? null)
   const driveDuration = formatRouteDuration(data.route?.durationSeconds ?? null)
+  const contentInset = embedded ? '' : 'mx-4 sm:mx-6'
 
   return (
-    <div className="flex flex-col h-full min-h-0 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:pb-6">
-      <div className="shrink-0 px-4 pt-4 sm:px-6 sm:pt-6 pb-3 flex flex-col gap-3">
+    <div
+      className={
+        embedded
+          ? 'flex h-full min-h-0 flex-col pb-2'
+          : 'flex h-full min-h-0 flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:pb-6'
+      }
+    >
+      <div
+        className={
+          embedded
+            ? 'flex shrink-0 flex-col gap-3 pb-3'
+            : 'flex shrink-0 flex-col gap-3 px-4 pb-3 pt-4 sm:px-6 sm:pt-6'
+        }
+      >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Day</h1>
+            {!embedded ? (
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Day</h1>
+            ) : null}
             <p className="text-sm text-muted-foreground">
               {isSoloOwner
                 ? data.dateLabel
@@ -284,34 +399,54 @@ export function TeamPageClient({
           </p>
         )}
 
-        <div className="hidden sm:flex items-center gap-1 bg-muted/50 rounded-lg p-1 w-fit">
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-            onClick={() => setViewMode('list')}
-          >
-            <List className="size-4" />
-            List
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === 'map' ? 'secondary' : 'ghost'}
-            onClick={() => setViewMode('map')}
-          >
-            <MapIcon className="size-4" />
-            Map
-          </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="hidden sm:flex items-center gap-1 bg-muted/50 rounded-lg p-1 w-fit">
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+              onClick={() => setViewMode('list')}
+            >
+              <List className="size-4" />
+              List
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === 'map' ? 'secondary' : 'ghost'}
+              onClick={() => setViewMode('map')}
+            >
+              <MapIcon className="size-4" />
+              Map
+            </Button>
+          </div>
+
+          {canOptimizeRoute ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn(MOBILE_FULL_WIDTH_BUTTON_CLASS, 'sm:w-auto')}
+              disabled={isOptimizing || isRefreshing}
+              onClick={handleOptimizeRoute}
+            >
+              {isOptimizing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Route className="size-4" />
+              )}
+              {isOptimizing ? 'Optimizing…' : 'Optimize route'}
+            </Button>
+          ) : null}
         </div>
       </div>
 
       {error ? (
-        <Card className="mx-4 sm:mx-6 p-8 text-center">
+        <Card className={`${contentInset} p-8 text-center`}>
           <p className="text-sm text-muted-foreground">{error}</p>
         </Card>
       ) : !data.hasCrew ? (
-        <Card className="mx-4 sm:mx-6 p-8 text-center">
+        <Card className={`${contentInset} p-8 text-center`}>
           <CalendarDays className="size-10 mx-auto text-muted-foreground mb-3" />
           <h2 className="text-lg font-semibold tracking-tight">
             {isSoloOwner ? 'Schedule not ready' : 'No crew assigned'}
@@ -323,18 +458,23 @@ export function TeamPageClient({
           </p>
         </Card>
       ) : data.jobs.length === 0 ? (
-        <Card className="mx-4 sm:mx-6 p-8 text-center">
+        <Card className={`${contentInset} p-8 text-center`}>
           <CalendarDays className="size-10 mx-auto text-muted-foreground mb-3" />
           <h2 className="text-lg font-semibold tracking-tight">No jobs today</h2>
           <p className="text-sm text-muted-foreground mt-2">
             {isSoloOwner
-              ? `You're all clear for ${data.dateLabel.toLowerCase()}. Schedule jobs from Clients when you're ready.`
+              ? `You're all clear for ${data.dateLabel.toLowerCase()}. Open My Schedule in the sidebar to put unassigned jobs on your day, or create jobs from Clients.`
               : `You're all clear for ${data.dateLabel.toLowerCase()}.`}
           </p>
         </Card>
       ) : viewMode === 'map' ? (
-        <MainPageCard className="mx-4 sm:mx-6 min-h-0 flex-1 gap-0 overflow-hidden p-0">
-          <div className="relative isolate min-h-[50vh] flex-1 sm:min-h-0">
+        <MainPageCard className={`${contentInset} min-h-0 flex-1 gap-0 overflow-hidden p-0`}>
+          <div
+            className={cn(
+              'relative isolate min-h-[50vh] flex-1 sm:min-h-0',
+              MOBILE_MAP_MIN_HEIGHT_CLASS
+            )}
+          >
             {hasRoute ? (
               <>
                 <div className="absolute inset-0 z-0">
@@ -430,43 +570,79 @@ export function TeamPageClient({
           </div>
         </MainPageCard>
       ) : (
-        <div className="mx-4 flex min-h-0 flex-1 flex-col sm:mx-6">
+        <div className={`${contentInset} flex min-h-0 flex-1 flex-col`}>
           <MainPageCardScroll contentClassName="flex flex-col gap-3 px-4 pb-4 sm:px-6 max-w-2xl mx-auto w-full">
             {data.jobs.map((job) => (
               <TeamJobCard
                 key={job.id}
                 job={job}
                 stopOrder={stopOrderByJobId.get(job.id)}
+                onStatusChanged={() => {
+                  void refresh()
+                }}
               />
             ))}
           </MainPageCardScroll>
         </div>
       )}
 
-      <div className="sm:hidden fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
-        <div className="grid grid-cols-2">
-          <button
-            type="button"
-            onClick={() => setViewMode('list')}
-            className={`flex flex-col items-center justify-center gap-1 py-3 text-xs font-medium transition-colors ${
-              viewMode === 'list' ? 'text-primary' : 'text-muted-foreground'
-            }`}
-          >
-            <List className="size-5" />
-            List
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('map')}
-            className={`flex flex-col items-center justify-center gap-1 py-3 text-xs font-medium transition-colors ${
-              viewMode === 'map' ? 'text-primary' : 'text-muted-foreground'
-            }`}
-          >
-            <MapIcon className="size-5" />
-            Map
-          </button>
+      {!embedded ? (
+        <div className="sm:hidden fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
+          <div className="grid grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`flex min-h-12 flex-col items-center justify-center gap-1 py-3 text-xs font-medium transition-colors ${
+                viewMode === 'list' ? 'text-primary' : 'text-muted-foreground'
+              }`}
+            >
+              <List className="size-5" />
+              List
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('map')}
+              className={`flex min-h-12 flex-col items-center justify-center gap-1 py-3 text-xs font-medium transition-colors ${
+                viewMode === 'map' ? 'text-primary' : 'text-muted-foreground'
+              }`}
+            >
+              <MapIcon className="size-5" />
+              Map
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="sm:hidden shrink-0 border-t bg-background pt-2">
+          <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted/50 p-1">
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={cn(
+                'flex min-h-11 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors',
+                viewMode === 'list'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground'
+              )}
+            >
+              <List className="size-4" />
+              List
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('map')}
+              className={cn(
+                'flex min-h-11 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors',
+                viewMode === 'map'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground'
+              )}
+            >
+              <MapIcon className="size-4" />
+              Map
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

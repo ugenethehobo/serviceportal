@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { getDashboardMapDataAction, getDashboardOverviewAction } from '@/app/action'
 import { ActiveCrewsToday } from '@/components/dashboard/active-crews-today'
 import { DashboardActivityInbox } from '@/components/dashboard/dashboard-activity-inbox'
+import { DashboardGlobalSearch } from '@/components/dashboard/dashboard-global-search'
 import { DashboardMonthKpis } from '@/components/dashboard/dashboard-month-kpis'
 import { JobsTimeline } from '@/components/dashboard/jobs-timeline'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -115,6 +116,8 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
           </>
         }
       />
+
+      <DashboardGlobalSearch />
 
       <MainPageCard className="min-h-0 flex-[3] overflow-visible p-4 shadow-sm max-md:flex-none">
         {isClosedDay && data.monthlyKpis ? (

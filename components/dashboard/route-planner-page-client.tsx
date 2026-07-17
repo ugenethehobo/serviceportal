@@ -1,10 +1,21 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, Building2, ChevronDown, ChevronUp, MapPin } from 'lucide-react'
+import {
+  AlertTriangle,
+  Building2,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  MapPin,
+  Route,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { getRoutePlannerDataAction } from '@/app/action'
+import { optimizeCrewDayRouteAction } from '@/app/route-optimize-actions'
 import { MainPageCard } from '@/components/ui/main-page-card'
+import { Button } from '@/components/ui/button'
 import {
   Map,
   MapControls,
@@ -23,6 +34,7 @@ import {
 import {
   ROUTE_PLANNER_MOBILE_MAP_CLASS,
   ROUTE_PLANNER_MOBILE_PAGE_CLASS,
+  MOBILE_FULL_WIDTH_BUTTON_CLASS,
   MOBILE_PAGE_ROOT_CLASS,
 } from '@/lib/mobile-layout'
 import {
@@ -133,10 +145,14 @@ function DesktopCrewsPanel({
   routes,
   visibleCrews,
   onToggle,
+  optimizingCrewId,
+  onOptimize,
 }: {
   routes: CrewRoute[]
   visibleCrews: Set<string>
   onToggle: (crewId: string) => void
+  optimizingCrewId: string | null
+  onOptimize: (crewId: string) => void
 }) {
   return (
     <ScrollArea
@@ -154,9 +170,11 @@ function DesktopCrewsPanel({
           const color = CREW_ROUTE_COLORS[route.colorIndex]
           const driveDistance = formatRouteDistance(route.distanceMeters)
           const driveDuration = formatRouteDuration(route.durationSeconds)
+          const canOptimize = route.jobCount >= 2
+          const isOptimizing = optimizingCrewId === route.crewId
 
           return (
-            <li key={route.crewId}>
+            <li key={route.crewId} className="space-y-1">
               <button
                 type="button"
                 onClick={() => onToggle(route.crewId)}
@@ -186,6 +204,23 @@ function DesktopCrewsPanel({
                   </p>
                 )}
               </button>
+              {canOptimize ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 w-full text-xs"
+                  disabled={optimizingCrewId != null}
+                  onClick={() => onOptimize(route.crewId)}
+                >
+                  {isOptimizing ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Route className="size-3.5" />
+                  )}
+                  {isOptimizing ? 'Optimizing…' : 'Optimize'}
+                </Button>
+              ) : null}
             </li>
           )
         })}
@@ -198,10 +233,14 @@ function MobileRouteStopsPanel({
   routes,
   visibleCrews,
   onToggle,
+  optimizingCrewId,
+  onOptimize,
 }: {
   routes: CrewRoute[]
   visibleCrews: Set<string>
   onToggle: (crewId: string) => void
+  optimizingCrewId: string | null
+  onOptimize: (crewId: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -249,6 +288,9 @@ function MobileRouteStopsPanel({
                   const driveDuration = formatRouteDuration(route.durationSeconds)
                   const jobStops = route.stops.filter((stop) => stop.kind === 'job')
 
+                  const canOptimize = route.jobCount >= 2
+                  const isOptimizing = optimizingCrewId === route.crewId
+
                   return (
                     <div
                       key={route.crewId}
@@ -271,6 +313,28 @@ function MobileRouteStopsPanel({
                           {driveDistance} · {driveDuration}
                           {!route.followsRoads && ' (direct)'}
                         </p>
+                      ) : null}
+                      {canOptimize ? (
+                        <div className="border-b border-border/40 px-2 py-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className={cn(
+                              'h-9 w-full text-xs',
+                              MOBILE_FULL_WIDTH_BUTTON_CLASS
+                            )}
+                            disabled={optimizingCrewId != null}
+                            onClick={() => onOptimize(route.crewId)}
+                          >
+                            {isOptimizing ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <Route className="size-3.5" />
+                            )}
+                            {isOptimizing ? 'Optimizing…' : 'Optimize route'}
+                          </Button>
+                        </div>
                       ) : null}
                       <ol className="divide-y divide-border/40 px-2 py-0.5">
                         {route.stops.map((stop) => (
@@ -345,7 +409,7 @@ function MobileRouteStopsPanel({
                 type="button"
                 onClick={() => onToggle(route.crewId)}
                 className={cn(
-                  'flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition-colors',
+                  'flex min-h-9 shrink-0 items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] transition-colors',
                   isVisible
                     ? 'border-transparent bg-accent text-accent-foreground'
                     : 'border-border/60 bg-background/70 text-muted-foreground hover:bg-muted/50'
@@ -457,6 +521,8 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
   const [data, setData] = useState(initialData)
   const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [optimizingCrewId, setOptimizingCrewId] = useState<string | null>(null)
+  const [, startOptimize] = useTransition()
   const [visibleCrews, setVisibleCrews] = useState<Set<string>>(() =>
     new Set(initialData.routes.map((route) => route.crewId))
   )
@@ -477,6 +543,37 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
     }
     setIsRefreshing(false)
   }, [])
+
+  const handleOptimize = useCallback(
+    (crewId: string) => {
+      if (optimizingCrewId) return
+      setOptimizingCrewId(crewId)
+      startOptimize(async () => {
+        try {
+          const result = await optimizeCrewDayRouteAction({ crewId, dayOffset: 0 })
+          if (!result.success) {
+            toast.error(result.error)
+            return
+          }
+          if (result.updatedCount === 0) {
+            toast.success(
+              result.usedRoadOptimization
+                ? 'Route order is already optimal'
+                : 'Visit order looks good — no time changes needed'
+            )
+          } else {
+            toast.success(
+              `Optimized ${result.updatedCount} job${result.updatedCount === 1 ? '' : 's'}`
+            )
+          }
+          await refresh()
+        } finally {
+          setOptimizingCrewId(null)
+        }
+      })
+    },
+    [optimizingCrewId, refresh]
+  )
 
   useEffect(() => {
     const interval = setInterval(refresh, 120_000)
@@ -605,6 +702,8 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
                     routes={data.routes}
                     visibleCrews={visibleCrews}
                     onToggle={toggleCrew}
+                    optimizingCrewId={optimizingCrewId}
+                    onOptimize={handleOptimize}
                   />
                 </div>
                 {hasWarnings ? (
@@ -619,6 +718,8 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
                   routes={data.routes}
                   visibleCrews={visibleCrews}
                   onToggle={toggleCrew}
+                  optimizingCrewId={optimizingCrewId}
+                  onOptimize={handleOptimize}
                 />
                 {hasWarnings ? (
                   <DesktopRouteWarnings invalidAddresses={data.invalidAddresses} />

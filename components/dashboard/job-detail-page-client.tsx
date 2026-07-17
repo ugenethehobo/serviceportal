@@ -11,7 +11,15 @@ import {
   cancelJobAction,
   deleteJobAction,
 } from '@/app/action'
+import {
+  completeFieldJobAction,
+  startFieldJobAction,
+} from '@/app/field-job-actions'
 import { SOLO_CREW_NAME } from '@/lib/company-operations'
+import {
+  getAvailableFieldJobAction,
+  getFieldJobActionLabel,
+} from '@/lib/field-job-access'
 import { JobDetailsPanel } from '@/components/dashboard/job-details-panel'
 import { JobPhotosPanel } from '@/components/dashboard/job-photos-panel'
 import { JobDocumentsPanel } from '@/components/dashboard/job-documents-panel'
@@ -20,7 +28,10 @@ import { MapsNavigateButton } from '@/components/dashboard/maps-navigate-button'
 import { getDisplayAddressFromClient } from '@/lib/address'
 import { Button } from '@/components/ui/button'
 import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
-import { MOBILE_NATURAL_HEIGHT_CLASS } from '@/lib/mobile-layout'
+import {
+  MOBILE_FULL_WIDTH_BUTTON_CLASS,
+  MOBILE_NATURAL_HEIGHT_CLASS,
+} from '@/lib/mobile-layout'
 import { cn } from '@/lib/utils'
 import {
   Breadcrumb,
@@ -382,6 +393,26 @@ export function JobDetailPageClient({
     setIsActionLoading(false)
   }
 
+  const handleFieldJobAction = async () => {
+    if (!job) return
+    const action = getAvailableFieldJobAction(job.status)
+    if (!action) return
+
+    setIsActionLoading(true)
+    const result =
+      action === 'start'
+        ? await startFieldJobAction(jobId, clientId)
+        : await completeFieldJobAction(jobId, clientId)
+
+    if (result.success) {
+      toast.success(result.message)
+      await refreshJob()
+    } else {
+      toast.error(result.error || 'Action failed')
+    }
+    setIsActionLoading(false)
+  }
+
   if (isLoading || !job) {
     return (
       <div className="flex h-full min-h-0 flex-col p-6">
@@ -394,6 +425,9 @@ export function JobDetailPageClient({
   const canArchive = !isTeamMember && job.status === 'in_progress'
   const canCancel = !isTeamMember && job.status === 'scheduled'
   const canDelete = !isTeamMember && (job.status === 'scheduled' || job.status === 'cancelled')
+  /** Start / complete on the job itself (crew ACL enforced server-side for team members). */
+  const fieldAction = getAvailableFieldJobAction(job.status)
+  const canFieldAction = Boolean(fieldAction)
 
   const jobMeta = [
     statusLabels[job.status] ?? job.status,
@@ -438,12 +472,21 @@ export function JobDetailPageClient({
           </Button>
         </>
       )}
+      {canFieldAction && fieldAction && !isEditing && (
+        <Button
+          className={MOBILE_FULL_WIDTH_BUTTON_CLASS}
+          onClick={() => void handleFieldJobAction()}
+          disabled={isActionLoading}
+        >
+          {isActionLoading ? 'Updating…' : getFieldJobActionLabel(fieldAction)}
+        </Button>
+      )}
       {canCancel && !isEditing && (
         <Button variant="outline" onClick={() => setConfirmAction('cancel')}>
           Cancel Job
         </Button>
       )}
-      {canArchive && !isEditing && (
+      {canArchive && !isEditing && !canFieldAction && (
         <Button variant="outline" onClick={() => setConfirmAction('archive')}>Complete Early</Button>
       )}
       {canDelete && !isEditing && (

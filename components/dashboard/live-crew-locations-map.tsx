@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, Building2, MapPin } from 'lucide-react'
+import { AlertTriangle, Building2, Check, MapPin } from 'lucide-react'
 import {
   Map,
   MapControls,
@@ -162,7 +162,11 @@ export function LiveCrewLocationsMap({
 
               {data.markers.map((marker) => {
                 const isCompany = marker.kind === 'company'
-                const isInProgress = marker.kind === 'job' && marker.status === 'in_progress'
+                const isCompleted = marker.kind === 'job' && Boolean(marker.completed)
+                const isInProgress =
+                  marker.kind === 'job' &&
+                  !isCompleted &&
+                  marker.status === 'in_progress'
                 const crewColor =
                   marker.crewId && crewColorMap.get(marker.crewId)
                     ? crewColorMap.get(marker.crewId)
@@ -181,10 +185,17 @@ export function LiveCrewLocationsMap({
                         </div>
                       ) : (
                         <div
-                          className={`rounded-full border-2 border-white shadow-lg ring-4 ${crewColor} ${
-                            isInProgress ? 'size-5' : 'size-4'
-                          }`}
-                        />
+                          className={cn(
+                            'flex items-center justify-center rounded-full border-2 border-white shadow-lg ring-4',
+                            crewColor,
+                            isInProgress ? 'size-5' : 'size-4',
+                            isCompleted && 'opacity-55 saturate-50'
+                          )}
+                        >
+                          {isCompleted ? (
+                            <Check className="size-2.5 text-white" strokeWidth={3} />
+                          ) : null}
+                        </div>
                       )}
                     </MarkerContent>
                     <MarkerLabel position="top">{marker.label}</MarkerLabel>

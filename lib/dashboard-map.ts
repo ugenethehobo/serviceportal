@@ -14,7 +14,8 @@ import {
 import { validateAddressFormat } from '@/lib/geocoding'
 import { formatTimeInTimezone } from '@/lib/timezone'
 
-const TODAY_MAP_JOB_STATUSES = new Set(['scheduled', 'in_progress'])
+const ACTIVE_MAP_JOB_STATUSES = new Set(['scheduled', 'in_progress'])
+const TODAY_MAP_JOB_STATUSES = new Set(['scheduled', 'in_progress', 'archived'])
 
 type RawSchedule = {
   id: string
@@ -65,6 +66,7 @@ export type MapMarkerData = {
   latitude: number
   crewId?: string | null
   status?: string
+  completed?: boolean
 }
 
 export type InvalidMapAddress = {
@@ -123,7 +125,7 @@ function buildJobSubtitle(
   client: { name: string } | null,
   crew: { name: string } | null,
   timezone: string,
-  options?: { includeDayLabel?: boolean }
+  options?: { includeDayLabel?: boolean; completed?: boolean }
 ): string | undefined {
   const parts: string[] = []
   if (options?.includeDayLabel) {
@@ -137,11 +139,34 @@ function buildJobSubtitle(
     parts.push(client.name)
   }
 
-  if (schedule.status === 'in_progress') {
+  if (options?.completed) {
+    parts.push('Completed')
+  } else if (schedule.status === 'in_progress') {
     parts.push('In progress')
   }
 
   return parts.join(' · ')
+}
+
+function isTodayMapJobCompleted(schedule: RawSchedule, now: Date): boolean {
+  if (schedule.status === 'archived') return true
+  return now.getTime() >= new Date(schedule.end_time).getTime()
+}
+
+function shouldIncludeScheduleOnMap(
+  schedule: RawSchedule,
+  mode: DashboardMapMode,
+  now: Date
+): boolean {
+  if (schedule.status === 'cancelled') return false
+  if (mode === 'today') {
+    if (TODAY_MAP_JOB_STATUSES.has(schedule.status)) return true
+    if (ACTIVE_MAP_JOB_STATUSES.has(schedule.status) && isTodayMapJobCompleted(schedule, now)) {
+      return true
+    }
+    return false
+  }
+  return ACTIVE_MAP_JOB_STATUSES.has(schedule.status)
 }
 
 export async function buildDashboardMapData(input: {
@@ -157,6 +182,8 @@ export async function buildDashboardMapData(input: {
   onGeocodesResolved?: (result: Awaited<ReturnType<typeof resolveGeocodeResults>>) => Promise<void>
 }): Promise<DashboardMapData> {
   const timezone = input.timezone || 'America/Chicago'
+  const now = input.now ?? new Date()
+  const mapMode = input.mode || 'today'
   const invalidAddresses: InvalidMapAddress[] = []
   const markers: MapMarkerData[] = []
   const pendingGeocode: Array<{
@@ -168,6 +195,7 @@ export async function buildDashboardMapData(input: {
     address: string
     crewId?: string | null
     status?: string
+    completed?: boolean
   }> = []
   const geocodeEntries: GeocodeResolveEntry[] = []
 
@@ -222,15 +250,17 @@ export async function buildDashboardMapData(input: {
   }
 
   for (const schedule of input.schedules) {
-    if (!TODAY_MAP_JOB_STATUSES.has(schedule.status)) continue
+    if (!shouldIncludeScheduleOnMap(schedule, mapMode, now)) continue
 
     const client = unwrapRelation(schedule.client)
     const crew = unwrapRelation(schedule.crew)
+    const completed = mapMode === 'today' && isTodayMapJobCompleted(schedule, now)
     const locationAddress = client ? getDisplayAddressFromClient(client) : ''
     const label = buildJobLabel(schedule, client)
     const warningLabel = buildJobWarningLabel(schedule, client, crew)
     const subtitle = buildJobSubtitle(schedule, client, crew, timezone, {
-      includeDayLabel: input.mode === 'upcoming_open_days',
+      includeDayLabel: mapMode === 'upcoming_open_days',
+      completed,
     })
 
     if (!locationAddress) {
@@ -274,6 +304,7 @@ export async function buildDashboardMapData(input: {
       address: locationAddress,
       crewId: crew?.id ?? schedule.crew_id,
       status: schedule.status,
+      completed,
     })
   }
 
@@ -309,6 +340,7 @@ export async function buildDashboardMapData(input: {
       latitude: result.latitude,
       crewId: entry.crewId,
       status: entry.status,
+      completed: entry.completed,
     })
   }
 

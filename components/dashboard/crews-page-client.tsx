@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
@@ -18,18 +18,19 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from '@/components/ui/dialog'
 import { createCrew, updateCrew, deleteCrew, getCrewsPageDataAction } from '@/app/action'
 import { getCrewLimitMessage, type PlanEntitlements } from '@/lib/platform-entitlements'
+import { DispatchBoard } from '@/components/dashboard/dispatch-board'
 import { SoloTeamView } from '@/components/dashboard/solo-team-view'
 import { TeamMembersPanel } from '@/components/dashboard/team-members-panel'
 import { TeamPageSkeleton } from '@/components/dashboard/team-page-client'
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
-import { MainPageCard, MainPageCardScroll } from '@/components/ui/main-page-card'
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { WorkspaceSectionShell } from '@/components/dashboard/workspace-section-shell'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { MainPageCardScroll } from '@/components/ui/main-page-card'
+import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Tooltip,
   TooltipContent,
@@ -38,12 +39,13 @@ import {
 } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 import { X } from 'lucide-react'
-import { PageHeader } from '@/components/ui/page-header'
 import {
-  MOBILE_FULL_WIDTH_BUTTON_CLASS,
-  MOBILE_PAGE_ROOT_CLASS,
-  MOBILE_TAB_LIST_CLASS,
-} from '@/lib/mobile-layout'
+  CREWS_SECTION_GROUPS,
+  getCrewsWorkspaceDefaultSection,
+  getCrewsWorkspacePageCopy,
+  getCrewsWorkspaceSections,
+} from '@/lib/crews-workspace'
+import { MOBILE_FULL_WIDTH_BUTTON_CLASS } from '@/lib/mobile-layout'
 
 interface Profile {
   id: string
@@ -66,7 +68,7 @@ type CrewsPageClientProps = {
   initialEntitlements: PlanEntitlements | null
 }
 
-export function CrewsPageClient({
+function CrewsPageContent({
   initialCrews,
   initialAvailableMembers,
   initialIsSoloBusiness,
@@ -80,26 +82,20 @@ export function CrewsPageClient({
   const [editingCrew, setEditingCrew] = useState<CrewWithMembers | null>(null)
   const [isCreating, setIsCreating] = useState(false)
 
-  // Add Crew form
   const [newCrewName, setNewCrewName] = useState('')
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const [selectedLeadId, setSelectedLeadId] = useState<string>('')
 
-  // Edit Crew form
   const [editCrewName, setEditCrewName] = useState('')
   const [editSelectedLeadId, setEditSelectedLeadId] = useState<string>('')
   const [editMembersToAdd, setEditMembersToAdd] = useState<string[]>([])
   const [editMembersToRemove, setEditMembersToRemove] = useState<string[]>([])
-  // Edit Crew - local available members (for real-time updates)
   const [editAvailableMembers, setEditAvailableMembers] = useState<Profile[]>([])
 
-  // Delete confirmation
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [crewToDelete, setCrewToDelete] = useState<CrewWithMembers | null>(null)
   const [entitlements, setEntitlements] = useState<PlanEntitlements | null>(initialEntitlements)
   const [isSoloBusiness, setIsSoloBusiness] = useState(initialIsSoloBusiness)
-  const [modeLoaded, setModeLoaded] = useState(true)
-  const [activeTab, setActiveTab] = useState('crews')
 
   const crewLimit = entitlements?.crewLimit ?? null
   const atCrewLimit = crewLimit !== null && crews.length >= crewLimit
@@ -107,6 +103,21 @@ export function CrewsPageClient({
     entitlements && crewLimit !== null && atCrewLimit
       ? getCrewLimitMessage(entitlements.plan, crewLimit)
       : null
+
+  const sections = useMemo(
+    () =>
+      getCrewsWorkspaceSections(isSoloBusiness).map((section) => ({
+        id: section.id,
+        label: section.label,
+        description: section.description,
+        icon: section.icon,
+        groupId: section.group,
+      })),
+    [isSoloBusiness]
+  )
+
+  const pageCopy = getCrewsWorkspacePageCopy(isSoloBusiness)
+  const defaultSectionId = getCrewsWorkspaceDefaultSection(isSoloBusiness)
 
   const fetchData = async () => {
     const result = await getCrewsPageDataAction()
@@ -127,10 +138,7 @@ export function CrewsPageClient({
     setEditSelectedLeadId(crew.crew_lead_id || '')
     setEditMembersToAdd([])
     setEditMembersToRemove([])
-
-    // Initialize available members for this edit session
     setEditAvailableMembers(availableMembers)
-
     setIsEditModalOpen(true)
   }
 
@@ -142,7 +150,9 @@ export function CrewsPageClient({
 
     setIsCreating(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return
 
     const { data: profile } = await supabase
@@ -208,18 +218,6 @@ export function CrewsPageClient({
     }
   }
 
-  const toggleEditMember = (memberId: string, isCurrentlyInCrew: boolean) => {
-    if (isCurrentlyInCrew) {
-      setEditMembersToRemove((prev) =>
-        prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId]
-      )
-    } else {
-      setEditMembersToAdd((prev) =>
-        prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId]
-      )
-    }
-  }
-
   const addCrewButton = (
     <Button
       onClick={() => setIsAddModalOpen(true)}
@@ -230,49 +228,17 @@ export function CrewsPageClient({
     </Button>
   )
 
-  if (!modeLoaded) {
-    return (
-      <div className="flex h-full min-h-0 flex-col p-6">
-        <TeamPageSkeleton />
-      </div>
-    )
-  }
-
-  if (isSoloBusiness) {
-    return (
-      <div className="flex h-full min-h-0 flex-col">
-        <SoloTeamView />
-      </div>
-    )
-  }
-
   return (
-    <div className={MOBILE_PAGE_ROOT_CLASS}>
-      <PageHeader
-        title="Crews & Team"
-        description="Manage field crews and team member accounts"
-      />
-
-      <Tabs
-        value={activeTab}
-        onValueChange={setActiveTab}
-        className="flex flex-1 flex-col min-h-0 gap-4"
-      >
-        <TabsList className={MOBILE_TAB_LIST_CLASS}>
-          <TabsTrigger value="crews">Crews</TabsTrigger>
-          <TabsTrigger value="team">Team Members</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="crews" className="flex flex-1 flex-col min-h-0 mt-0 gap-4">
-          <div className="flex shrink-0 flex-col items-stretch gap-3 max-md:gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">
-              Organize team members into field crews
-              {crewLimit !== null && (
-                <span className="ml-1">
-                  · {crews.length}/{crewLimit} used
-                </span>
-              )}
-            </p>
+    <>
+      <WorkspaceSectionShell
+        title={pageCopy.title}
+        description={pageCopy.description}
+        sections={sections}
+        groups={CREWS_SECTION_GROUPS.map((g) => ({ id: g.id, label: g.label }))}
+        defaultSectionId={defaultSectionId}
+        sectionActions={(activeSectionId) => {
+          if (activeSectionId !== 'crews') return null
+          return (
             <TooltipProvider>
               {atCrewLimit && crewUpgradeMessage ? (
                 <Tooltip>
@@ -285,66 +251,106 @@ export function CrewsPageClient({
                 addCrewButton
               )}
             </TooltipProvider>
-          </div>
-
-      <MainPageCard className="overflow-hidden p-6">
-        <MainPageCardScroll className="pr-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {crews.length > 0 ? (
-              crews.map((crew) => {
-                const lead = crew.members.find((m) => m.id === crew.crew_lead_id)
-                return (
-                  <div
-                    key={crew.id}
-                    onClick={() => openEditModal(crew)}
-                    className="rounded-lg border p-5 cursor-pointer hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex justify-between items-start">
-                      <h3 className="font-semibold text-lg">{crew.name}</h3>
-                      {lead && <Badge>Lead: {lead.full_name.split(' ')[0]}</Badge>}
-                    </div>
-
-                    <div className="mt-4">
-                      <p className="text-sm font-medium text-muted-foreground mb-2">
-                        Members ({crew.members.length})
-                      </p>
-                      {crew.members.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {crew.members.map((member) => (
-                            <div key={member.id} className="flex items-center gap-2 text-sm">
-                              <Avatar className="h-6 w-6">
-                                <AvatarImage src={member.avatar_url || undefined} />
-                                <AvatarFallback className="text-xs">
-                                  {member.full_name.split(' ').map((n) => n[0]).join('')}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span>{member.full_name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground italic">No members</p>
-                      )}
-                    </div>
-                  </div>
-                )
-              })
-            ) : (
-              <div className="col-span-full text-center py-12 text-muted-foreground">
-                No crews yet. Create your first crew.
+          )
+        }}
+      >
+        {(activeSectionId) => {
+          if (activeSectionId === 'my-day') {
+            return (
+              <div className="flex h-full min-h-0 flex-col p-4 sm:p-6">
+                <SoloTeamView embedded />
               </div>
-            )}
-          </div>
-        </MainPageCardScroll>
-      </MainPageCard>
-        </TabsContent>
+            )
+          }
 
-        <TabsContent value="team" className="flex flex-1 flex-col min-h-0 mt-0">
-          <TeamMembersPanel />
-        </TabsContent>
-      </Tabs>
+          if (activeSectionId === 'schedule' || activeSectionId === 'dispatch') {
+            return (
+              <MainPageCardScroll contentClassName="max-w-none p-4 sm:p-6">
+                <DispatchBoard embedded />
+              </MainPageCardScroll>
+            )
+          }
 
-      {/* Add Crew Modal */}
+          if (activeSectionId === 'team') {
+            return (
+              <div className="flex h-full min-h-0 flex-col p-4 sm:p-6">
+                <TeamMembersPanel />
+              </div>
+            )
+          }
+
+          // crews
+          return (
+            <MainPageCardScroll contentClassName="max-w-none p-4 sm:p-6">
+              <div className="mb-4">
+                <p className="text-sm text-muted-foreground">
+                  Organize team members into field crews
+                  {crewLimit !== null ? (
+                    <span className="ml-1">
+                      · {crews.length}/{crewLimit} used
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {crews.length > 0 ? (
+                  crews.map((crew) => {
+                    const lead = crew.members.find((m) => m.id === crew.crew_lead_id)
+                    return (
+                      <div
+                        key={crew.id}
+                        onClick={() => openEditModal(crew)}
+                        className="cursor-pointer rounded-lg border p-5 transition-shadow hover:shadow-md"
+                      >
+                        <div className="flex items-start justify-between">
+                          <h3 className="text-lg font-semibold">{crew.name}</h3>
+                          {lead ? (
+                            <Badge>Lead: {lead.full_name.split(' ')[0]}</Badge>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-4">
+                          <p className="mb-2 text-sm font-medium text-muted-foreground">
+                            Members ({crew.members.length})
+                          </p>
+                          {crew.members.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {crew.members.map((member) => (
+                                <div
+                                  key={member.id}
+                                  className="flex items-center gap-2 text-sm"
+                                >
+                                  <Avatar className="h-6 w-6">
+                                    <AvatarImage src={member.avatar_url || undefined} />
+                                    <AvatarFallback className="text-xs">
+                                      {member.full_name
+                                        .split(' ')
+                                        .map((n) => n[0])
+                                        .join('')}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span>{member.full_name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm italic text-muted-foreground">No members</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="col-span-full py-12 text-center text-muted-foreground">
+                    No crews yet. Create your first crew.
+                  </div>
+                )}
+              </div>
+            </MainPageCardScroll>
+          )
+        }}
+      </WorkspaceSectionShell>
+
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
         <DialogContent className="!max-w-md">
           <DialogHeader>
@@ -363,40 +369,45 @@ export function CrewsPageClient({
 
             <div>
               <Label>Select Team Members</Label>
-              <ScrollArea className="mt-2 max-h-52 border rounded-md" viewportClassName="scroll-fade">
-                <div className="p-2 space-y-1">
-                {availableMembers.length > 0 ? (
-                  availableMembers.map((member) => (
-                    <div key={member.id} className="flex items-center justify-between p-2 hover:bg-muted rounded">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <Checkbox
-                          checked={selectedMembers.includes(member.id)}
-                          onCheckedChange={() =>
-                            setSelectedMembers((prev) =>
-                              prev.includes(member.id)
-                                ? prev.filter((id) => id !== member.id)
-                                : [...prev, member.id]
-                            )
-                          }
-                        />
-                        <span>{member.full_name}</span>
-                      </label>
+              <ScrollArea className="mt-2 max-h-52 rounded-md border" viewportClassName="scroll-fade">
+                <div className="space-y-1 p-2">
+                  {availableMembers.length > 0 ? (
+                    availableMembers.map((member) => (
+                      <div
+                        key={member.id}
+                        className="flex items-center justify-between rounded p-2 hover:bg-muted"
+                      >
+                        <label className="flex cursor-pointer items-center gap-2">
+                          <Checkbox
+                            checked={selectedMembers.includes(member.id)}
+                            onCheckedChange={() =>
+                              setSelectedMembers((prev) =>
+                                prev.includes(member.id)
+                                  ? prev.filter((id) => id !== member.id)
+                                  : [...prev, member.id]
+                              )
+                            }
+                          />
+                          <span>{member.full_name}</span>
+                        </label>
 
-                      {selectedMembers.includes(member.id) && (
-                        <Button
-                          variant={selectedLeadId === member.id ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setSelectedLeadId(member.id)}
-                          className="text-xs h-7"
-                        >
-                          {selectedLeadId === member.id ? "Lead" : "Make Lead"}
-                        </Button>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground p-2">No available team members.</p>
-                )}
+                        {selectedMembers.includes(member.id) && (
+                          <Button
+                            variant={selectedLeadId === member.id ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setSelectedLeadId(member.id)}
+                            className="h-7 text-xs"
+                          >
+                            {selectedLeadId === member.id ? 'Lead' : 'Make Lead'}
+                          </Button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="p-2 text-sm text-muted-foreground">
+                      No available team members.
+                    </p>
+                  )}
                 </div>
               </ScrollArea>
             </div>
@@ -413,7 +424,6 @@ export function CrewsPageClient({
         </DialogContent>
       </Dialog>
 
-      {/* Edit Crew Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="!max-w-lg">
           <DialogHeader>
@@ -426,73 +436,70 @@ export function CrewsPageClient({
               <Input value={editCrewName} onChange={(e) => setEditCrewName(e.target.value)} />
             </div>
 
-            {/* Current Members */}
             <div>
               <Label>Current Members</Label>
-              <ScrollArea className="mt-2 max-h-40 border rounded" viewportClassName="scroll-fade">
-                <div className="p-2 space-y-2">
-                {editingCrew?.members.length ? (
-                  editingCrew.members.map((member) => (
-                    <div key={member.id} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarImage src={member.avatar_url || undefined} />
-                          <AvatarFallback>{member.full_name[0]}</AvatarFallback>
-                        </Avatar>
-                        <span>{member.full_name}</span>
-                        {member.id === editingCrew.crew_lead_id && (
-                          <Badge variant="secondary" className="text-xs">Lead</Badge>
-                        )}
+              <ScrollArea className="mt-2 max-h-40 rounded border" viewportClassName="scroll-fade">
+                <div className="space-y-2 p-2">
+                  {editingCrew?.members.length ? (
+                    editingCrew.members.map((member) => (
+                      <div key={member.id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={member.avatar_url || undefined} />
+                            <AvatarFallback>{member.full_name[0]}</AvatarFallback>
+                          </Avatar>
+                          <span>{member.full_name}</span>
+                          {member.id === editingCrew.crew_lead_id && (
+                            <Badge variant="secondary" className="text-xs">
+                              Lead
+                            </Badge>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const memberToRemove = member
+                            setEditMembersToRemove((prev) => [...prev, memberToRemove.id])
+                            setEditingCrew((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    members: prev.members.filter(
+                                      (m) => m.id !== memberToRemove.id
+                                    ),
+                                  }
+                                : null
+                            )
+                            setEditAvailableMembers((prev) => {
+                              const alreadyExists = prev.some((m) => m.id === memberToRemove.id)
+                              return alreadyExists ? prev : [...prev, memberToRemove]
+                            })
+                            if (editSelectedLeadId === memberToRemove.id) {
+                              setEditSelectedLeadId('')
+                            }
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const memberToRemove = member
-
-                          // 1. Mark for database removal
-                          setEditMembersToRemove((prev) => [...prev, memberToRemove.id])
-
-                          // 2. Immediately remove from current members list (UI)
-                          setEditingCrew((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  members: prev.members.filter((m) => m.id !== memberToRemove.id),
-                                }
-                              : null
-                          )
-
-                          // 3. Immediately add to available members list (so they can be re-added)
-                          setEditAvailableMembers((prev) => {
-                            const alreadyExists = prev.some((m) => m.id === memberToRemove.id)
-                            return alreadyExists ? prev : [...prev, memberToRemove]
-                          })
-
-                          // 4. Clear lead if this person was the lead
-                          if (editSelectedLeadId === memberToRemove.id) {
-                            setEditSelectedLeadId('')
-                          }
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">No members</p>
-                )}
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No members</p>
+                  )}
                 </div>
               </ScrollArea>
             </div>
 
-            {/* Add New Members */}
             <div>
               <Label>Add Team Members</Label>
-              <ScrollArea className="mt-2 max-h-40 border rounded" viewportClassName="scroll-fade">
-                <div className="p-2 space-y-1">
+              <ScrollArea className="mt-2 max-h-40 rounded border" viewportClassName="scroll-fade">
+                <div className="space-y-1 p-2">
                   {editAvailableMembers.map((member) => (
-                    <label key={member.id} className="flex items-center gap-2 p-1 hover:bg-muted rounded cursor-pointer">
+                    <label
+                      key={member.id}
+                      className="flex cursor-pointer items-center gap-2 rounded p-1 hover:bg-muted"
+                    >
                       <Checkbox
                         checked={editMembersToAdd.includes(member.id)}
                         onCheckedChange={() =>
@@ -510,7 +517,6 @@ export function CrewsPageClient({
               </ScrollArea>
             </div>
 
-            {/* Change Crew Lead */}
             <div>
               <Label>Crew Lead</Label>
               <Select
@@ -534,7 +540,7 @@ export function CrewsPageClient({
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-4 border-t">
+          <div className="flex items-center justify-between border-t pt-4">
             <Button
               variant="destructive"
               onClick={() => {
@@ -557,17 +563,16 @@ export function CrewsPageClient({
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
       <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
         <DialogContent className="!max-w-sm">
           <DialogHeader>
             <DialogTitle>Delete this crew?</DialogTitle>
           </DialogHeader>
           <p>
-            Are you sure you want to delete <strong>{crewToDelete?.name}</strong>?
-            All members will be removed from the crew.
+            Are you sure you want to delete <strong>{crewToDelete?.name}</strong>? All members
+            will be removed from the crew.
           </p>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="mt-4 flex justify-end gap-2">
             <Button
               variant="outline"
               onClick={() => {
@@ -583,6 +588,20 @@ export function CrewsPageClient({
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
+  )
+}
+
+export function CrewsPageClient(props: CrewsPageClientProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-full min-h-0 flex-col p-6">
+          <PageLoadingSkeleton />
+        </div>
+      }
+    >
+      <CrewsPageContent {...props} />
+    </Suspense>
   )
 }
