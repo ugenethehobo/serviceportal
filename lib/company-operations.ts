@@ -8,10 +8,10 @@ export function isSoloBusiness(company: { is_solo_business?: boolean | null } | 
   return Boolean(company?.is_solo_business)
 }
 
-export function getCrewsNavLabel(isSoloBusinessMode: boolean) {
-  return isSoloBusinessMode ? 'Team' : 'Crews & Team'
-}
-
-export function getActiveCrewsHeading(isSoloBusinessMode: boolean) {
-  return isSoloBusinessMode ? "Today's Schedule" : 'Active Crews Today'
-}
+// Re-export terminology helpers so existing imports keep working.
+export {
+  getActiveCrewsHeading,
+  getCrewsNavLabel,
+  getCrewTerminology,
+  normalizeCrewLabel,
+} from '@/lib/crew-terminology'

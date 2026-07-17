@@ -1,6 +1,9 @@
 import type { LucideIcon } from 'lucide-react'
 import { CalendarDays, LayoutGrid, UserRound, Users } from 'lucide-react'
-import { getCrewsNavLabel } from '@/lib/company-operations'
+import {
+  getCrewTerminology,
+  getCrewsNavLabel,
+} from '@/lib/crew-terminology'
 
 /** Multi-crew workspace sections */
 export type MultiCrewSectionId = 'dispatch' | 'crews' | 'team'
@@ -30,29 +33,32 @@ export const CREWS_SECTION_GROUPS: CrewsSectionGroup[] = [
   { id: 'people', label: 'People' },
 ]
 
-const MULTI_CREW_SECTIONS: CrewsWorkspaceSection[] = [
-  {
-    id: 'dispatch',
-    label: 'Dispatch',
-    description: "Assign today's jobs to crews.",
-    icon: LayoutGrid,
-    group: 'operations',
-  },
-  {
-    id: 'crews',
-    label: 'Crews',
-    description: 'Field teams and crew leads.',
-    icon: Users,
-    group: 'people',
-  },
-  {
-    id: 'team',
-    label: 'Team members',
-    description: 'Accounts, roles, and invites.',
-    icon: UserRound,
-    group: 'people',
-  },
-]
+function multiCrewSections(crewLabel?: string | null): CrewsWorkspaceSection[] {
+  const { plural, pluralLower, singularLower } = getCrewTerminology(crewLabel)
+  return [
+    {
+      id: 'dispatch',
+      label: 'Dispatch',
+      description: `Assign today's jobs; leads pull work onto their ${singularLower}.`,
+      icon: LayoutGrid,
+      group: 'operations',
+    },
+    {
+      id: 'crews',
+      label: plural,
+      description: `Field ${pluralLower}; leads manage helpers and dispatch.`,
+      icon: Users,
+      group: 'people',
+    },
+    {
+      id: 'team',
+      label: 'Team members',
+      description: 'Accounts, roles, and invites.',
+      icon: UserRound,
+      group: 'people',
+    },
+  ]
+}
 
 const SOLO_SECTIONS: CrewsWorkspaceSection[] = [
   {
@@ -72,9 +78,10 @@ const SOLO_SECTIONS: CrewsWorkspaceSection[] = [
 ]
 
 export function getCrewsWorkspaceSections(
-  isSoloBusiness: boolean
+  isSoloBusiness: boolean,
+  crewLabel?: string | null
 ): CrewsWorkspaceSection[] {
-  return isSoloBusiness ? SOLO_SECTIONS : MULTI_CREW_SECTIONS
+  return isSoloBusiness ? SOLO_SECTIONS : multiCrewSections(crewLabel)
 }
 
 export function getCrewsWorkspaceDefaultSection(
@@ -83,7 +90,10 @@ export function getCrewsWorkspaceDefaultSection(
   return isSoloBusiness ? 'my-day' : 'dispatch'
 }
 
-export function getCrewsWorkspacePageCopy(isSoloBusiness: boolean): {
+export function getCrewsWorkspacePageCopy(
+  isSoloBusiness: boolean,
+  crewLabel?: string | null
+): {
   title: string
   description: string
 } {
@@ -93,9 +103,10 @@ export function getCrewsWorkspacePageCopy(isSoloBusiness: boolean): {
       description: 'Your day in the field and tools to schedule yourself.',
     }
   }
+  const { pluralLower } = getCrewTerminology(crewLabel)
   return {
-    title: getCrewsNavLabel(false),
-    description: 'Dispatch work, organize crews, and manage team access.',
+    title: getCrewsNavLabel(false, crewLabel),
+    description: `Dispatch work, organize ${pluralLower}, and manage team access.`,
   }
 }
 

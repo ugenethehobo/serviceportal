@@ -282,8 +282,17 @@ export async function middleware(request: NextRequest) {
         pathname === '/dashboard/settings' || pathname.startsWith('/dashboard/settings/')
       const isTrialExpiredRoute = pathname === '/dashboard/trial-expired'
       const isAssignedJobRoute = /^\/dashboard\/clients\/[^/]+\/jobs\/[^/]+/.test(pathname)
+      // P4: crew leads use limited dispatch under /dashboard/crews
+      const isCrewsDispatchRoute =
+        pathname === '/dashboard/crews' || pathname.startsWith('/dashboard/crews/')
 
-      if (!isTeamHome && !isSettingsRoute && !isTrialExpiredRoute && !isAssignedJobRoute) {
+      if (
+        !isTeamHome &&
+        !isSettingsRoute &&
+        !isTrialExpiredRoute &&
+        !isAssignedJobRoute &&
+        !isCrewsDispatchRoute
+      ) {
         const url = request.nextUrl.clone()
         url.pathname = '/dashboard/team'
         return NextResponse.redirect(url)

@@ -45,6 +45,7 @@ import {
   getCrewsWorkspacePageCopy,
   getCrewsWorkspaceSections,
 } from '@/lib/crews-workspace'
+import { getCrewTerminology } from '@/lib/crew-terminology'
 import { MOBILE_FULL_WIDTH_BUTTON_CLASS } from '@/lib/mobile-layout'
 
 interface Profile {
@@ -66,6 +67,10 @@ type CrewsPageClientProps = {
   initialAvailableMembers: Profile[]
   initialIsSoloBusiness: boolean
   initialEntitlements: PlanEntitlements | null
+  /** Crew lead (non-admin): only Dispatch section (P4). */
+  initialLeadOnly?: boolean
+  /** Company-customized plural label (default "Crews"). */
+  initialCrewLabel?: string | null
 }
 
 function CrewsPageContent({
@@ -73,6 +78,8 @@ function CrewsPageContent({
   initialAvailableMembers,
   initialIsSoloBusiness,
   initialEntitlements,
+  initialLeadOnly = false,
+  initialCrewLabel = null,
 }: CrewsPageClientProps) {
   const supabase = createClient()
   const [crews, setCrews] = useState<CrewWithMembers[]>(initialCrews)
@@ -96,6 +103,8 @@ function CrewsPageContent({
   const [crewToDelete, setCrewToDelete] = useState<CrewWithMembers | null>(null)
   const [entitlements, setEntitlements] = useState<PlanEntitlements | null>(initialEntitlements)
   const [isSoloBusiness, setIsSoloBusiness] = useState(initialIsSoloBusiness)
+  const [crewLabel, setCrewLabel] = useState(initialCrewLabel)
+  const terms = useMemo(() => getCrewTerminology(crewLabel), [crewLabel])
 
   const crewLimit = entitlements?.crewLimit ?? null
   const atCrewLimit = crewLimit !== null && crews.length >= crewLimit
@@ -104,20 +113,29 @@ function CrewsPageContent({
       ? getCrewLimitMessage(entitlements.plan, crewLimit)
       : null
 
-  const sections = useMemo(
-    () =>
-      getCrewsWorkspaceSections(isSoloBusiness).map((section) => ({
-        id: section.id,
-        label: section.label,
-        description: section.description,
-        icon: section.icon,
-        groupId: section.group,
-      })),
-    [isSoloBusiness]
-  )
+  const sections = useMemo(() => {
+    const all = getCrewsWorkspaceSections(isSoloBusiness, crewLabel).map((section) => ({
+      id: section.id,
+      label: section.label,
+      description: section.description,
+      icon: section.icon,
+      groupId: section.group,
+    }))
+    if (initialLeadOnly) {
+      return all.filter((s) => s.id === 'dispatch')
+    }
+    return all
+  }, [isSoloBusiness, initialLeadOnly, crewLabel])
 
-  const pageCopy = getCrewsWorkspacePageCopy(isSoloBusiness)
-  const defaultSectionId = getCrewsWorkspaceDefaultSection(isSoloBusiness)
+  const pageCopy = initialLeadOnly
+    ? {
+        title: 'Dispatch',
+        description: `Pull unassigned jobs onto your ${terms.singularLower}, release work you cannot cover, and open jobs to add helpers.`,
+      }
+    : getCrewsWorkspacePageCopy(isSoloBusiness, crewLabel)
+  const defaultSectionId = initialLeadOnly
+    ? 'dispatch'
+    : getCrewsWorkspaceDefaultSection(isSoloBusiness)
 
   const fetchData = async () => {
     const result = await getCrewsPageDataAction()
@@ -130,6 +148,9 @@ function CrewsPageContent({
     setAvailableMembers(result.data.availableMembers)
     setIsSoloBusiness(result.data.isSoloBusiness)
     setEntitlements(result.data.entitlements)
+    if (result.data.crewLabel !== undefined) {
+      setCrewLabel(result.data.crewLabel)
+    }
   }
 
   const openEditModal = (crew: CrewWithMembers) => {
@@ -144,7 +165,7 @@ function CrewsPageContent({
 
   const handleCreateCrew = async () => {
     if (!newCrewName.trim()) {
-      toast.error('Crew name is required')
+      toast.error(`${terms.singular} name is required`)
       return
     }
 
@@ -224,7 +245,7 @@ function CrewsPageContent({
       disabled={atCrewLimit}
       className={MOBILE_FULL_WIDTH_BUTTON_CLASS}
     >
-      + Add Crew
+      + Add {terms.singular}
     </Button>
   )
 
@@ -237,7 +258,7 @@ function CrewsPageContent({
         groups={CREWS_SECTION_GROUPS.map((g) => ({ id: g.id, label: g.label }))}
         defaultSectionId={defaultSectionId}
         sectionActions={(activeSectionId) => {
-          if (activeSectionId !== 'crews') return null
+          if (initialLeadOnly || activeSectionId !== 'crews') return null
           return (
             <TooltipProvider>
               {atCrewLimit && crewUpgradeMessage ? (
@@ -284,7 +305,8 @@ function CrewsPageContent({
             <MainPageCardScroll contentClassName="max-w-none p-4 sm:p-6">
               <div className="mb-4">
                 <p className="text-sm text-muted-foreground">
-                  Organize team members into field crews
+                  Organize team members into field {terms.pluralLower}. Designate a lead so they
+                  can pull jobs from Unassigned and add multi-tech helpers.
                   {crewLimit !== null ? (
                     <span className="ml-1">
                       · {crews.length}/{crewLimit} used
@@ -305,8 +327,14 @@ function CrewsPageContent({
                         <div className="flex items-start justify-between">
                           <h3 className="text-lg font-semibold">{crew.name}</h3>
                           {lead ? (
-                            <Badge>Lead: {lead.full_name.split(' ')[0]}</Badge>
-                          ) : null}
+                            <Badge className="max-md:text-[10px]">
+                              Lead: {lead.full_name.split(' ')[0]}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="max-md:text-[10px]">
+                              No lead
+                            </Badge>
+                          )}
                         </div>
 
                         <div className="mt-4">
@@ -342,7 +370,7 @@ function CrewsPageContent({
                   })
                 ) : (
                   <div className="col-span-full py-12 text-center text-muted-foreground">
-                    No crews yet. Create your first crew.
+                    No {terms.pluralLower} yet. Create your first {terms.singularLower}.
                   </div>
                 )}
               </div>
@@ -354,16 +382,16 @@ function CrewsPageContent({
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
         <DialogContent className="!max-w-md">
           <DialogHeader>
-            <DialogTitle>Create New Crew</DialogTitle>
+            <DialogTitle>Create New {terms.singular}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div>
-              <Label>Crew Name *</Label>
+              <Label>{terms.singular} Name *</Label>
               <Input
                 value={newCrewName}
                 onChange={(e) => setNewCrewName(e.target.value)}
-                placeholder="Morning Crew"
+                placeholder={`Morning ${terms.singular}`}
               />
             </div>
 
@@ -418,7 +446,7 @@ function CrewsPageContent({
               Cancel
             </Button>
             <Button onClick={handleCreateCrew} disabled={isCreating || !newCrewName.trim()}>
-              {isCreating ? 'Creating...' : 'Create Crew'}
+              {isCreating ? 'Creating...' : `Create ${terms.singular}`}
             </Button>
           </div>
         </DialogContent>
@@ -427,12 +455,14 @@ function CrewsPageContent({
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="!max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit Crew: {editingCrew?.name}</DialogTitle>
+            <DialogTitle>
+              Edit {terms.singular}: {editingCrew?.name}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6 py-4">
             <div>
-              <Label>Crew Name</Label>
+              <Label>{terms.singular} Name</Label>
               <Input value={editCrewName} onChange={(e) => setEditCrewName(e.target.value)} />
             </div>
 
@@ -518,7 +548,7 @@ function CrewsPageContent({
             </div>
 
             <div>
-              <Label>Crew Lead</Label>
+              <Label>{terms.singular} Lead</Label>
               <Select
                 value={editSelectedLeadId || '__none__'}
                 onValueChange={(value) =>
@@ -548,7 +578,7 @@ function CrewsPageContent({
                 setIsDeleteConfirmOpen(true)
               }}
             >
-              Delete Crew
+              Delete {terms.singular}
             </Button>
 
             <div className="flex gap-2">
@@ -566,11 +596,11 @@ function CrewsPageContent({
       <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
         <DialogContent className="!max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete this crew?</DialogTitle>
+            <DialogTitle>Delete this {terms.singularLower}?</DialogTitle>
           </DialogHeader>
           <p>
             Are you sure you want to delete <strong>{crewToDelete?.name}</strong>? All members
-            will be removed from the crew.
+            will be removed from the {terms.singularLower}.
           </p>
           <div className="mt-4 flex justify-end gap-2">
             <Button
@@ -583,7 +613,7 @@ function CrewsPageContent({
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleDeleteCrew}>
-              Yes, Delete Crew
+              Yes, Delete {terms.singular}
             </Button>
           </div>
         </DialogContent>

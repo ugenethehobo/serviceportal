@@ -19,6 +19,11 @@ export function buildPasswordResetVerifyUrl(tokenHash: string) {
   return `${base}/auth/callback?${params.toString()}`
 }
 
-export function isValidNewPassword(password: string) {
-  return password.trim().length >= 8
-}
+// Re-export shared policy so existing imports keep working.
+export {
+  getPasswordRequirementsHint,
+  isValidNewPassword,
+  validatePassword,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_MAX_LENGTH,
+} from '@/lib/password-policy'

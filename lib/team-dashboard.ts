@@ -22,6 +22,9 @@ export type TeamMemberJob = {
   status: string
   displayStatus: 'Scheduled' | 'In Progress' | 'Completed'
   timeLabel: string
+  /** True when this job is on My Day only because the user is a helper (P4). */
+  isHelper?: boolean
+  helperCount?: number
 }
 
 export type TeamMemberDashboardData = {
@@ -31,6 +34,8 @@ export type TeamMemberDashboardData = {
   dateLabel: string
   jobs: TeamMemberJob[]
   hasCrew: boolean
+  /** User is designated crew lead for their home crew (P4). */
+  isCrewLead?: boolean
   route: CrewRoute | null
   companyLocation: { longitude: number; latitude: number } | null
   invalidAddresses: InvalidRouteAddress[]
@@ -94,11 +99,16 @@ function getDisplayStatus(
 export function buildTeamMemberJobs(
   schedules: RawSchedule[],
   timezone: string,
-  now = new Date()
+  now = new Date(),
+  options?: {
+    helperJobIds?: Set<string>
+    helperCounts?: Map<string, number>
+  }
 ): TeamMemberJob[] {
   return schedules.map((schedule) => {
     const client = unwrapClient(schedule.client)
     const address = client ? getDisplayAddressFromClient(client) : ''
+    const isHelper = options?.helperJobIds?.has(schedule.id) ?? false
 
     return {
       id: schedule.id,
@@ -116,8 +126,33 @@ export function buildTeamMemberJobs(
         now
       ),
       timeLabel: `${formatTimeInTimezone(schedule.start_time, timezone)} – ${formatTimeInTimezone(schedule.end_time, timezone)}`,
+      isHelper,
+      helperCount: options?.helperCounts?.get(schedule.id) ?? 0,
     }
   })
+}
+
+/** Merge crew-day jobs with helper-only jobs; prefer primary crew entry over helper flag. */
+export function mergeTeamMemberDaySchedules(
+  crewSchedules: RawSchedule[],
+  helperSchedules: RawSchedule[]
+): { schedules: RawSchedule[]; helperOnlyIds: Set<string> } {
+  const byId = new Map<string, RawSchedule>()
+  for (const s of crewSchedules) {
+    byId.set(s.id, s)
+  }
+  const helperOnlyIds = new Set<string>()
+  for (const s of helperSchedules) {
+    if (!byId.has(s.id)) {
+      byId.set(s.id, s)
+      helperOnlyIds.add(s.id)
+    }
+  }
+  const schedules = Array.from(byId.values()).sort(
+    (a, b) =>
+      new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+  )
+  return { schedules, helperOnlyIds }
 }
 
 type RouteScheduleInput = {

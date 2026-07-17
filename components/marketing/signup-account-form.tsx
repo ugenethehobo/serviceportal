@@ -7,6 +7,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { PlatformPlanId } from '@/lib/platform-billing'
+import {
+  getPasswordRequirementsHint,
+  PASSWORD_MIN_LENGTH,
+  validatePassword,
+} from '@/lib/password-policy'
 import { Loader2 } from 'lucide-react'
 
 interface SignupAccountFormProps {
@@ -34,6 +39,13 @@ export function SignupAccountForm({
     e.preventDefault()
     setError(null)
     setIsSubmitting(true)
+
+    const passwordCheck = validatePassword(password)
+    if (!passwordCheck.ok) {
+      setError(passwordCheck.error || getPasswordRequirementsHint())
+      setIsSubmitting(false)
+      return
+    }
 
     const result = await completePlatformSignupAction({
       plan,
@@ -113,12 +125,13 @@ export function SignupAccountForm({
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="At least 8 characters"
+          placeholder={getPasswordRequirementsHint()}
           required
-          minLength={8}
+          minLength={PASSWORD_MIN_LENGTH}
           disabled={isSubmitting}
           autoComplete="new-password"
         />
+        <p className="text-xs text-muted-foreground">{getPasswordRequirementsHint()}</p>
       </div>
 
       {error && (

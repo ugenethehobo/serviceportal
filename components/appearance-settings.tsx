@@ -17,6 +17,11 @@ interface AppearanceSettingsProps {
   initialBackgroundUrl?: string | null
   /** Company admins can edit shared branding; others only change their theme. */
   canEditCompanyBranding?: boolean
+  /**
+   * When false, hide company accent/background controls entirely
+   * (e.g. client portal — clients should not see company branding settings).
+   */
+  showCompanyBranding?: boolean
 }
 
 export function AppearanceSettings({
@@ -24,6 +29,7 @@ export function AppearanceSettings({
   initialAccentColor = null,
   initialBackgroundUrl = null,
   canEditCompanyBranding = true,
+  showCompanyBranding = true,
 }: AppearanceSettingsProps) {
   const { resolvedTheme, setTheme } = useTheme()
   const [isMounted, setIsMounted] = useState(false)
@@ -85,12 +91,14 @@ export function AppearanceSettings({
         />
       </div>
 
-      <PersonalizationSettings
-        embedded
-        initialAccentColor={initialAccentColor}
-        initialBackgroundUrl={initialBackgroundUrl}
-        canEdit={canEditCompanyBranding}
-      />
+      {showCompanyBranding ? (
+        <PersonalizationSettings
+          embedded
+          initialAccentColor={initialAccentColor}
+          initialBackgroundUrl={initialBackgroundUrl}
+          canEdit={canEditCompanyBranding}
+        />
+      ) : null}
     </div>
   )
 

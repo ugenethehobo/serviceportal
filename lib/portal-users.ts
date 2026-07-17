@@ -31,17 +31,29 @@ export async function findAuthUserByEmail(
   return null
 }
 
+/** All portal profiles linked to a client (multi-login). */
+export async function findProfilesByClientId(
+  supabaseAdmin: SupabaseClient,
+  clientId: string
+) {
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id, email, full_name, role, client_id, created_at')
+    .eq('client_id', clientId)
+    .eq('role', 'client')
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return data || []
+}
+
+/** First portal profile for a client (legacy single-user helpers). */
 export async function findProfileByClientId(
   supabaseAdmin: SupabaseClient,
   clientId: string
 ) {
-  const { data } = await supabaseAdmin
-    .from('profiles')
-    .select('id, email, role, client_id')
-    .eq('client_id', clientId)
-    .maybeSingle()
-
-  return data
+  const profiles = await findProfilesByClientId(supabaseAdmin, clientId)
+  return profiles[0] ?? null
 }
 
 export async function findProfileByEmail(
@@ -70,6 +82,13 @@ export async function assertPortalEmailAvailable(
 
   if (profile?.client_id && profile.client_id !== clientId) {
     return { ok: false, error: 'This email is already linked to another client portal' }
+  }
+
+  if (profile?.client_id === clientId) {
+    return {
+      ok: false,
+      error: 'This email already has portal access for this client',
+    }
   }
 
   return { ok: true }
@@ -101,23 +120,57 @@ export async function upsertClientPortalProfile(
   if (error) throw error
 }
 
+/**
+ * Enable portal for the client and link a login.
+ * `auth_user_id` stays the first (primary) linked user for legacy callers;
+ * additional logins only need profiles.client_id.
+ */
 export async function linkClientPortalAccess(
   supabaseAdmin: SupabaseClient,
   clientId: string,
   authUserId: string,
   email?: string | null
 ) {
+  const { data: client } = await supabaseAdmin
+    .from('clients')
+    .select('auth_user_id')
+    .eq('id', clientId)
+    .maybeSingle()
+
   const { error } = await supabaseAdmin
     .from('clients')
     .update({
-      auth_user_id: authUserId,
       portal_enabled: true,
       portal_invited_at: new Date().toISOString(),
+      ...(client?.auth_user_id ? {} : { auth_user_id: authUserId }),
       ...(email ? { email } : {}),
     })
     .eq('id', clientId)
 
   if (error) throw error
+}
+
+/** After removing a portal user, keep auth_user_id pointing at a remaining login. */
+export async function refreshClientPortalPrimaryUser(
+  supabaseAdmin: SupabaseClient,
+  clientId: string
+) {
+  const remaining = await findProfilesByClientId(supabaseAdmin, clientId)
+  const primaryId = remaining[0]?.id ?? null
+
+  const { error } = await supabaseAdmin
+    .from('clients')
+    .update({
+      auth_user_id: primaryId,
+      portal_enabled: remaining.length > 0 ? true : false,
+      ...(remaining.length === 0
+        ? { portal_invited_at: null, portal_last_login_at: null }
+        : {}),
+    })
+    .eq('id', clientId)
+
+  if (error) throw error
+  return remaining
 }
 
 export function isEmailAlreadyRegisteredError(message?: string) {

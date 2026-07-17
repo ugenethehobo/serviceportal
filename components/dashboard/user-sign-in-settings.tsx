@@ -7,6 +7,7 @@ import { updateAccountSettingsAction } from '@/app/action'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { getPasswordRequirementsHint } from '@/lib/password-policy'
 import { toast } from 'sonner'
 
 type UserSignInSettingsProps = {
@@ -81,7 +82,8 @@ export function UserSignInSettings({
             autoComplete="new-password"
           />
           <p className="text-xs text-muted-foreground">
-            Use at least 8 characters when changing your password. Signed out on another device?{' '}
+            {getPasswordRequirementsHint()} when changing your password. Signed out on another
+            device?{' '}
             <Link href="/login/forgot-password" className="font-medium text-primary hover:underline">
               Reset via email
             </Link>

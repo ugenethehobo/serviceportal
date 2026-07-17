@@ -107,6 +107,7 @@ import {
 import {
   buildTeamMemberJobs,
   buildTeamMemberRouteData,
+  mergeTeamMemberDaySchedules,
   structuredAddressFromCompany,
   type TeamMemberDashboardData,
 } from '@/lib/team-dashboard'
@@ -160,7 +161,6 @@ import {
 import {
   assertPortalEmailAvailable,
   findAuthUserByEmail,
-  findProfileByClientId,
   findProfileByEmail,
   isEmailAlreadyRegisteredError,
   linkClientPortalAccess,
@@ -204,6 +204,15 @@ export async function createCompanyUser(data: {
   )
 
   try {
+    const { validatePassword } = await import('@/lib/password-policy')
+    const passwordCheck = validatePassword(data.password)
+    if (!passwordCheck.ok) {
+      return {
+        success: false,
+        error: passwordCheck.error || 'Password does not meet requirements',
+      }
+    }
+
     const { countCompanySeats } = await import('@/lib/platform-signup-server')
     const { data: company, error: companyError } = await supabaseAdmin
       .from('companies')
@@ -693,13 +702,25 @@ export async function createCrew(data: {
   if (!crewGate.ok) return { success: false, error: crewGate.error }
 
   try {
+    const { resolveValidCrewLeadId } = await import('@/lib/job-helpers')
+    const crewLeadId = resolveValidCrewLeadId(
+      data.memberIds,
+      data.crewLeadId ?? null
+    )
+    if (data.crewLeadId && !crewLeadId) {
+      return {
+        success: false,
+        error: 'Crew lead must be one of the selected crew members.',
+      }
+    }
+
     // Create the crew
     const { data: crewData, error: crewError } = await supabaseAdmin
       .from('crews')
       .insert({
         name: data.name,
         company_id: data.companyId,
-        crew_lead_id: data.crewLeadId || null,
+        crew_lead_id: crewLeadId,
       })
       .select()
       .single()
@@ -746,16 +767,7 @@ export async function updateCrew(data: {
   )
 
   try {
-    // 1. Update crew name and lead
-    const { error: crewError } = await supabaseAdmin
-      .from('crews')
-      .update({
-        name: data.name,
-        crew_lead_id: data.crewLeadId || null,
-      })
-      .eq('id', data.crewId)
-
-    if (crewError) throw crewError
+    const { resolveValidCrewLeadId } = await import('@/lib/job-helpers')
 
     // 2. Remove members from crew
     if (data.membersToRemove.length > 0) {
@@ -772,6 +784,32 @@ export async function updateCrew(data: {
         .update({ crew_id: data.crewId })
         .in('id', data.membersToAdd)
     }
+
+    // Resolve final member set so lead must remain on the crew
+    const { data: remainingMembers } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('crew_id', data.crewId)
+
+    const memberIds = (remainingMembers || []).map((m) => m.id as string)
+    const crewLeadId = resolveValidCrewLeadId(memberIds, data.crewLeadId ?? null)
+    if (data.crewLeadId && !crewLeadId) {
+      return {
+        success: false,
+        error: 'Crew lead must be a current member of this crew.',
+      }
+    }
+
+    // 1. Update crew name and lead (after membership settles)
+    const { error: crewError } = await supabaseAdmin
+      .from('crews')
+      .update({
+        name: data.name,
+        crew_lead_id: crewLeadId,
+      })
+      .eq('id', data.crewId)
+
+    if (crewError) throw crewError
 
     revalidatePath('/dashboard/crews')
     return { success: true }
@@ -1703,7 +1741,7 @@ async function verifyScheduleCompanyAccess(scheduleId: string, clientId: string)
     return { ok: false as const, error: 'Job not found' }
   }
 
-  // Crew ACL: team members may only open jobs assigned to their crew
+  // Crew ACL: team members may open jobs on their crew or where they are helpers (P4)
   if (check.session.profile.role === 'team_member') {
     const supabaseAdmin = createSupabaseAdmin()
     const { data: profile } = await supabaseAdmin
@@ -1712,8 +1750,16 @@ async function verifyScheduleCompanyAccess(scheduleId: string, clientId: string)
       .eq('id', check.userId)
       .maybeSingle()
 
+    const { isUserHelperOnSchedule } = await import('@/app/job-helpers-actions')
+    const isHelper = await isUserHelperOnSchedule(scheduleId, check.userId)
     const { canTeamMemberAccessCrewJob } = await import('@/lib/field-job-access')
-    if (!canTeamMemberAccessCrewJob(schedule.crew_id, profile?.crew_id ?? null)) {
+    if (
+      !canTeamMemberAccessCrewJob(
+        schedule.crew_id,
+        profile?.crew_id ?? null,
+        isHelper
+      )
+    ) {
       return { ok: false as const, error: 'Job not found' }
     }
   }
@@ -4105,32 +4151,39 @@ async function verifyCompanyAdminForClient(clientId: string) {
   return { ok: true as const, client, companyId: session.profile.company_id }
 }
 
+export type ClientPortalLoginUser = {
+  id: string
+  email: string | null
+  fullName: string | null
+  isPrimary: boolean
+}
+
 export async function getClientPortalStatusAction(clientId: string) {
   try {
     const check = await verifyCompanyAdminForClient(clientId)
     if (!check.ok) return { success: false, error: check.error }
 
     const { client } = check
-    let profileEmail: string | null = null
+    const supabaseAdmin = createSupabaseAdmin()
+    const { findProfilesByClientId } = await import('@/lib/portal-users')
+    const profiles = await findProfilesByClientId(supabaseAdmin, clientId)
 
-    if (client.auth_user_id) {
-      const supabaseAdmin = createSupabaseAdmin()
-      const { data: profile } = await supabaseAdmin
-        .from('profiles')
-        .select('email')
-        .eq('id', client.auth_user_id)
-        .single()
-      profileEmail = profile?.email ?? null
-    }
+    const users: ClientPortalLoginUser[] = profiles.map((profile) => ({
+      id: profile.id,
+      email: profile.email ?? null,
+      fullName: profile.full_name ?? null,
+      isPrimary: profile.id === client.auth_user_id,
+    }))
 
     return {
       success: true,
       status: {
         portalEnabled: client.portal_enabled,
         portalInvitedAt: client.portal_invited_at,
-        hasPortalUser: !!client.auth_user_id,
-        portalUserEmail: profileEmail,
+        hasPortalUser: users.length > 0,
+        portalUserEmail: users[0]?.email ?? null,
         clientEmail: client.email,
+        users,
       },
     }
   } catch (error: any) {
@@ -4139,7 +4192,11 @@ export async function getClientPortalStatusAction(clientId: string) {
   }
 }
 
-export async function inviteClientToPortalAction(clientId: string, origin: string) {
+export async function inviteClientToPortalAction(
+  clientId: string,
+  origin: string,
+  options?: { email?: string; fullName?: string }
+) {
   const supabaseAdmin = createSupabaseAdmin()
 
   try {
@@ -4149,61 +4206,72 @@ export async function inviteClientToPortalAction(clientId: string, origin: strin
     const { client, companyId } = check
     if (!companyId) return { success: false, error: 'Company not found' }
 
-    const email = client.email?.trim().toLowerCase()
+    const email = (
+      options?.email?.trim() ||
+      client.email?.trim() ||
+      ''
+    ).toLowerCase()
 
     if (!email) {
-      return { success: false, error: 'Add a client email before sending a portal invite' }
+      return {
+        success: false,
+        error: 'Enter an email for this login, or add a client email first',
+      }
     }
 
-    if (client.auth_user_id) {
-      return { success: false, error: 'This client already has portal access. Revoke first to re-invite.' }
-    }
+    const fullName =
+      options?.fullName?.trim() || client.name || email.split('@')[0] || 'Client'
 
     const emailCheck = await assertPortalEmailAvailable(supabaseAdmin, email, clientId)
     if (!emailCheck.ok) return { success: false, error: emailCheck.error }
-
-    const orphanedProfile = await findProfileByClientId(supabaseAdmin, clientId)
-    if (orphanedProfile) {
-      await upsertClientPortalProfile(supabaseAdmin, {
-        userId: orphanedProfile.id,
-        fullName: client.name,
-        email,
-        companyId,
-        clientId,
-      })
-      await linkClientPortalAccess(supabaseAdmin, clientId, orphanedProfile.id)
-      revalidatePath(`/dashboard/clients/${clientId}`)
-      return { success: true }
-    }
 
     let authUserId: string
 
     const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, email)
     if (existingAuthUser) {
+      // Only reclaim unused auth users (no profile or matching client portal role)
+      const { data: existingProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('id, role, client_id')
+        .eq('id', existingAuthUser.id)
+        .maybeSingle()
+
+      if (
+        existingProfile &&
+        (existingProfile.role !== 'client' ||
+          (existingProfile.client_id && existingProfile.client_id !== clientId))
+      ) {
+        return {
+          success: false,
+          error: 'This email already belongs to another account',
+        }
+      }
+
       authUserId = existingAuthUser.id
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, {
-        email_confirm: true,
-        user_metadata: {
-          full_name: client.name,
-          role: 'client',
-          company_id: companyId,
-          client_id: clientId,
-        },
-      })
-      if (updateError) throw updateError
-    } else {
-      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-        email,
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        existingAuthUser.id,
         {
-          redirectTo: `${origin}/login`,
-          data: {
-            full_name: client.name,
+          email_confirm: true,
+          user_metadata: {
+            full_name: fullName,
             role: 'client',
             company_id: companyId,
             client_id: clientId,
           },
         }
       )
+      if (updateError) throw updateError
+    } else {
+      const { data: inviteData, error: inviteError } =
+        await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+          redirectTo: `${origin}/login`,
+          data: {
+            full_name: fullName,
+            role: 'client',
+            company_id: companyId,
+            client_id: clientId,
+          },
+        })
 
       if (inviteError) throw inviteError
       if (!inviteData.user) throw new Error('Invite failed')
@@ -4212,7 +4280,7 @@ export async function inviteClientToPortalAction(clientId: string, origin: strin
 
     await upsertClientPortalProfile(supabaseAdmin, {
       userId: authUserId,
-      fullName: client.name,
+      fullName,
       email,
       companyId,
       clientId,
@@ -4233,6 +4301,7 @@ export async function createClientPortalUserAction(data: {
   clientId: string
   email: string
   password: string
+  fullName?: string
 }) {
   const supabaseAdmin = createSupabaseAdmin()
 
@@ -4243,47 +4312,25 @@ export async function createClientPortalUserAction(data: {
     const { client, companyId } = check
     if (!companyId) return { success: false, error: 'Company not found' }
 
-    if (client.auth_user_id) {
-      return { success: false, error: 'This client already has portal credentials' }
-    }
-
     const email = data.email.trim().toLowerCase()
-    if (!email || !data.password || data.password.length < 8) {
-      return { success: false, error: 'Valid email and password (8+ characters) are required' }
+    const { validatePassword } = await import('@/lib/password-policy')
+    const passwordCheck = validatePassword(data.password)
+    if (!email || !email.includes('@')) {
+      return { success: false, error: 'Enter a valid email address' }
+    }
+    if (!passwordCheck.ok) {
+      return { success: false, error: passwordCheck.error || 'Invalid password' }
     }
 
-    const emailCheck = await assertPortalEmailAvailable(supabaseAdmin, email, data.clientId)
+    const fullName =
+      data.fullName?.trim() || client.name || email.split('@')[0] || 'Client'
+
+    const emailCheck = await assertPortalEmailAvailable(
+      supabaseAdmin,
+      email,
+      data.clientId
+    )
     if (!emailCheck.ok) return { success: false, error: emailCheck.error }
-
-    const orphanedProfile = await findProfileByClientId(supabaseAdmin, data.clientId)
-    if (orphanedProfile) {
-      const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(
-        orphanedProfile.id,
-        {
-          email,
-          password: data.password,
-          email_confirm: true,
-          user_metadata: {
-            full_name: client.name,
-            role: 'client',
-            company_id: companyId,
-            client_id: data.clientId,
-          },
-        }
-      )
-      if (passwordError) throw passwordError
-
-      await upsertClientPortalProfile(supabaseAdmin, {
-        userId: orphanedProfile.id,
-        fullName: client.name,
-        email,
-        companyId,
-        clientId: data.clientId,
-      })
-      await linkClientPortalAccess(supabaseAdmin, data.clientId, orphanedProfile.id, client.email || email)
-      revalidatePath(`/dashboard/clients/${data.clientId}`)
-      return { success: true }
-    }
 
     let authUserId: string
 
@@ -4292,7 +4339,7 @@ export async function createClientPortalUserAction(data: {
       password: data.password,
       email_confirm: true,
       user_metadata: {
-        full_name: client.name,
+        full_name: fullName,
         role: 'client',
         company_id: companyId,
         client_id: data.clientId,
@@ -4303,6 +4350,23 @@ export async function createClientPortalUserAction(data: {
       const existingAuthUser = await findAuthUserByEmail(supabaseAdmin, email)
       if (!existingAuthUser) throw authError
 
+      const { data: existingProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('id, role, client_id')
+        .eq('id', existingAuthUser.id)
+        .maybeSingle()
+
+      if (
+        existingProfile &&
+        (existingProfile.role !== 'client' ||
+          (existingProfile.client_id && existingProfile.client_id !== data.clientId))
+      ) {
+        return {
+          success: false,
+          error: 'This email already belongs to another account',
+        }
+      }
+
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
         existingAuthUser.id,
         {
@@ -4310,7 +4374,7 @@ export async function createClientPortalUserAction(data: {
           password: data.password,
           email_confirm: true,
           user_metadata: {
-            full_name: client.name,
+            full_name: fullName,
             role: 'client',
             company_id: companyId,
             client_id: data.clientId,
@@ -4329,13 +4393,18 @@ export async function createClientPortalUserAction(data: {
 
     await upsertClientPortalProfile(supabaseAdmin, {
       userId: authUserId,
-      fullName: client.name,
+      fullName,
       email,
       companyId,
       clientId: data.clientId,
     })
 
-    await linkClientPortalAccess(supabaseAdmin, data.clientId, authUserId, client.email || email)
+    await linkClientPortalAccess(
+      supabaseAdmin,
+      data.clientId,
+      authUserId,
+      client.email || email
+    )
 
     revalidatePath(`/dashboard/clients/${data.clientId}`)
 
@@ -4353,8 +4422,10 @@ export async function setClientPortalEnabledAction(clientId: string, enabled: bo
     const check = await verifyCompanyAdminForClient(clientId)
     if (!check.ok) return { success: false, error: check.error }
 
-    if (!check.client.auth_user_id) {
-      return { success: false, error: 'Set up portal access first' }
+    const { findProfilesByClientId } = await import('@/lib/portal-users')
+    const users = await findProfilesByClientId(supabaseAdmin, clientId)
+    if (users.length === 0 && !check.client.auth_user_id) {
+      return { success: false, error: 'Add a portal login first' }
     }
 
     await supabaseAdmin
@@ -4371,6 +4442,42 @@ export async function setClientPortalEnabledAction(clientId: string, enabled: bo
   }
 }
 
+/** Remove a single household login without revoking the whole portal. */
+export async function revokeClientPortalUserAction(clientId: string, userId: string) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const check = await verifyCompanyAdminForClient(clientId)
+    if (!check.ok) return { success: false, error: check.error }
+
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, role, client_id')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (
+      !profile ||
+      profile.role !== 'client' ||
+      profile.client_id !== clientId
+    ) {
+      return { success: false, error: 'Portal login not found for this client' }
+    }
+
+    await supabaseAdmin.from('profiles').delete().eq('id', userId)
+    await supabaseAdmin.auth.admin.deleteUser(userId)
+
+    const { refreshClientPortalPrimaryUser } = await import('@/lib/portal-users')
+    await refreshClientPortalPrimaryUser(supabaseAdmin, clientId)
+
+    revalidatePath(`/dashboard/clients/${clientId}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error('revokeClientPortalUserAction error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 export async function revokeClientPortalAccessAction(clientId: string) {
   const supabaseAdmin = createSupabaseAdmin()
 
@@ -4378,11 +4485,24 @@ export async function revokeClientPortalAccessAction(clientId: string) {
     const check = await verifyCompanyAdminForClient(clientId)
     if (!check.ok) return { success: false, error: check.error }
 
-    const authUserId = check.client.auth_user_id
+    const { findProfilesByClientId } = await import('@/lib/portal-users')
+    const profiles = await findProfilesByClientId(supabaseAdmin, clientId)
 
-    if (authUserId) {
-      await supabaseAdmin.from('profiles').delete().eq('id', authUserId)
-      await supabaseAdmin.auth.admin.deleteUser(authUserId)
+    for (const profile of profiles) {
+      await supabaseAdmin.from('profiles').delete().eq('id', profile.id)
+      await supabaseAdmin.auth.admin.deleteUser(profile.id)
+    }
+
+    // Legacy: primary auth_user_id may exist without a profile row
+    if (
+      check.client.auth_user_id &&
+      !profiles.some((p) => p.id === check.client.auth_user_id)
+    ) {
+      await supabaseAdmin
+        .from('profiles')
+        .delete()
+        .eq('id', check.client.auth_user_id)
+      await supabaseAdmin.auth.admin.deleteUser(check.client.auth_user_id)
     }
 
     await supabaseAdmin
@@ -4452,7 +4572,9 @@ export const getDashboardShellDataAction = cache(async () => {
       companyId
         ? supabaseAdmin
             .from('companies')
-            .select('id, name, logo_url, promo_code, stripe_platform_subscription_id')
+            .select(
+              'id, name, logo_url, promo_code, stripe_platform_subscription_id, crew_label'
+            )
             .eq('id', companyId)
             .single()
         : Promise.resolve({ data: null }),
@@ -4479,6 +4601,24 @@ export const getDashboardShellDataAction = cache(async () => {
       )
     }
 
+    // P4: crew lead flag for nav + limited dispatch access
+    let isCrewLead = false
+    if (isStaffWithCompany && profile.role === 'team_member' && companyId) {
+      const { data: leadCrew } = await supabaseAdmin
+        .from('crews')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('crew_lead_id', session.userId)
+        .limit(1)
+        .maybeSingle()
+      isCrewLead = Boolean(leadCrew?.id)
+    }
+
+    const { normalizeCrewLabel } = await import('@/lib/crew-terminology')
+    const crewLabel = normalizeCrewLabel(
+      (company as { crew_label?: string | null } | null)?.crew_label
+    )
+
     return {
       success: true as const,
       data: {
@@ -4489,6 +4629,8 @@ export const getDashboardShellDataAction = cache(async () => {
         isSoloBusiness: soloContext?.isSoloBusiness ?? false,
         soloCrewId: soloContext?.soloCrewId ?? null,
         role: profile.role,
+        isCrewLead,
+        crewLabel,
       },
     }
   } catch (error: any) {
@@ -4757,6 +4899,28 @@ export async function getCrewsPageDataAction() {
         ? getPlanEntitlements(shell.data.subscriptionAccess.plan)
         : null
 
+    const isCrewLead = Boolean(shell.success && shell.data.isCrewLead)
+    const isTeamMemberLead =
+      check.session.profile.role === 'team_member' && isCrewLead
+    const isTeamMemberNonLead =
+      check.session.profile.role === 'team_member' && !isCrewLead
+
+    // Plain team members (not leads) should not manage crews
+    if (isTeamMemberNonLead) {
+      return {
+        success: false as const,
+        error: 'Only company admins or crew leads can open this page',
+      }
+    }
+
+    const { normalizeCrewLabel } = await import('@/lib/crew-terminology')
+    const { data: companyLabelRow } = await supabaseAdmin
+      .from('companies')
+      .select('crew_label')
+      .eq('id', check.companyId)
+      .maybeSingle()
+    const crewLabel = normalizeCrewLabel(companyLabelRow?.crew_label)
+
     if (soloContext.isSoloBusiness) {
       return {
         success: true as const,
@@ -4775,6 +4939,33 @@ export async function getCrewsPageDataAction() {
           }>,
           isSoloBusiness: true,
           entitlements,
+          leadOnly: false,
+          crewLabel,
+        },
+      }
+    }
+
+    // Crew leads: dispatch-only workspace (no crew CRUD / team admin)
+    if (isTeamMemberLead) {
+      return {
+        success: true as const,
+        data: {
+          crews: [] as Array<{
+            id: string
+            name: string
+            created_at: string
+            crew_lead_id: string | null
+            members: Array<{ id: string; full_name: string; avatar_url: string | null }>
+          }>,
+          availableMembers: [] as Array<{
+            id: string
+            full_name: string
+            avatar_url: string | null
+          }>,
+          isSoloBusiness: false,
+          entitlements,
+          leadOnly: true,
+          crewLabel,
         },
       }
     }
@@ -4815,6 +5006,8 @@ export async function getCrewsPageDataAction() {
         availableMembers: membersData || [],
         isSoloBusiness: false,
         entitlements,
+        leadOnly: false,
+        crewLabel,
       },
     }
   } catch (error: any) {
@@ -4851,6 +5044,7 @@ export async function getSettingsPageInitialDataAction() {
       address_state: string | null
       address_zip: string | null
       is_solo_business: boolean | null
+      crew_label: string | null
       subscription_plan: string | null
       subscription_status: string | null
       stripe_platform_customer_id: string | null
@@ -4877,6 +5071,7 @@ export async function getSettingsPageInitialDataAction() {
           address_state,
           address_zip,
           is_solo_business,
+          crew_label,
           subscription_plan,
           subscription_status,
           stripe_platform_customer_id
@@ -4995,8 +5190,15 @@ export async function updateAccountSettingsAction(data: {
       return { success: false, error: 'Enter a valid email address' }
     }
 
-    if (password && password.length < 8) {
-      return { success: false, error: 'Password must be at least 8 characters' }
+    if (password) {
+      const { validatePassword } = await import('@/lib/password-policy')
+      const passwordCheck = validatePassword(password)
+      if (!passwordCheck.ok) {
+        return {
+          success: false,
+          error: passwordCheck.error || 'Password does not meet requirements',
+        }
+      }
     }
 
     const supabaseAdmin = createSupabaseAdmin()
@@ -5241,89 +5443,145 @@ export async function getTeamMemberDashboardAction(): Promise<
       crewId = soloContext.soloCrewId
     }
 
-    if (!crewId) {
-      return {
-        success: true,
-        data: emptyRouteData,
-      }
-    }
-
-    const { data: crew, error: crewError } = await supabaseAdmin
-      .from('crews')
-      .select('id, name')
-      .eq('id', crewId)
-      .eq('company_id', session.profile.company_id)
-      .single()
-
-    if (crewError || !crew) {
-      return {
-        success: true,
-        data: emptyRouteData,
-      }
-    }
-
     const { startIso, endIso } = getCompanyDayBounds(timezone, now, 0)
+    const companyId = session.profile.company_id
 
-    const { data: schedules, error: scheduleError } = await supabaseAdmin
-      .from('schedules')
-      .select(`
+    const scheduleSelect = `
+      id,
+      title,
+      start_time,
+      end_time,
+      status,
+      client_id,
+      client:clients!client_id (
         id,
-        title,
-        start_time,
-        end_time,
-        status,
-        client_id,
-        client:clients!client_id (
-          id,
-          name,
-          address,
-          address_street,
-          address_unit,
-          address_city,
-          address_state,
-          address_zip,
-          latitude,
-          longitude,
-          geocode_address_key
-        )
-      `)
-      .eq('crew_id', crewId)
-      .neq('status', 'cancelled')
-      .lt('start_time', endIso)
-      .gt('end_time', startIso)
-      .order('start_time', { ascending: true })
+        name,
+        address,
+        address_street,
+        address_unit,
+        address_city,
+        address_state,
+        address_zip,
+        latitude,
+        longitude,
+        geocode_address_key
+      )
+    `
 
-    if (scheduleError) {
-      return { success: false, error: scheduleError.message }
+    let crew: { id: string; name: string } | null = null
+    let isCrewLead = false
+    let crewSchedules: any[] = []
+
+    if (crewId) {
+      const { data: crewRow, error: crewError } = await supabaseAdmin
+        .from('crews')
+        .select('id, name, crew_lead_id')
+        .eq('id', crewId)
+        .eq('company_id', companyId)
+        .single()
+
+      if (!crewError && crewRow) {
+        crew = { id: crewRow.id, name: crewRow.name }
+        isCrewLead = crewRow.crew_lead_id === session.userId
+
+        const { data: scheduleData, error: scheduleError } = await supabaseAdmin
+          .from('schedules')
+          .select(scheduleSelect)
+          .eq('crew_id', crewId)
+          .neq('status', 'cancelled')
+          .lt('start_time', endIso)
+          .gt('end_time', startIso)
+          .order('start_time', { ascending: true })
+
+        if (scheduleError) {
+          return { success: false, error: scheduleError.message }
+        }
+        crewSchedules = scheduleData || []
+      }
     }
 
-    const companyId = session.profile.company_id
+    // P4: also surface jobs where this user is a helper (may be another crew)
+    const { fetchHelperScheduleIdsForProfile, fetchHelperCountsBySchedule } =
+      await import('@/app/job-helpers-actions')
+    const helperIds = await fetchHelperScheduleIdsForProfile(
+      supabaseAdmin,
+      session.userId
+    )
+
+    let helperSchedules: any[] = []
+    if (helperIds.length > 0) {
+      const { data: helperData, error: helperError } = await supabaseAdmin
+        .from('schedules')
+        .select(scheduleSelect)
+        .in('id', helperIds)
+        .neq('status', 'cancelled')
+        .lt('start_time', endIso)
+        .gt('end_time', startIso)
+        .order('start_time', { ascending: true })
+
+      if (!helperError) {
+        helperSchedules = helperData || []
+      }
+    }
+
+    if (!crew && helperSchedules.length === 0) {
+      return {
+        success: true,
+        data: emptyRouteData,
+      }
+    }
+
+    const { schedules: mergedSchedules, helperOnlyIds } = mergeTeamMemberDaySchedules(
+      crewSchedules,
+      helperSchedules
+    )
+
+    const helperCounts = await fetchHelperCountsBySchedule(
+      supabaseAdmin,
+      mergedSchedules.map((s) => s.id)
+    )
+
     const { queueCompanyScheduleStatusSync } = await import('@/lib/schedule-status-sync')
     queueCompanyScheduleStatusSync(supabaseAdmin, companyId)
 
     const { persistResolvedGeocodes } = await import('@/lib/address-geocoding-server')
-    const jobs = buildTeamMemberJobs(schedules || [], timezone, now)
-    const routeData = await buildTeamMemberRouteData({
-      companyName: companyDetails.name || 'Company',
-      companyAddress: companyDetails.address,
-      companyStructuredAddress: structuredAddressFromCompany(companyDetails),
-      companyCoordinates: companyDetails,
-      crew,
-      schedules: schedules || [],
-      onGeocodesResolved: async (resolved) => {
-        await persistResolvedGeocodes(supabaseAdmin, companyId, resolved)
-      },
+    const jobs = buildTeamMemberJobs(mergedSchedules, timezone, now, {
+      helperJobIds: helperOnlyIds,
+      helperCounts,
     })
+
+    // Route only for home-crew jobs (helpers on other crews stay list-only extras)
+    const routeSchedules = crew
+      ? crewSchedules
+      : []
+    const routeData = crew
+      ? await buildTeamMemberRouteData({
+          companyName: companyDetails.name || 'Company',
+          companyAddress: companyDetails.address,
+          companyStructuredAddress: structuredAddressFromCompany(companyDetails),
+          companyCoordinates: companyDetails,
+          crew,
+          schedules: routeSchedules,
+          onGeocodesResolved: async (resolved) => {
+            await persistResolvedGeocodes(supabaseAdmin, companyId, resolved)
+          },
+        })
+      : {
+          route: null,
+          companyLocation: null,
+          invalidAddresses: [] as TeamMemberDashboardData['invalidAddresses'],
+        }
 
     return {
       success: true,
       data: {
-        crewName: crew.name,
-        crewId: crew.id,
+        crewName: crew?.name ?? null,
+        crewId: crew?.id ?? null,
         companyName: companyDetails.name || 'Company',
         dateLabel,
         jobs,
-        hasCrew: true,
+        hasCrew: Boolean(crew) || jobs.length > 0,
+        isCrewLead,
         route: routeData.route,
         companyLocation: routeData.companyLocation,
         invalidAddresses: routeData.invalidAddresses,
@@ -5529,7 +5787,9 @@ export async function getDashboardOverviewAction(): Promise<
 
     const { data: company, error: companyError } = await supabaseAdmin
       .from('companies')
-      .select('timezone, business_hours_start, business_hours_end, business_open_weekdays, is_solo_business')
+      .select(
+        'timezone, business_hours_start, business_hours_end, business_open_weekdays, is_solo_business, crew_label'
+      )
       .eq('id', companyId)
       .single()
 
@@ -5537,6 +5797,10 @@ export async function getDashboardOverviewAction(): Promise<
       return { success: false, error: 'Company not found' }
     }
 
+    const { normalizeCrewLabel } = await import('@/lib/crew-terminology')
+    const crewLabel = normalizeCrewLabel(
+      (company as { crew_label?: string | null }).crew_label
+    )
     const timezone = company.timezone || 'America/Chicago'
     const businessHours = normalizeBusinessHours(
       company.business_hours_start,
@@ -5577,6 +5841,7 @@ export async function getDashboardOverviewAction(): Promise<
           closedDayLabel: weekday,
           monthlyKpis,
           isSoloBusiness: soloContext.isSoloBusiness,
+          crewLabel,
           activity,
         },
       }
@@ -5682,6 +5947,7 @@ export async function getDashboardOverviewAction(): Promise<
         timelineMode,
         timelineDateLabel: formatCompanyDateLabel(timezone, now, timelineDayOffset),
         isSoloBusiness: soloContext.isSoloBusiness,
+        crewLabel,
         activity,
       },
     }
@@ -6734,6 +7000,8 @@ export async function updateCompanySettingsAction(data: {
   companyAddress?: StructuredAddress
   companyName?: string
   isSoloBusiness?: boolean
+  /** Plural label for crews (e.g. "Crews", "Teams"). Empty resets to default. */
+  crewLabel?: string | null
 }) {
   try {
     const session = await getSessionProfile()
@@ -6780,6 +7048,16 @@ export async function updateCompanySettingsAction(data: {
 
   if (data.isSoloBusiness !== undefined) {
     companyUpdate.is_solo_business = data.isSoloBusiness
+  }
+
+  if (data.crewLabel !== undefined) {
+    const { normalizeCrewLabel, DEFAULT_CREW_LABEL } = await import(
+      '@/lib/crew-terminology'
+    )
+    const normalized = normalizeCrewLabel(data.crewLabel)
+    // Store null when default so DB stays clean and future default changes apply
+    companyUpdate.crew_label =
+      normalized === DEFAULT_CREW_LABEL ? null : normalized
   }
 
   const { error } = await supabaseAdmin
@@ -7090,6 +7368,15 @@ export async function createCompanyTeamMemberAction(data: {
     let userId: string
 
     if (data.password?.trim()) {
+      const { validatePassword } = await import('@/lib/password-policy')
+      const passwordCheck = validatePassword(data.password.trim())
+      if (!passwordCheck.ok) {
+        return {
+          success: false as const,
+          error: passwordCheck.error || 'Password does not meet requirements',
+        }
+      }
+
       const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password: data.password.trim(),
@@ -7196,6 +7483,14 @@ export async function updateCompanyTeamMemberAction(data: {
     }
 
     if (data.password?.trim()) {
+      const { validatePassword } = await import('@/lib/password-policy')
+      const passwordCheck = validatePassword(data.password.trim())
+      if (!passwordCheck.ok) {
+        return {
+          success: false as const,
+          error: passwordCheck.error || 'Password does not meet requirements',
+        }
+      }
       updateData.password = data.password.trim()
     }
 

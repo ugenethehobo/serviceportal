@@ -20,6 +20,12 @@ describe('crews-workspace', () => {
     assert.deepEqual(solo, ['my-day', 'schedule'])
   })
 
+  it('uses custom crew label on multi-crew people section', () => {
+    const multi = getCrewsWorkspaceSections(false, 'Teams')
+    const crewsSection = multi.find((s) => s.id === 'crews')
+    assert.equal(crewsSection?.label, 'Teams')
+  })
+
   it('groups multi-crew sections into operations and people', () => {
     const groups = groupCrewsWorkspaceSections(getCrewsWorkspaceSections(false))
     assert.deepEqual(

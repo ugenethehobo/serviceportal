@@ -26,6 +26,7 @@ import {
   DISPATCH_UNASSIGNED_COLUMN_ID,
   getDispatchPageDescription,
   getDispatchPageTitle,
+  isDispatchJobEditableByViewer,
 } from '@/lib/dispatch-board'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -79,6 +80,7 @@ function DispatchJobCardView({
 }) {
   const canDrag = job.draggable && !disabled
   const currentColumnId = job.crewId ?? DISPATCH_UNASSIGNED_COLUMN_ID
+  const helperCount = job.helperCount ?? 0
 
   return (
     <div
@@ -130,6 +132,11 @@ function DispatchJobCardView({
               >
                 <AlertTriangle className="size-3" />
                 Conflict
+              </Badge>
+            ) : null}
+            {helperCount > 0 ? (
+              <Badge variant="secondary" className="text-[10px]">
+                +{helperCount} helper{helperCount === 1 ? '' : 's'}
               </Badge>
             ) : null}
           </div>
@@ -365,8 +372,12 @@ export function DispatchBoard({ embedded = false }: DispatchBoardProps) {
     ? getDispatchPageTitle(board.isSoloBusiness)
     : 'Dispatch'
   const description = board
-    ? getDispatchPageDescription(board.isSoloBusiness)
+    ? getDispatchPageDescription(board.isSoloBusiness, board.viewerMode)
     : 'Assign work for the day.'
+
+  const viewer = board
+    ? { mode: board.viewerMode, leadCrewId: board.leadCrewId }
+    : { mode: 'admin' as const, leadCrewId: null }
 
   return (
     <div className="space-y-4">
@@ -375,6 +386,8 @@ export function DispatchBoard({ embedded = false }: DispatchBoardProps) {
           <h2 className="text-lg font-semibold text-foreground">{title}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
+      ) : board && !board.isSoloBusiness && board.viewerMode === 'crew_lead' ? (
+        <p className="text-xs text-muted-foreground sm:text-sm">{description}</p>
       ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
@@ -445,21 +458,44 @@ export function DispatchBoard({ embedded = false }: DispatchBoardProps) {
             setDropTargetId(null)
           }}
         >
-          {board.columns.map((column) => (
-            <DispatchColumnView
-              key={column.id}
-              column={column}
-              isSoloBusiness={board.isSoloBusiness}
-              assignOptions={assignOptions}
-              draggingJobId={draggingJobId}
-              dropTargetId={dropTargetId}
-              onDragStart={setDraggingJobId}
-              onDragOverColumn={setDropTargetId}
-              onDropOnColumn={handleDropOnColumn}
-              onAssign={applyReassign}
-              disabled={pending}
-            />
-          ))}
+          {board.columns.map((column) => {
+            const columnJobs =
+              board.viewerMode === 'crew_lead'
+                ? {
+                    ...column,
+                    jobs: column.jobs.map((job) => ({
+                      ...job,
+                      draggable:
+                        job.draggable &&
+                        isDispatchJobEditableByViewer(job, viewer),
+                    })),
+                  }
+                : column
+
+            return (
+              <DispatchColumnView
+                key={column.id}
+                column={columnJobs}
+                isSoloBusiness={board.isSoloBusiness}
+                assignOptions={
+                  board.viewerMode === 'crew_lead' && board.leadCrewId
+                    ? assignOptions.filter(
+                        (opt) =>
+                          opt.value === DISPATCH_UNASSIGNED_COLUMN_ID ||
+                          opt.value === board.leadCrewId
+                      )
+                    : assignOptions
+                }
+                draggingJobId={draggingJobId}
+                dropTargetId={dropTargetId}
+                onDragStart={setDraggingJobId}
+                onDragOverColumn={setDropTargetId}
+                onDropOnColumn={handleDropOnColumn}
+                onAssign={applyReassign}
+                disabled={pending}
+              />
+            )
+          })}
         </div>
       ) : null}
 
@@ -467,7 +503,9 @@ export function DispatchBoard({ embedded = false }: DispatchBoardProps) {
         <p className="text-xs text-muted-foreground">
           {board.isSoloBusiness
             ? 'Drag jobs onto You to put them on your day, or to Unassigned to free the slot. On mobile, use the menu on each card.'
-            : 'Drag jobs between crews or Unassigned. On mobile, use the assign menu on each card. Travel-buffer conflicts are blocked.'}
+            : board.viewerMode === 'crew_lead'
+              ? 'As lead, drag between Unassigned and your crew only. On mobile, use the assign menu. Open a job to add multi-tech helpers.'
+              : 'Drag jobs between crews or Unassigned. On mobile, use the assign menu on each card. Travel-buffer conflicts are blocked. Add helpers on the job page when a stop needs more techs.'}
         </p>
       ) : null}
     </div>

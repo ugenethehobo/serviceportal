@@ -5,8 +5,10 @@ import {
   buildDispatchBoardData,
   resolveDispatchTargetCrewId,
   type DispatchBoardData,
+  type DispatchViewerMode,
   type RawDispatchSchedule,
 } from '@/lib/dispatch-board'
+import { canCrewLeadReassignDispatch } from '@/lib/job-helpers'
 import {
   createSupabaseAdmin,
   getSessionProfile,
@@ -20,30 +22,68 @@ import {
   getCompanyDayBounds,
 } from '@/lib/timezone'
 
-async function verifyCompanyAdminForDispatch() {
+type DispatchAccess =
+  | {
+      ok: true
+      companyId: string
+      userId: string
+      viewerMode: DispatchViewerMode
+      leadCrewId: string | null
+    }
+  | { ok: false; error: string }
+
+async function verifyDispatchAccess(): Promise<DispatchAccess> {
   const session = await getSessionProfile()
   if (!session) {
-    return { ok: false as const, error: 'Not authenticated' }
+    return { ok: false, error: 'Not authenticated' }
   }
   if (!session.profile.company_id) {
-    return { ok: false as const, error: 'No company associated with this account' }
+    return { ok: false, error: 'No company associated with this account' }
   }
   if (!isStaffRole(session.profile.role)) {
-    return { ok: false as const, error: 'Unauthorized' }
-  }
-  if (session.profile.role !== 'company_admin') {
-    return { ok: false as const, error: 'Only company admins can use dispatch' }
+    return { ok: false, error: 'Unauthorized' }
   }
 
-  const subscription = await verifyStaffSubscriptionAccess(session.profile.company_id)
+  const companyId = session.profile.company_id
+  const subscription = await verifyStaffSubscriptionAccess(companyId)
   if (!subscription.ok) {
-    return { ok: false as const, error: TRIAL_EXPIRED_ERROR }
+    return { ok: false, error: TRIAL_EXPIRED_ERROR }
+  }
+
+  if (session.profile.role === 'company_admin') {
+    return {
+      ok: true,
+      companyId,
+      userId: session.userId,
+      viewerMode: 'admin',
+      leadCrewId: null,
+    }
+  }
+
+  // P4: crew leads may use dispatch with limited reassign powers
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data: leadCrews } = await supabaseAdmin
+    .from('crews')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('crew_lead_id', session.userId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+
+  const leadCrewId = leadCrews?.[0]?.id ?? null
+  if (!leadCrewId) {
+    return {
+      ok: false,
+      error: 'Only company admins or crew leads can use dispatch',
+    }
   }
 
   return {
-    ok: true as const,
-    companyId: session.profile.company_id,
+    ok: true,
+    companyId,
     userId: session.userId,
+    viewerMode: 'crew_lead',
+    leadCrewId,
   }
 }
 
@@ -53,12 +93,12 @@ async function getCompanyTravelBufferMinutes(
 ) {
   const { data } = await supabaseAdmin
     .from('companies')
-    .select('travel_buffer_minutes')
+    .select('booking_settings')
     .eq('id', companyId)
     .maybeSingle()
 
-  const value = Number(data?.travel_buffer_minutes)
-  return Number.isFinite(value) && value > 0 ? value : 0
+  const { normalizeBookingSettings } = await import('@/lib/booking')
+  return normalizeBookingSettings(data?.booking_settings).travel_buffer_minutes
 }
 
 export async function getDispatchBoardAction(
@@ -67,7 +107,7 @@ export async function getDispatchBoardAction(
   { success: true; data: DispatchBoardData } | { success: false; error: string }
 > {
   try {
-    const check = await verifyCompanyAdminForDispatch()
+    const check = await verifyDispatchAccess()
     if (!check.ok) return { success: false, error: check.error }
 
     const supabaseAdmin = createSupabaseAdmin()
@@ -85,6 +125,11 @@ export async function getDispatchBoardAction(
     const { getCompanySoloContext } = await import('@/lib/solo-business-server')
     const soloContext = await getCompanySoloContext(check.companyId)
     const isSoloBusiness = Boolean(company.is_solo_business) || soloContext.isSoloBusiness
+
+    // Solo mode is admin-owner only
+    if (isSoloBusiness && check.viewerMode !== 'admin') {
+      return { success: false, error: 'Only the owner can manage solo schedule' }
+    }
 
     const bounds = getCompanyDayBounds(timezone, new Date(), dayOffset)
     const dayLabel = formatCompanyDateLabel(timezone, new Date(), dayOffset)
@@ -144,6 +189,12 @@ export async function getDispatchBoardAction(
       return { success: false, error: crewsError.message }
     }
 
+    const { fetchHelperCountsBySchedule } = await import('@/app/job-helpers-actions')
+    const helperCounts = await fetchHelperCountsBySchedule(
+      supabaseAdmin,
+      schedules.map((s) => s.id)
+    )
+
     const data = buildDispatchBoardData({
       schedules,
       crews: crews || [],
@@ -153,6 +204,9 @@ export async function getDispatchBoardAction(
       timezone,
       isSoloBusiness,
       soloCrewId: soloContext.soloCrewId,
+      helperCounts,
+      viewerMode: check.viewerMode,
+      leadCrewId: check.leadCrewId,
     })
 
     return { success: true, data }
@@ -173,7 +227,7 @@ export async function reassignDispatchJobAction(input: {
   | { success: false; error: string; suggestedCrewIds?: string[] }
 > {
   try {
-    const check = await verifyCompanyAdminForDispatch()
+    const check = await verifyDispatchAccess()
     if (!check.ok) return { success: false, error: check.error }
 
     const supabaseAdmin = createSupabaseAdmin()
@@ -217,9 +271,27 @@ export async function reassignDispatchJobAction(input: {
       if (targetCrewId && soloContext.soloCrewId && targetCrewId !== soloContext.soloCrewId) {
         return { success: false, error: 'Solo mode can only assign jobs to you' }
       }
-      // Assigning to "crew" in solo always means owner crew
       if (targetCrewId === null && input.targetColumnId !== 'unassigned') {
         targetCrewId = soloContext.soloCrewId
+      }
+    }
+
+    // P4 crew lead: only unassigned ↔ their crew
+    if (check.viewerMode === 'crew_lead') {
+      if (!check.leadCrewId) {
+        return { success: false, error: 'Crew lead assignment not found' }
+      }
+      if (
+        !canCrewLeadReassignDispatch({
+          leadCrewId: check.leadCrewId,
+          sourceCrewId: schedule.crew_id,
+          targetCrewId,
+        })
+      ) {
+        return {
+          success: false,
+          error: 'Crew leads can only assign jobs to their own crew or unassigned',
+        }
       }
     }
 
@@ -277,6 +349,7 @@ export async function reassignDispatchJobAction(input: {
     revalidatePath(`/dashboard/clients/${input.clientId}`)
     revalidatePath(`/dashboard/clients/${input.clientId}/jobs/${input.jobId}`)
     revalidatePath('/dashboard')
+    revalidatePath('/dashboard/team')
 
     return { success: true }
   } catch (error: unknown) {

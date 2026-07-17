@@ -144,6 +144,9 @@ All SQL files live in `supabase/`. Run them in the **Supabase SQL editor** (or v
 | 31 | `user-backgrounds-storage.sql` | `user-backgrounds` storage bucket |
 | 32 | `recurring-occurrence-origin.sql` | Recurring occurrence origin tracking on `schedules` |
 | 33 | `production-rls-hardening.sql` | RLS on `crews`, `bookable_services`, etc.; company-scoped storage reads |
+| 34 | `schedule-helpers-schema.sql` | Multi-tech job helpers (`schedule_helpers`) for field ops P4 |
+| 35 | `crew-label-schema.sql` | Customizable `crew_label` on `companies` (default "Crews") |
+| 36 | `portal-multi-login-schema.sql` | Multiple client portal logins per client (drop unique on `profiles.client_id`) |
 
 > **Security:** Run `production-rls-hardening.sql` before exposing the app to real customers. It replaces the global `company-logos` read policy with company-scoped storage policies.
 
@@ -160,6 +163,8 @@ All SQL files live in `supabase/`. Run them in the **Supabase SQL editor** (or v
 | Document template editor shows column error | `document-templates-schema.sql` |
 | Onboarding wizard missing columns | `onboarding-schema.sql` |
 | Company branding (background/accent) fails | `personalization-schema.sql` + `user-backgrounds-storage.sql` |
+| Custom crew label / nav still says wrong name | `crew-label-schema.sql` |
+| Cannot add second portal login for a client | `portal-multi-login-schema.sql` |
 | Cross-tenant data visible in browser | `production-rls-hardening.sql` |
 
 ## Storage buckets

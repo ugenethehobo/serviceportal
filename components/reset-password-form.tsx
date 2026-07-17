@@ -2,7 +2,10 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { isValidNewPassword } from '@/lib/auth-password-reset'
+import {
+  getPasswordRequirementsHint,
+  validatePassword,
+} from '@/lib/auth-password-reset'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import {
@@ -50,8 +53,9 @@ export function ResetPasswordForm({
     event.preventDefault()
     setError('')
 
-    if (!isValidNewPassword(password)) {
-      setError('Password must be at least 8 characters.')
+    const passwordCheck = validatePassword(password)
+    if (!passwordCheck.ok) {
+      setError(passwordCheck.error || getPasswordRequirementsHint())
       return
     }
 
@@ -147,6 +151,7 @@ export function ResetPasswordForm({
             disabled={isLoading}
             autoComplete="new-password"
           />
+          <p className="text-xs text-muted-foreground">{getPasswordRequirementsHint()}</p>
         </Field>
 
         <Field>

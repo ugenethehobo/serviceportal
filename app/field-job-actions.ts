@@ -57,7 +57,7 @@ async function verifyFieldJobAccess(jobId: string, clientId: string) {
     return { ok: false as const, error: 'Job not found' }
   }
 
-  // Team members: only jobs assigned to their crew
+  // Team members: crew jobs or helper assignments (P4)
   if (session.profile.role === 'team_member') {
     const { data: profile } = await supabaseAdmin
       .from('profiles')
@@ -65,8 +65,16 @@ async function verifyFieldJobAccess(jobId: string, clientId: string) {
       .eq('id', session.userId)
       .maybeSingle()
 
+    const { isUserHelperOnSchedule } = await import('@/app/job-helpers-actions')
+    const isHelper = await isUserHelperOnSchedule(jobId, session.userId)
     const { canTeamMemberAccessCrewJob } = await import('@/lib/field-job-access')
-    if (!canTeamMemberAccessCrewJob(schedule.crew_id, profile?.crew_id ?? null)) {
+    if (
+      !canTeamMemberAccessCrewJob(
+        schedule.crew_id,
+        profile?.crew_id ?? null,
+        isHelper
+      )
+    ) {
       return { ok: false as const, error: 'Job not found' }
     }
   }

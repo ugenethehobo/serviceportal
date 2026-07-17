@@ -151,10 +151,17 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
             <div className="flex min-h-0 flex-col overflow-hidden border-border/70 lg:col-span-2 lg:border-r lg:pr-6">
               <div className="mb-3 flex shrink-0 items-center justify-between border-b pb-2">
                 <h2 className="text-lg font-semibold tracking-tight">
-                  {getActiveCrewsHeading(Boolean(data.isSoloBusiness))}
+                  {getActiveCrewsHeading(
+                    Boolean(data.isSoloBusiness),
+                    data.crewLabel
+                  )}
                 </h2>
               </div>
-              <ActiveCrewsToday crews={data.crews} isSoloBusiness={data.isSoloBusiness} />
+              <ActiveCrewsToday
+                crews={data.crews}
+                isSoloBusiness={data.isSoloBusiness}
+                crewLabel={data.crewLabel}
+              />
             </div>
 
             <div className="flex min-h-0 flex-col overflow-visible max-md:min-h-[200px] lg:col-span-3 lg:pl-6">

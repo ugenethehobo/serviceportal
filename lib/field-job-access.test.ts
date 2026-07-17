@@ -13,6 +13,8 @@ describe('field-job-access', () => {
     assert.equal(canTeamMemberAccessCrewJob(null, 'crew-a'), false)
     assert.equal(canTeamMemberAccessCrewJob('crew-a', null), false)
     assert.equal(canTeamMemberAccessCrewJob(null, null), false)
+    // Helpers may access even when not on the job's primary crew (P4)
+    assert.equal(canTeamMemberAccessCrewJob('crew-a', 'crew-b', true), true)
   })
 
   it('maps statuses to field actions', () => {

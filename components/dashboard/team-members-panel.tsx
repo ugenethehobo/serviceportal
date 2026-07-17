@@ -422,12 +422,11 @@ export function TeamMembersPanel() {
                   }
                   autoComplete="new-password"
                 />
-                {!editingMember && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Leave blank to email an invite link. Set a password to create the account
-                    directly.
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {editingMember
+                    ? 'If set, must be at least 10 characters with a letter and a number.'
+                    : 'Leave blank to email an invite link. If you set a password, use at least 10 characters with a letter and a number.'}
+                </p>
               </div>
 
               <div>

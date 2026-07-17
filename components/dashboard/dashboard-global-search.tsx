@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
 import {
-  GLOBAL_SEARCH_GROUP_ORDER,
+  getGlobalSearchGroupOrder,
   getGlobalSearchResultKey,
   groupGlobalSearchResults,
   mergeGlobalSearchResults,
@@ -97,15 +97,26 @@ export function DashboardGlobalSearch({ className }: DashboardGlobalSearchProps)
     return () => document.removeEventListener('mousedown', handlePointerDown)
   }, [])
 
+  const searchGroupOrder = useMemo(
+    () =>
+      getGlobalSearchGroupOrder(
+        shellData?.isSoloBusiness ?? false,
+        shellData?.crewLabel
+      ),
+    [shellData?.crewLabel, shellData?.isSoloBusiness]
+  )
+
   const staticResults = useMemo(() => {
     if (!trimmedQuery) return []
     return searchStaticGlobalResults(trimmedQuery, {
       role: shellData?.role,
       plan: shellData?.subscriptionAccess?.plan ?? null,
       isSoloBusiness: shellData?.isSoloBusiness,
+      crewLabel: shellData?.crewLabel,
     })
   }, [
     trimmedQuery,
+    shellData?.crewLabel,
     shellData?.isSoloBusiness,
     shellData?.role,
     shellData?.subscriptionAccess?.plan,
@@ -143,10 +154,20 @@ export function DashboardGlobalSearch({ className }: DashboardGlobalSearchProps)
   const results = useMemo(() => {
     if (!trimmedQuery) return []
     if (trimmedQuery.length < 2 || debouncedQuery !== trimmedQuery) {
-      return groupGlobalSearchResults(staticResults)
+      return groupGlobalSearchResults(staticResults, searchGroupOrder)
     }
-    return mergeGlobalSearchResults(staticResults, remoteResults)
-  }, [trimmedQuery, debouncedQuery, remoteResults, staticResults])
+    return mergeGlobalSearchResults(
+      staticResults,
+      remoteResults,
+      searchGroupOrder
+    )
+  }, [
+    trimmedQuery,
+    debouncedQuery,
+    remoteResults,
+    staticResults,
+    searchGroupOrder,
+  ])
 
   const groupedResults = useMemo(() => {
     const groups = new Map<string, GlobalSearchResult[]>()
@@ -156,12 +177,12 @@ export function DashboardGlobalSearch({ className }: DashboardGlobalSearchProps)
       groups.set(result.group, list)
     }
 
-    return GLOBAL_SEARCH_GROUP_ORDER.flatMap((group) => {
+    return searchGroupOrder.flatMap((group) => {
       const items = groups.get(group)
       if (!items?.length) return []
       return [{ group, items }]
     })
-  }, [results])
+  }, [results, searchGroupOrder])
 
   const showPanel = isFocused && trimmedQuery.length > 0
 

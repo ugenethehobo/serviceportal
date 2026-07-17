@@ -3,6 +3,7 @@ import {
   getDashboardNavItems,
   type DashboardNavItem,
 } from '@/lib/dashboard-nav'
+import { getCrewsSearchGroupLabel } from '@/lib/crew-terminology'
 import type { PlatformPlanId } from '@/lib/platform-billing'
 import { getVisibleSettingsNavSections } from '@/lib/settings-nav'
 import { matchesSearch } from '@/lib/search'
@@ -32,6 +33,7 @@ export type GlobalSearchResult = {
   group: string
 }
 
+/** Default order; crews group label is company-customizable via getGlobalSearchGroupOrder. */
 export const GLOBAL_SEARCH_GROUP_ORDER = [
   'Pages',
   'Settings',
@@ -43,9 +45,19 @@ export const GLOBAL_SEARCH_GROUP_ORDER = [
   'Contracts',
   'Photos',
   'Payments',
-  'Crews & team',
+  'Crews',
   'Service packages',
 ] as const
+
+export function getGlobalSearchGroupOrder(
+  isSoloBusiness = false,
+  crewLabel?: string | null
+): string[] {
+  const crewsGroup = getCrewsSearchGroupLabel(isSoloBusiness, crewLabel)
+  return GLOBAL_SEARCH_GROUP_ORDER.map((group) =>
+    group === 'Crews' ? crewsGroup : group
+  )
+}
 
 const EXTRA_PAGE_SHORTCUTS: Array<DashboardNavItem & { keywords?: string[] }> = [
   {
@@ -87,12 +99,13 @@ export function dedupeGlobalSearchResults(results: GlobalSearchResult[]): Global
   return deduped
 }
 
-export function groupGlobalSearchResults(results: GlobalSearchResult[]): GlobalSearchResult[] {
-  const order = new Map(GLOBAL_SEARCH_GROUP_ORDER.map((group, index) => [group, index]))
+export function groupGlobalSearchResults(
+  results: GlobalSearchResult[],
+  groupOrder: readonly string[] = GLOBAL_SEARCH_GROUP_ORDER
+): GlobalSearchResult[] {
+  const order = new Map(groupOrder.map((group, index) => [group, index]))
   return dedupeGlobalSearchResults(results).sort((a, b) => {
-    const groupDelta =
-      (order.get(a.group as (typeof GLOBAL_SEARCH_GROUP_ORDER)[number]) ?? 99) -
-      (order.get(b.group as (typeof GLOBAL_SEARCH_GROUP_ORDER)[number]) ?? 99)
+    const groupDelta = (order.get(a.group) ?? 99) - (order.get(b.group) ?? 99)
     if (groupDelta !== 0) return groupDelta
     return a.title.localeCompare(b.title)
   })
@@ -104,6 +117,7 @@ export function searchStaticGlobalResults(
     role?: string
     plan?: PlatformPlanId | null
     isSoloBusiness?: boolean
+    crewLabel?: string | null
   }
 ): GlobalSearchResult[] {
   const normalized = query.trim()
@@ -113,7 +127,9 @@ export function searchStaticGlobalResults(
   const matchedPageHrefs = new Set<string>()
   const isAdmin = options.role === 'company_admin'
 
-  const navItems = getDashboardNavItems(options.role, options.plan, options.isSoloBusiness)
+  const navItems = getDashboardNavItems(options.role, options.plan, options.isSoloBusiness, {
+    crewLabel: options.crewLabel,
+  })
   for (const item of navItems) {
     if (item.locked) continue
     if (
@@ -174,7 +190,11 @@ export function searchStaticGlobalResults(
 
 export function mergeGlobalSearchResults(
   staticResults: GlobalSearchResult[],
-  remoteResults: GlobalSearchResult[]
+  remoteResults: GlobalSearchResult[],
+  groupOrder?: readonly string[]
 ): GlobalSearchResult[] {
-  return groupGlobalSearchResults([...staticResults, ...remoteResults])
+  return groupGlobalSearchResults(
+    [...staticResults, ...remoteResults],
+    groupOrder
+  )
 }

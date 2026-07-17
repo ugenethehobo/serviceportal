@@ -8,7 +8,8 @@ export default function PortalSettingsPage() {
         title="Settings"
         description="Manage your client portal preferences."
       />
-      <AppearanceSettings canEditCompanyBranding={false} />
+      {/* Clients may change light/dark only — company branding is admin-owned. */}
+      <AppearanceSettings showCompanyBranding={false} />
     </div>
   )
 }

@@ -25,8 +25,8 @@ test('buildPasswordResetVerifyUrl includes recovery token and next path', () => 
   assert.equal(url.searchParams.get('next'), PASSWORD_RESET_NEXT_PATH)
 })
 
-test('isValidNewPassword requires at least 8 characters', () => {
+test('isValidNewPassword enforces shared password policy', () => {
   assert.equal(isValidNewPassword('short'), false)
-  assert.equal(isValidNewPassword('longenough'), true)
-  assert.equal(isValidNewPassword('  eightchr  '), true)
+  assert.equal(isValidNewPassword('longenough'), false)
+  assert.equal(isValidNewPassword('Password12'), true)
 })

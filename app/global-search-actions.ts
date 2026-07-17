@@ -149,15 +149,45 @@ async function searchLeads(companyId: string, pattern: string): Promise<GlobalSe
   }))
 }
 
+async function loadCompanyCrewSearchMeta(companyId: string): Promise<{
+  group: string
+  singular: string
+  isSoloBusiness: boolean
+  crewLabel: string | null
+}> {
+  const supabaseAdmin = createSupabaseAdmin()
+  const { data } = await supabaseAdmin
+    .from('companies')
+    .select('crew_label, is_solo_business')
+    .eq('id', companyId)
+    .maybeSingle()
+
+  const { getCrewsSearchGroupLabel, getCrewTerminology } = await import(
+    '@/lib/crew-terminology'
+  )
+  const isSoloBusiness = Boolean(data?.is_solo_business)
+  const crewLabel = (data?.crew_label as string | null | undefined) ?? null
+  const terms = getCrewTerminology(crewLabel)
+  return {
+    group: getCrewsSearchGroupLabel(isSoloBusiness, crewLabel),
+    singular: terms.singular,
+    isSoloBusiness,
+    crewLabel,
+  }
+}
+
 async function searchCrews(companyId: string, pattern: string): Promise<GlobalSearchResult[]> {
   const supabaseAdmin = createSupabaseAdmin()
-  const { data, error } = await supabaseAdmin
-    .from('crews')
-    .select('id, name')
-    .eq('company_id', companyId)
-    .ilike('name', pattern)
-    .order('name', { ascending: true })
-    .limit(RESULT_LIMIT)
+  const [{ data, error }, meta] = await Promise.all([
+    supabaseAdmin
+      .from('crews')
+      .select('id, name')
+      .eq('company_id', companyId)
+      .ilike('name', pattern)
+      .order('name', { ascending: true })
+      .limit(RESULT_LIMIT),
+    loadCompanyCrewSearchMeta(companyId),
+  ])
 
   if (error) throw error
 
@@ -165,9 +195,9 @@ async function searchCrews(companyId: string, pattern: string): Promise<GlobalSe
     id: crew.id,
     type: 'crew' as const,
     title: crew.name,
-    subtitle: 'Crew',
+    subtitle: meta.singular,
     href: '/dashboard/crews',
-    group: 'Crews & team',
+    group: meta.group,
   }))
 }
 
@@ -176,14 +206,17 @@ async function searchTeamMembers(
   pattern: string
 ): Promise<GlobalSearchResult[]> {
   const supabaseAdmin = createSupabaseAdmin()
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .select('id, full_name, email, role')
-    .eq('company_id', companyId)
-    .in('role', ['company_admin', 'team_member'])
-    .or(`full_name.ilike.${pattern},email.ilike.${pattern}`)
-    .order('full_name', { ascending: true })
-    .limit(RESULT_LIMIT)
+  const [{ data, error }, meta] = await Promise.all([
+    supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .eq('company_id', companyId)
+      .in('role', ['company_admin', 'team_member'])
+      .or(`full_name.ilike.${pattern},email.ilike.${pattern}`)
+      .order('full_name', { ascending: true })
+      .limit(RESULT_LIMIT),
+    loadCompanyCrewSearchMeta(companyId),
+  ])
 
   if (error) throw error
 
@@ -193,7 +226,7 @@ async function searchTeamMembers(
     title: member.full_name || member.email || 'Team member',
     subtitle: member.role === 'company_admin' ? 'Admin' : 'Team member',
     href: '/dashboard/crews',
-    group: 'Crews & team',
+    group: meta.group,
   }))
 }
 
@@ -462,12 +495,20 @@ export async function globalSearchAction(query: string) {
       )
     }
 
-    const remoteChunks = await Promise.all(remoteTasks)
+    const [remoteChunks, meta] = await Promise.all([
+      Promise.all(remoteTasks),
+      loadCompanyCrewSearchMeta(check.companyId),
+    ])
     const remoteResults = remoteChunks.flat()
+    const { getGlobalSearchGroupOrder } = await import('@/lib/global-search')
+    const groupOrder = getGlobalSearchGroupOrder(
+      meta.isSoloBusiness,
+      meta.crewLabel
+    )
 
     return {
       success: true as const,
-      results: groupGlobalSearchResults(remoteResults),
+      results: groupGlobalSearchResults(remoteResults, groupOrder),
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Search failed'

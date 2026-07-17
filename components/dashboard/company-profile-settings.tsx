@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Building2, Clock, MapPin, User } from 'lucide-react'
+import { Building2, Clock, MapPin, Tags, User } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { updateCompanySoloModeAction } from '@/app/action'
 import { toast } from 'sonner'
@@ -38,6 +38,12 @@ import {
   normalizeBusinessHours,
   type BusinessHours,
 } from '@/lib/business-hours'
+import {
+  CREW_LABEL_MAX_LENGTH,
+  DEFAULT_CREW_LABEL,
+  getCrewTerminology,
+  normalizeCrewLabel,
+} from '@/lib/crew-terminology'
 
 type CompanyRow = {
   name?: string | null
@@ -53,6 +59,7 @@ type CompanyRow = {
   address_state?: string | null
   address_zip?: string | null
   is_solo_business?: boolean | null
+  crew_label?: string | null
 } | null
 
 interface CompanyProfileSettingsProps {
@@ -65,6 +72,7 @@ type ProfileSnapshot = {
   companyAddress: StructuredAddress
   timezone: string
   businessHours: BusinessHours
+  crewLabel: string
 }
 
 function serializeSnapshot(snapshot: ProfileSnapshot) {
@@ -73,6 +81,7 @@ function serializeSnapshot(snapshot: ProfileSnapshot) {
     companyAddress: normalizeStructuredAddress(snapshot.companyAddress),
     timezone: snapshot.timezone,
     businessHours: snapshot.businessHours,
+    crewLabel: normalizeCrewLabel(snapshot.crewLabel),
   })
 }
 
@@ -115,6 +124,7 @@ export function CompanyProfileSettings({
   const [legacyAddress, setLegacyAddress] = useState<string | null>(null)
   const [businessHours, setBusinessHours] = useState<BusinessHours>(DEFAULT_BUSINESS_HOURS)
   const [isSoloBusiness, setIsSoloBusiness] = useState(false)
+  const [crewLabel, setCrewLabel] = useState(DEFAULT_CREW_LABEL)
   const [isSavingSoloMode, setIsSavingSoloMode] = useState(false)
   const isReadyRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -123,6 +133,7 @@ export function CompanyProfileSettings({
   const hydrationKeyRef = useRef('')
 
   const timezones = Intl.supportedValuesOf('timeZone')
+  const crewTermsPreview = getCrewTerminology(crewLabel)
 
   const updateSaveStatus = useCallback(
     (status: SaveStatus, message = '') => {
@@ -148,6 +159,7 @@ export function CompanyProfileSettings({
       company.address_zip,
       company.address,
       company.is_solo_business,
+      company.crew_label,
     ].join('|')
 
     if (hydrationKeyRef.current === hydrationKey) return
@@ -163,6 +175,7 @@ export function CompanyProfileSettings({
         company.business_hours_end,
         company.business_open_weekdays
       ),
+      crewLabel: normalizeCrewLabel(company.crew_label),
     }
 
     setCompanyName(nextSnapshot.companyName)
@@ -170,6 +183,7 @@ export function CompanyProfileSettings({
     setTimezone(nextSnapshot.timezone)
     setCompanyAddress(nextSnapshot.companyAddress)
     setBusinessHours(nextSnapshot.businessHours)
+    setCrewLabel(nextSnapshot.crewLabel)
     setLegacyAddress(structured.street ? null : company.address?.trim() || null)
     setIsSoloBusiness(Boolean(company.is_solo_business))
     setAddressErrors({})
@@ -187,6 +201,7 @@ export function CompanyProfileSettings({
       companyAddress,
       timezone,
       businessHours,
+      crewLabel,
     }
 
     const serialized = serializeSnapshot(snapshot)
@@ -220,11 +235,13 @@ export function CompanyProfileSettings({
     isSavingRef.current = true
     updateSaveStatus('saving')
 
+    const normalizedCrewLabel = normalizeCrewLabel(crewLabel)
     const result = await updateCompanySettingsAction({
       companyName: companyName.trim(),
       timezone,
       businessHours,
       companyAddress: normalizedAddress,
+      crewLabel: normalizedCrewLabel,
     })
 
     isSavingRef.current = false
@@ -236,17 +253,22 @@ export function CompanyProfileSettings({
 
     setLegacyAddress(null)
     setCompanyAddress(normalizedAddress)
+    setCrewLabel(normalizedCrewLabel)
     savedSnapshotRef.current = serializeSnapshot({
       companyName: companyName.trim(),
       companyAddress: normalizedAddress,
       timezone,
       businessHours,
+      crewLabel: normalizedCrewLabel,
     })
 
     dispatchCompanyBrandingUpdate({
       name: companyName.trim(),
       logo_url: logoRef,
     })
+
+    // Refresh shell so sidebar nav label updates without a full reload
+    window.dispatchEvent(new Event('dashboard-profile-updated'))
 
     if (result.mapReady) {
       updateSaveStatus('saved')
@@ -264,6 +286,7 @@ export function CompanyProfileSettings({
     businessHours,
     companyAddress,
     companyName,
+    crewLabel,
     logoRef,
     timezone,
     updateSaveStatus,
@@ -280,7 +303,7 @@ export function CompanyProfileSettings({
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [companyName, companyAddress, timezone, businessHours, performSave])
+  }, [companyName, companyAddress, timezone, businessHours, crewLabel, performSave])
 
   const previewAddress = formatAddressForDisplay(normalizeStructuredAddress(companyAddress))
   const hasAddressPreview = previewAddress.replace(/,\s*/g, '').length > 0
@@ -302,7 +325,7 @@ export function CompanyProfileSettings({
     toast.success(
       checked
         ? 'Solo business mode enabled'
-        : 'Team business mode enabled — you can now manage multiple crews'
+        : `Team business mode enabled — you can now manage multiple ${crewTermsPreview.pluralLower}`
     )
     window.dispatchEvent(new Event('dashboard-profile-updated'))
   }
@@ -440,16 +463,44 @@ export function CompanyProfileSettings({
       </SettingsSubsection>
 
       <SettingsSubsection
+        icon={Tags}
+        title="Field team label"
+        description="What you call your field groups in the sidebar, pages, and search."
+      >
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="crew-label">Label (plural)</Label>
+            <Input
+              id="crew-label"
+              value={crewLabel}
+              onChange={(event) => setCrewLabel(event.target.value)}
+              placeholder={DEFAULT_CREW_LABEL}
+              maxLength={CREW_LABEL_MAX_LENGTH}
+              className="mt-1 max-w-xs"
+              disabled={isSoloBusiness}
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Default is &ldquo;{DEFAULT_CREW_LABEL}&rdquo;. Examples: Teams, Units, Squads.
+              {isSoloBusiness
+                ? ' Solo mode uses “Team” in the nav; this label applies when multi-crew mode is on.'
+                : ` Singular preview: “${crewTermsPreview.singular}”.`}
+            </p>
+          </div>
+        </div>
+      </SettingsSubsection>
+
+      <SettingsSubsection
         icon={User}
         title="Business mode"
-        description="Choose how crew scheduling works for your company."
+        description="Choose how field-team scheduling works for your company."
       >
         <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
           <div className="min-w-0">
             <p className="text-sm font-medium">Solo business</p>
             <p className="text-xs text-muted-foreground mt-1">
-              You work alone or don&apos;t need multiple crews. Jobs assign to you automatically,
-              and crew management is simplified across the dashboard.
+              You work alone or don&apos;t need multiple {crewTermsPreview.pluralLower}. Jobs
+              assign to you automatically, and {crewTermsPreview.singularLower} management is
+              simplified across the dashboard.
             </p>
           </div>
           <Switch

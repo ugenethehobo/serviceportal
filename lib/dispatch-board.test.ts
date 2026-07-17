@@ -5,6 +5,7 @@ import {
   DISPATCH_UNASSIGNED_COLUMN_ID,
   getDispatchCrewColumnLabel,
   getDispatchDisplayStatus,
+  isDispatchJobEditableByViewer,
   markDispatchCrewConflicts,
   resolveDispatchTargetCrewId,
   type DispatchJobCard,
@@ -167,6 +168,38 @@ describe('dispatch-board', () => {
         new Date('2026-07-17T12:00:00.000Z')
       ),
       'Completed'
+    )
+  })
+
+  it('limits crew lead editability to unassigned and their crew', () => {
+    const viewer = { mode: 'crew_lead' as const, leadCrewId: 'mine' }
+    assert.equal(
+      isDispatchJobEditableByViewer(
+        { crewId: null, draggable: true },
+        viewer
+      ),
+      true
+    )
+    assert.equal(
+      isDispatchJobEditableByViewer(
+        { crewId: 'mine', draggable: true },
+        viewer
+      ),
+      true
+    )
+    assert.equal(
+      isDispatchJobEditableByViewer(
+        { crewId: 'other', draggable: true },
+        viewer
+      ),
+      false
+    )
+    assert.equal(
+      isDispatchJobEditableByViewer(
+        { crewId: null, draggable: false },
+        viewer
+      ),
+      false
     )
   })
 })

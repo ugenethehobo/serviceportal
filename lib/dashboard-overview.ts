@@ -215,5 +215,7 @@ export type DashboardOverviewData = {
   closedDayLabel?: string
   monthlyKpis?: DashboardMonthlyKpis
   isSoloBusiness?: boolean
+  /** Plural crew label (default "Crews"). */
+  crewLabel?: string
   activity: ActivityFeedItem[]
 }

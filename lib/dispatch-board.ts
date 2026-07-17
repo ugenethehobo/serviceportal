@@ -22,6 +22,8 @@ export type DispatchJobCard = {
   hasCrewConflict: boolean
   href: string
   draggable: boolean
+  /** Extra techs assigned as helpers (P4). */
+  helperCount?: number
 }
 
 export type DispatchColumn = {
@@ -30,6 +32,8 @@ export type DispatchColumn = {
   name: string
   jobs: DispatchJobCard[]
 }
+
+export type DispatchViewerMode = 'admin' | 'crew_lead'
 
 export type DispatchBoardData = {
   dayOffset: number
@@ -41,6 +45,10 @@ export type DispatchBoardData = {
   columns: DispatchColumn[]
   unassignedCount: number
   jobCount: number
+  /** admin = full reassign; crew_lead = only unassigned ↔ their crew (P4). */
+  viewerMode: DispatchViewerMode
+  /** When viewerMode is crew_lead, the crew they may reassign. */
+  leadCrewId: string | null
 }
 
 type RawDispatchClient =
@@ -91,10 +99,17 @@ export function getDispatchPageTitle(isSoloBusiness: boolean) {
   return isSoloBusiness ? 'My Schedule' : 'Dispatch'
 }
 
-export function getDispatchPageDescription(isSoloBusiness: boolean) {
-  return isSoloBusiness
-    ? 'Plan your day — drag unassigned jobs onto yourself, or pull them off when plans change.'
-    : 'Assign jobs to crews for the day. Drag cards between columns to reassign.'
+export function getDispatchPageDescription(
+  isSoloBusiness: boolean,
+  viewerMode: DispatchViewerMode = 'admin'
+) {
+  if (isSoloBusiness) {
+    return 'Plan your day — drag unassigned jobs onto yourself, or pull them off when plans change.'
+  }
+  if (viewerMode === 'crew_lead') {
+    return 'As crew lead, pull unassigned jobs onto your crew or release them back. Admins can reassign across all crews.'
+  }
+  return 'Assign jobs to crews for the day. Drag cards between columns to reassign. Add helpers on the job page when a stop needs more techs.'
 }
 
 export function getDispatchCrewColumnLabel(
@@ -151,7 +166,8 @@ export function markDispatchCrewConflicts(jobs: DispatchJobCard[]): DispatchJobC
 function toJobCard(
   schedule: RawDispatchSchedule,
   timezone: string,
-  now: Date
+  now: Date,
+  helperCount = 0
 ): DispatchJobCard {
   const client = unwrapRelation(schedule.client)
   const clientName = client?.name?.trim() || 'Client'
@@ -180,6 +196,7 @@ function toJobCard(
     hasCrewConflict: false,
     href: `/dashboard/clients/${schedule.client_id}/jobs/${schedule.id}`,
     draggable,
+    helperCount,
   }
 }
 
@@ -203,13 +220,23 @@ export function buildDispatchBoardData(input: {
   isSoloBusiness: boolean
   soloCrewId: string | null
   now?: Date
+  helperCounts?: Map<string, number>
+  viewerMode?: DispatchViewerMode
+  leadCrewId?: string | null
 }): DispatchBoardData {
   const now = input.now ?? new Date()
   const activeSchedules = input.schedules.filter(
     (schedule) => schedule.status !== 'cancelled'
   )
 
-  let jobs = activeSchedules.map((schedule) => toJobCard(schedule, input.timezone, now))
+  let jobs = activeSchedules.map((schedule) =>
+    toJobCard(
+      schedule,
+      input.timezone,
+      now,
+      input.helperCounts?.get(schedule.id) ?? 0
+    )
+  )
   jobs = markDispatchCrewConflicts(jobs)
 
   const crewColumnsSource = input.isSoloBusiness
@@ -271,7 +298,23 @@ export function buildDispatchBoardData(input: {
     columns,
     unassignedCount: unassignedJobs.length,
     jobCount: jobs.length,
+    viewerMode: input.viewerMode ?? 'admin',
+    leadCrewId: input.leadCrewId ?? null,
   }
+}
+
+/**
+ * Whether a dispatch card can be reassigned by the current viewer.
+ * Admins: all draggable jobs. Crew leads: only unassigned or their crew.
+ */
+export function isDispatchJobEditableByViewer(
+  job: Pick<DispatchJobCard, 'crewId' | 'draggable'>,
+  viewer: { mode: DispatchViewerMode; leadCrewId: string | null }
+): boolean {
+  if (!job.draggable) return false
+  if (viewer.mode === 'admin') return true
+  if (!viewer.leadCrewId) return false
+  return job.crewId === null || job.crewId === viewer.leadCrewId
 }
 
 /** Resolve target crew id from a column drop target. */

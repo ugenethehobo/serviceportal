@@ -3,11 +3,13 @@
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { getCrewTerminology } from '@/lib/crew-terminology'
 import type { DashboardCrewSummary } from '@/lib/dashboard-overview'
 
 interface ActiveCrewsTodayProps {
   crews: DashboardCrewSummary[]
   isSoloBusiness?: boolean
+  crewLabel?: string | null
 }
 
 function statusVariant(status: DashboardCrewSummary['status']) {
@@ -16,17 +18,25 @@ function statusVariant(status: DashboardCrewSummary['status']) {
   return 'secondary' as const
 }
 
-export function ActiveCrewsToday({ crews, isSoloBusiness = false }: ActiveCrewsTodayProps) {
+export function ActiveCrewsToday({
+  crews,
+  isSoloBusiness = false,
+  crewLabel,
+}: ActiveCrewsTodayProps) {
+  const terms = getCrewTerminology(crewLabel)
+
   if (crews.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg">
         <div className="text-center px-4">
           <p className="text-sm text-muted-foreground">
-            {isSoloBusiness ? 'No jobs scheduled for today yet.' : 'No crews set up yet.'}
+            {isSoloBusiness
+              ? 'No jobs scheduled for today yet.'
+              : `No ${terms.pluralLower} set up yet.`}
           </p>
           {!isSoloBusiness && (
             <Link href="/dashboard/crews" className="text-sm text-primary hover:underline mt-1 inline-block">
-              Create your first crew
+              Create your first {terms.singularLower}
             </Link>
           )}
         </div>

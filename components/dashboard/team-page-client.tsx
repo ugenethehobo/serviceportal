@@ -211,7 +211,14 @@ function TeamJobCard({
           </div>
           <p className="text-sm text-muted-foreground truncate mt-0.5">{job.clientName}</p>
         </div>
-        <JobStatusBadge status={job.status} />
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <JobStatusBadge status={job.status} />
+          {job.isHelper ? (
+            <Badge variant="secondary" className="text-[10px]">
+              Helping
+            </Badge>
+          ) : null}
+        </div>
       </div>
 
       <div className="space-y-2 text-sm">
@@ -264,8 +271,18 @@ function TeamJobCard({
         </Link>
       </div>
 
-      <div className="mt-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <Badge variant="outline">{job.displayStatus}</Badge>
+        {job.isHelper ? (
+          <Badge variant="outline" className="text-[10px]">
+            Helper on this job
+          </Badge>
+        ) : null}
+        {!job.isHelper && (job.helperCount ?? 0) > 0 ? (
+          <Badge variant="outline" className="text-[10px]">
+            +{job.helperCount} helper{(job.helperCount ?? 0) === 1 ? '' : 's'}
+          </Badge>
+        ) : null}
       </div>
     </Card>
   )
@@ -384,7 +401,9 @@ export function TeamPageClient({
             <p className="text-sm text-muted-foreground">
               {isSoloOwner
                 ? data.dateLabel
-                : `${data.crewName ? `${data.crewName} · ` : ''}${data.dateLabel}`}
+                : `${data.crewName ? `${data.crewName} · ` : ''}${data.dateLabel}${
+                    data.isCrewLead ? ' · Lead' : ''
+                  }`}
             </p>
           </div>
           {isRefreshing && (

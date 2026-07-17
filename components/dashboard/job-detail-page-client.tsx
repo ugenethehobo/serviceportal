@@ -21,6 +21,7 @@ import {
   getFieldJobActionLabel,
 } from '@/lib/field-job-access'
 import { JobDetailsPanel } from '@/components/dashboard/job-details-panel'
+import { JobHelpersPanel } from '@/components/dashboard/job-helpers-panel'
 import { JobPhotosPanel } from '@/components/dashboard/job-photos-panel'
 import { JobDocumentsPanel } from '@/components/dashboard/job-documents-panel'
 import { JobMessagingPanel } from '@/components/dashboard/job-messaging-panel'
@@ -588,13 +589,20 @@ export function JobDetailPageClient({
                 />
               </div>
             ) : (
-              <JobDetailsPanel
-                job={job}
-                clientName={clientName}
-                clientId={clientId}
-                jobAddress={jobAddress}
-                isTeamMember={isTeamMember}
-              />
+              <div className="flex flex-col gap-6">
+                <JobDetailsPanel
+                  job={job}
+                  clientName={clientName}
+                  clientId={clientId}
+                  jobAddress={jobAddress}
+                  isTeamMember={isTeamMember}
+                />
+                <JobHelpersPanel
+                  jobId={jobId}
+                  clientId={clientId}
+                  isSoloBusiness={isSoloBusiness}
+                />
+              </div>
             )}
           </MainPageCardScroll>
         </TabsContent>

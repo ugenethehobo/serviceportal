@@ -121,7 +121,11 @@ function useDashboardNav() {
   const visibleNavItems = getDashboardNavItems(
     userProfile?.role,
     subscriptionAccess?.plan,
-    isSoloBusiness
+    isSoloBusiness,
+    {
+      isCrewLead: shellData?.isCrewLead === true,
+      crewLabel: shellData?.crewLabel,
+    }
   )
 
   return {

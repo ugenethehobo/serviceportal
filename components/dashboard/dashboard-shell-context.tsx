@@ -35,6 +35,10 @@ export type DashboardShellData = {
   isSoloBusiness: boolean
   soloCrewId: string | null
   role: string
+  /** Company admin is designated crew lead (P4). */
+  isCrewLead?: boolean
+  /** Custom plural label for crews (default "Crews"). */
+  crewLabel?: string
 }
 
 type DashboardShellContextValue = {

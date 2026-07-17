@@ -180,7 +180,11 @@ export async function completePlatformSignup(input: {
   if (!companyName) throw new Error('Company name is required')
   if (!fullName) throw new Error('Your name is required')
   if (!email || !email.includes('@')) throw new Error('Enter a valid email address')
-  if (password.length < 8) throw new Error('Password must be at least 8 characters')
+  const { validatePassword } = await import('@/lib/password-policy')
+  const passwordCheck = validatePassword(password)
+  if (!passwordCheck.ok) {
+    throw new Error(passwordCheck.error || 'Password does not meet requirements')
+  }
 
   const releaseMode = await getPlatformReleaseMode()
   if (releaseMode === 'beta' && input.plan === 'trial') {

@@ -25,6 +25,8 @@ export default async function CrewsPage() {
       initialAvailableMembers={result.data.availableMembers}
       initialIsSoloBusiness={result.data.isSoloBusiness}
       initialEntitlements={result.data.entitlements}
+      initialLeadOnly={Boolean(result.data.leadOnly)}
+      initialCrewLabel={result.data.crewLabel}
     />
   )
 }
