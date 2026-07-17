@@ -180,20 +180,19 @@ export async function getJobHelpersAction(
         return { success: false, error: helperError.message }
       }
     } else {
-      helpers = (helperRows || [])
-        .map((row) => {
-          const profileRaw = row.profile
-          const profile = Array.isArray(profileRaw) ? profileRaw[0] : profileRaw
-          if (!profile?.id) return null
-          return {
-            id: profile.id as string,
-            fullName: (profile.full_name as string) || 'Team member',
-            avatarUrl: (profile.avatar_url as string | null) ?? null,
-            crewId: (profile.crew_id as string | null) ?? null,
-          }
+      const mapped: JobHelperPerson[] = []
+      for (const row of helperRows || []) {
+        const profileRaw = row.profile
+        const profile = Array.isArray(profileRaw) ? profileRaw[0] : profileRaw
+        if (!profile?.id) continue
+        mapped.push({
+          id: profile.id as string,
+          fullName: (profile.full_name as string) || 'Team member',
+          avatarUrl: (profile.avatar_url as string | null) ?? null,
+          crewId: (profile.crew_id as string | null) ?? null,
         })
-        .filter((h): h is JobHelperPerson => Boolean(h))
-        .sort((a, b) => a.fullName.localeCompare(b.fullName))
+      }
+      helpers = mapped.sort((a, b) => a.fullName.localeCompare(b.fullName))
     }
 
     let candidates: JobHelperPerson[] = []
