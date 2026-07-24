@@ -101,7 +101,7 @@ export function ClientBillingPanel({
           variant="client"
           embedded
           compact
-          listClassName="max-h-full min-h-0 flex-1"
+          listClassName="h-full min-h-0 flex-1"
         />
       </div>
     </div>
@@ -275,7 +275,7 @@ export function ClientBillingPanel({
             variant="client"
             embedded
             compact
-            listClassName={cn('max-h-full min-h-0 flex-1', MOBILE_SCROLL_VIEWPORT_CLASS)}
+            listClassName="h-full min-h-0 flex-1"
           />
         </MainPageCard>
         <MainPageCard className="min-h-0 flex-1 gap-4 p-4">

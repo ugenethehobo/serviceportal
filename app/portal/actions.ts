@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getSessionProfile, createSupabaseAdmin } from '@/lib/portal-auth'
+import { createSupabaseAdmin, resolvePortalSession } from '@/lib/portal-auth'
 import { getDisplayAddressFromClient } from '@/lib/address'
 import { calcBillingSummary, formatCurrency } from '@/lib/billing'
 import { buildPortalActivity } from '@/lib/portal-activity'
@@ -33,21 +33,28 @@ import {
 } from '@/lib/messaging-server'
 
 async function requirePortalClient() {
-  const session = await getSessionProfile()
-  if (!session || session.profile.role !== 'client' || !session.profile.client_id) {
-    throw new Error('Unauthorized')
+  const portal = await resolvePortalSession()
+  if (!portal) throw new Error('Unauthorized')
+
+  // Real clients require portal enabled; staff preview can view disabled portals too.
+  if (!portal.isPreview && !portal.portalEnabled) {
+    throw new Error('Portal access disabled')
   }
 
-  const admin = createSupabaseAdmin()
-  const { data: client } = await admin
-    .from('clients')
-    .select('id, portal_enabled, company_id')
-    .eq('id', session.profile.client_id)
-    .single()
+  return {
+    profile: portal.profile,
+    clientId: portal.clientId,
+    companyId: portal.companyId,
+    isPreview: portal.isPreview,
+  }
+}
 
-  if (!client?.portal_enabled) throw new Error('Portal access disabled')
-
-  return { profile: session.profile, clientId: session.profile.client_id, companyId: client.company_id }
+async function requirePortalClientWrite() {
+  const portal = await requirePortalClient()
+  if (portal.isPreview) {
+    throw new Error('Actions are disabled while previewing the portal as staff')
+  }
+  return portal
 }
 
 async function getPortalCompanyTimezone(companyId: string) {
@@ -379,7 +386,7 @@ export async function respondToEstimateAction(
   estimateId: string,
   response: 'accepted' | 'declined'
 ) {
-  const { clientId } = await requirePortalClient()
+  const { clientId } = await requirePortalClientWrite()
   const admin = createSupabaseAdmin()
 
   const { data: estimate } = await admin
@@ -469,7 +476,7 @@ export async function sendPortalMessagingMessageAction(
       return { success: false, error: validation.error }
     }
 
-    const { clientId, companyId, profile } = await requirePortalClient()
+    const { clientId, companyId, profile } = await requirePortalClientWrite()
     const admin = createSupabaseAdmin()
 
     const { data: client } = await admin

@@ -4456,6 +4456,9 @@ export type ClientPortalLoginUser = {
   email: string | null
   fullName: string | null
   isPrimary: boolean
+  createdAt: string | null
+  accessExpiresAt: string | null
+  isExpired: boolean
 }
 
 export async function getClientPortalStatusAction(clientId: string) {
@@ -4465,7 +4468,9 @@ export async function getClientPortalStatusAction(clientId: string) {
 
     const { client } = check
     const supabaseAdmin = createSupabaseAdmin()
-    const { findProfilesByClientId } = await import('@/lib/portal-users')
+    const { findProfilesByClientId, isPortalAccessExpired } = await import(
+      '@/lib/portal-users'
+    )
     const profiles = await findProfilesByClientId(supabaseAdmin, clientId)
 
     const users: ClientPortalLoginUser[] = profiles.map((profile) => ({
@@ -4473,6 +4478,9 @@ export async function getClientPortalStatusAction(clientId: string) {
       email: profile.email ?? null,
       fullName: profile.full_name ?? null,
       isPrimary: profile.id === client.auth_user_id,
+      createdAt: profile.created_at ?? null,
+      accessExpiresAt: profile.portal_access_expires_at ?? null,
+      isExpired: isPortalAccessExpired(profile.portal_access_expires_at),
     }))
 
     return {
@@ -4495,7 +4503,11 @@ export async function getClientPortalStatusAction(clientId: string) {
 export async function inviteClientToPortalAction(
   clientId: string,
   origin: string,
-  options?: { email?: string; fullName?: string }
+  options?: {
+    email?: string
+    fullName?: string
+    accessDuration?: import('@/lib/portal-users').PortalAccessDuration
+  }
 ) {
   const supabaseAdmin = createSupabaseAdmin()
 
@@ -4521,6 +4533,10 @@ export async function inviteClientToPortalAction(
 
     const fullName =
       options?.fullName?.trim() || client.name || email.split('@')[0] || 'Client'
+    const { portalAccessExpiresAtFromDuration } = await import('@/lib/portal-users')
+    const portalAccessExpiresAt = portalAccessExpiresAtFromDuration(
+      options?.accessDuration ?? 'none'
+    )
 
     const emailCheck = await assertPortalEmailAvailable(supabaseAdmin, email, clientId)
     if (!emailCheck.ok) return { success: false, error: emailCheck.error }
@@ -4584,6 +4600,7 @@ export async function inviteClientToPortalAction(
       email,
       companyId,
       clientId,
+      portalAccessExpiresAt,
     })
 
     await linkClientPortalAccess(supabaseAdmin, clientId, authUserId)
@@ -4602,6 +4619,7 @@ export async function createClientPortalUserAction(data: {
   email: string
   password: string
   fullName?: string
+  accessDuration?: import('@/lib/portal-users').PortalAccessDuration
 }) {
   const supabaseAdmin = createSupabaseAdmin()
 
@@ -4624,6 +4642,10 @@ export async function createClientPortalUserAction(data: {
 
     const fullName =
       data.fullName?.trim() || client.name || email.split('@')[0] || 'Client'
+    const { portalAccessExpiresAtFromDuration } = await import('@/lib/portal-users')
+    const portalAccessExpiresAt = portalAccessExpiresAtFromDuration(
+      data.accessDuration ?? 'none'
+    )
 
     const emailCheck = await assertPortalEmailAvailable(
       supabaseAdmin,
@@ -4697,6 +4719,7 @@ export async function createClientPortalUserAction(data: {
       email,
       companyId,
       clientId: data.clientId,
+      portalAccessExpiresAt,
     })
 
     await linkClientPortalAccess(
@@ -4711,6 +4734,236 @@ export async function createClientPortalUserAction(data: {
     return { success: true }
   } catch (error: any) {
     console.error('createClientPortalUserAction error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function updateClientPortalUserAction(data: {
+  clientId: string
+  userId: string
+  fullName?: string
+  accessDuration?: import('@/lib/portal-users').PortalAccessDuration
+}) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const check = await verifyCompanyAdminForClient(data.clientId)
+    if (!check.ok) return { success: false, error: check.error }
+
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, role, client_id, full_name, email')
+      .eq('id', data.userId)
+      .maybeSingle()
+
+    if (
+      !profile ||
+      profile.role !== 'client' ||
+      profile.client_id !== data.clientId
+    ) {
+      return { success: false, error: 'Portal login not found for this client' }
+    }
+
+    const fullName = data.fullName?.trim() || profile.full_name || 'Client'
+    const { portalAccessExpiresAtFromDuration } = await import('@/lib/portal-users')
+
+    const updates: Record<string, unknown> = {
+      full_name: fullName,
+    }
+    if (data.accessDuration !== undefined) {
+      updates.portal_access_expires_at = portalAccessExpiresAtFromDuration(
+        data.accessDuration
+      )
+    }
+
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .update(updates)
+      .eq('id', data.userId)
+
+    if (profileError) throw profileError
+
+    await supabaseAdmin.auth.admin.updateUserById(data.userId, {
+      user_metadata: {
+        full_name: fullName,
+        role: 'client',
+        company_id: check.companyId,
+        client_id: data.clientId,
+      },
+    })
+
+    revalidatePath(`/dashboard/clients/${data.clientId}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error('updateClientPortalUserAction error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/** Company admin sets a temporary password for a portal login. */
+export async function setClientPortalUserPasswordAction(data: {
+  clientId: string
+  userId: string
+  password: string
+}) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const check = await verifyCompanyAdminForClient(data.clientId)
+    if (!check.ok) return { success: false, error: check.error }
+
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, role, client_id')
+      .eq('id', data.userId)
+      .maybeSingle()
+
+    if (
+      !profile ||
+      profile.role !== 'client' ||
+      profile.client_id !== data.clientId
+    ) {
+      return { success: false, error: 'Portal login not found for this client' }
+    }
+
+    const { validatePassword } = await import('@/lib/password-policy')
+    const passwordCheck = validatePassword(data.password)
+    if (!passwordCheck.ok) {
+      return { success: false, error: passwordCheck.error || 'Invalid password' }
+    }
+
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
+      password: data.password,
+    })
+    if (error) throw error
+
+    revalidatePath(`/dashboard/clients/${data.clientId}`)
+    return { success: true }
+  } catch (error: any) {
+    console.error('setClientPortalUserPasswordAction error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/** Start a staff preview session of this client's portal (httpOnly cookie). */
+export async function startClientPortalPreviewAction(clientId: string) {
+  try {
+    const check = await verifyCompanyAdminForClient(clientId)
+    if (!check.ok) return { success: false as const, error: check.error }
+
+    const { cookies } = await import('next/headers')
+    const { PORTAL_PREVIEW_CLIENT_COOKIE } = await import('@/lib/portal-auth')
+    const cookieStore = await cookies()
+    cookieStore.set(PORTAL_PREVIEW_CLIENT_COOKIE, clientId, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 8, // 8 hours
+    })
+
+    return { success: true as const, portalPath: '/portal' as const }
+  } catch (error: any) {
+    console.error('startClientPortalPreviewAction error:', error)
+    return { success: false as const, error: error.message || 'Failed to start preview' }
+  }
+}
+
+/** End staff portal preview and return to the client portal tab. */
+export async function exitClientPortalPreviewAction() {
+  try {
+    const { cookies } = await import('next/headers')
+    const { PORTAL_PREVIEW_CLIENT_COOKIE, getPortalPreviewClientIdFromCookies } =
+      await import('@/lib/portal-auth')
+    const cookieStore = await cookies()
+    const clientId = await getPortalPreviewClientIdFromCookies()
+    cookieStore.set(PORTAL_PREVIEW_CLIENT_COOKIE, '', {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 0,
+    })
+
+    return {
+      success: true as const,
+      returnPath: clientId
+        ? `/dashboard/clients/${clientId}?tab=portal`
+        : '/dashboard/clients',
+    }
+  } catch (error: any) {
+    console.error('exitClientPortalPreviewAction error:', error)
+    return {
+      success: false as const,
+      error: error.message || 'Failed to exit preview',
+      returnPath: '/dashboard/clients',
+    }
+  }
+}
+
+/** Send a password-reset email to a portal login. */
+export async function sendClientPortalUserPasswordResetAction(data: {
+  clientId: string
+  userId: string
+}) {
+  const supabaseAdmin = createSupabaseAdmin()
+
+  try {
+    const check = await verifyCompanyAdminForClient(data.clientId)
+    if (!check.ok) return { success: false, error: check.error }
+
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, role, client_id, email')
+      .eq('id', data.userId)
+      .maybeSingle()
+
+    if (
+      !profile ||
+      profile.role !== 'client' ||
+      profile.client_id !== data.clientId
+    ) {
+      return { success: false, error: 'Portal login not found for this client' }
+    }
+
+    const email = profile.email?.trim().toLowerCase()
+    if (!email) {
+      return { success: false, error: 'This login has no email address' }
+    }
+
+    const {
+      buildPasswordResetVerifyUrl,
+      getPasswordResetRedirectUrl,
+    } = await import('@/lib/auth-password-reset')
+    const { sendPasswordResetEmail } = await import('@/lib/email/password-reset-email')
+    const { isResendConfigured } = await import('@/lib/email/resend')
+
+    if (isResendConfigured()) {
+      const { data: linkData, error } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email,
+      })
+      if (error || !linkData?.properties?.hashed_token) {
+        throw error || new Error('Could not generate reset link')
+      }
+      const resetUrl = buildPasswordResetVerifyUrl(linkData.properties.hashed_token)
+      const sendResult = await sendPasswordResetEmail({ to: email, resetUrl })
+      if (!sendResult.ok) {
+        return { success: false, error: sendResult.error || 'Failed to send reset email' }
+      }
+    } else {
+      // Fallback: Supabase Auth email (requires Auth email templates configured)
+      const { createClient } = await import('@/lib/supabase/server')
+      const supabase = await createClient()
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: getPasswordResetRedirectUrl(),
+      })
+      if (error) throw error
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('sendClientPortalUserPasswordResetAction error:', error)
     return { success: false, error: error.message }
   }
 }

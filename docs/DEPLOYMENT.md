@@ -149,6 +149,7 @@ All SQL files live in `supabase/`. Run them in the **Supabase SQL editor** (or v
 | 35 | `crew-label-schema.sql` | Customizable `crew_label` on `companies` (default "Crews") |
 | 36 | `portal-multi-login-schema.sql` | Multiple client portal logins per client (drop unique on `profiles.client_id`) |
 | 37 | `job-payment-plan-schema.sql` | Multi-payment job plans (`job_payment_plans`, `billing_installments`, company/series templates) |
+| 38 | `portal-access-expiry-schema.sql` | Per-login portal access expiry (`profiles.portal_access_expires_at`; NULL = no limit) |
 
 > **Security:** Run `production-rls-hardening.sql` before exposing the app to real customers. It replaces the global `company-logos` read policy with company-scoped storage policies.
 

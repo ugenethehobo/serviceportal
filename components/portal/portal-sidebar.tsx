@@ -45,6 +45,9 @@ interface PortalSidebarProps {
   clientName: string
   companyName: string
   companyLogoRef?: string | null
+  isPreview?: boolean
+  onExitPreview?: () => void
+  isExitingPreview?: boolean
 }
 
 function CompanyMark({
@@ -108,6 +111,7 @@ function MobilePortalHeader({
   clientName,
   companyName,
   companyLogoRef,
+  isPreview,
   pathname,
   isLoggingOut,
   onLogout,
@@ -178,7 +182,13 @@ function MobilePortalHeader({
               disabled={isLoggingOut}
             >
               <LogOut className="size-5 shrink-0" />
-              {isLoggingOut ? 'Signing out...' : 'Sign out'}
+              {isLoggingOut
+                ? isPreview
+                  ? 'Exiting…'
+                  : 'Signing out...'
+                : isPreview
+                  ? 'Exit preview'
+                  : 'Sign out'}
             </Button>
           </div>
         </SheetContent>
@@ -192,7 +202,9 @@ function MobilePortalHeader({
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold tracking-tight">{companyName}</p>
-        <p className="truncate text-xs text-muted-foreground">{clientName}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {isPreview ? `Preview · ${clientName}` : clientName}
+        </p>
       </div>
     </header>
   )
@@ -202,6 +214,9 @@ function DesktopPortalSidebar({
   clientName,
   companyName,
   companyLogoRef,
+  isPreview,
+  onExitPreview,
+  isExitingPreview,
   pathname,
   isLoggingOut,
   onLogout,
@@ -259,7 +274,9 @@ function DesktopPortalSidebar({
               }`}
             >
               <div className="truncate text-sm font-medium leading-5">{clientName}</div>
-              <div className="truncate text-xs leading-4 text-muted-foreground">Client portal</div>
+              <div className="truncate text-xs leading-4 text-muted-foreground">
+                {isPreview ? 'Staff preview' : 'Client portal'}
+              </div>
             </div>
           </div>
         </div>
@@ -269,24 +286,44 @@ function DesktopPortalSidebar({
         <PortalNavLinks pathname={pathname} expanded={isExpanded} />
       </div>
 
-      <div className="mt-auto p-2">
-        <button
-          type="button"
-          onClick={onLogout}
-          disabled={isLoggingOut}
-          className={`flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground ${
-            !isExpanded ? 'justify-center' : ''
-          }`}
-        >
-          <LogOut className="h-5 w-5 shrink-0" />
-          <span
-            className={`ml-3 overflow-hidden whitespace-nowrap transition-all duration-150 ${
-              isExpanded ? 'max-w-[180px] opacity-100' : 'max-w-0 opacity-0'
+      <div className="mt-auto space-y-1 p-2">
+        {isPreview && onExitPreview ? (
+          <button
+            type="button"
+            onClick={onExitPreview}
+            disabled={isExitingPreview}
+            className={`flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground ${
+              !isExpanded ? 'justify-center' : ''
             }`}
           >
-            {isLoggingOut ? 'Signing out...' : 'Sign out'}
-          </span>
-        </button>
+            <LogOut className="h-5 w-5 shrink-0" />
+            <span
+              className={`ml-3 overflow-hidden whitespace-nowrap transition-all duration-150 ${
+                isExpanded ? 'max-w-[180px] opacity-100' : 'max-w-0 opacity-0'
+              }`}
+            >
+              {isExitingPreview ? 'Exiting…' : 'Exit preview'}
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onLogout}
+            disabled={isLoggingOut}
+            className={`flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground ${
+              !isExpanded ? 'justify-center' : ''
+            }`}
+          >
+            <LogOut className="h-5 w-5 shrink-0" />
+            <span
+              className={`ml-3 overflow-hidden whitespace-nowrap transition-all duration-150 ${
+                isExpanded ? 'max-w-[180px] opacity-100' : 'max-w-0 opacity-0'
+              }`}
+            >
+              {isLoggingOut ? 'Signing out...' : 'Sign out'}
+            </span>
+          </button>
+        )}
       </div>
     </aside>
   )
@@ -297,8 +334,13 @@ export function PortalSidebar(props: PortalSidebarProps) {
   const router = useRouter()
   const supabase = createClient()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const { isPreview, onExitPreview, isExitingPreview } = props
 
   const handleLogout = async () => {
+    if (isPreview && onExitPreview) {
+      onExitPreview()
+      return
+    }
     setIsLoggingOut(true)
     try {
       await supabase.auth.signOut()

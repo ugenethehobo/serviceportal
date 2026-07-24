@@ -46,6 +46,12 @@ export async function POST(request: Request) {
         { status: access.error === 'Unauthorized' ? 401 : 403 }
       )
     }
+    if (access.mode === 'staff_preview') {
+      return NextResponse.json(
+        { error: 'Payments are disabled while previewing the client portal.' },
+        { status: 403 }
+      )
+    }
 
     const billing = await fetchJobBillingTotals(scheduleId, clientId)
     if (!billing) {

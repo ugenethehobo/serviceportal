@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Fragment } from 'react'
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
@@ -14,7 +13,7 @@ import {
   DialogContent,
   DialogDescription,
 } from "@/components/ui/dialog"
-import { CalendarDays, Users, Banknote, MapPin, Pencil } from 'lucide-react';
+import { CalendarDays, Users, Banknote, MapPin, Pencil } from 'lucide-react'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -23,11 +22,13 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import { Card, CardTitle, CardDescription, CardHeader, CardContent, CardFooter } from "@/components/ui/card"
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { MainPageCard } from '@/components/ui/main-page-card'
+import { MobileListCard } from '@/components/ui/mobile-list-card'
 import {
   archiveClientAction,
   createJobAction,
@@ -71,8 +72,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { matchesSearch } from '@/lib/search'
 import {
   MOBILE_LG_TAB_LIST_CLASS,
+  MOBILE_LIST_STACK_CLASS,
   MOBILE_NATURAL_HEIGHT_CLASS,
   MOBILE_SCROLL_VIEWPORT_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
 } from '@/lib/mobile-layout'
 import { cn } from '@/lib/utils'
 import { useLazyMountedTabs } from '@/hooks/use-lazy-mounted-tabs'
@@ -83,6 +86,7 @@ type ClientDetailTab =
   | 'jobs'
   | 'estimates'
   | 'billing'
+  | 'portal'
   | 'documents'
   | 'photos'
   | 'messaging'
@@ -108,6 +112,7 @@ const CLIENT_DETAIL_TABS: ClientDetailTab[] = [
   'jobs',
   'estimates',
   'billing',
+  'portal',
   'documents',
   'photos',
   'messaging',
@@ -166,16 +171,32 @@ export function ClientDetailPageClient({
   const { mountedTabs, mountTab } = useLazyMountedTabs(activeTab, initialTab)
   const [activity, setActivity] = useState(initialActivity)
 
+  // Keep tab state in sync with the URL only when the query changes (e.g. exit
+  // portal preview → ?tab=portal). Do not depend on activeTab here — that would
+  // fight local clicks while the old query param is still present.
   useEffect(() => {
-    if (isClientDetailTab(tabFromUrl) && tabFromUrl !== activeTab) {
-      setActiveTab(tabFromUrl)
-      mountTab(tabFromUrl)
-    }
-  }, [tabFromUrl, activeTab, mountTab])
+    const nextTab = isClientDetailTab(tabFromUrl) ? tabFromUrl : 'jobs'
+    setActiveTab(nextTab)
+    mountTab(nextTab)
+  }, [tabFromUrl, mountTab])
 
   const handleTabChange = (tab: ClientDetailTab) => {
     setActiveTab(tab)
     mountTab(tab)
+
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'jobs') {
+      params.delete('tab')
+    } else {
+      params.set('tab', tab)
+    }
+    const query = params.toString()
+    router.replace(
+      query
+        ? `/dashboard/clients/${clientId}?${query}`
+        : `/dashboard/clients/${clientId}`,
+      { scroll: false }
+    )
   }
 
   const [newJob, setNewJob] = useState({
@@ -666,6 +687,9 @@ export function ClientDetailPageClient({
         <TabsTrigger value="billing" className="px-4 py-1.5 text-sm">
           Billing
         </TabsTrigger>
+        <TabsTrigger value="portal" className="px-4 py-1.5 text-sm">
+          Client Portal
+        </TabsTrigger>
         <TabsTrigger value="documents" className="px-4 py-1.5 text-sm">
           Documents
         </TabsTrigger>
@@ -694,64 +718,43 @@ export function ClientDetailPageClient({
       </div>
     </div>
 
-      {activeTab !== 'billing' ? (
+      {/* Slim activity strip — jobs/billing/portal use their own layouts */}
+      {activeTab !== 'billing' && activeTab !== 'jobs' && activeTab !== 'portal' ? (
         <StaffActivityCard
           items={activity}
           timezone={initialTimezone}
           variant="client"
-          listClassName="max-h-48"
+          listClassName="max-h-32"
           compact
         />
       ) : null}
 
       {/* Main Content */}
-      <div className={`flex flex-col flex-1 min-h-0 gap-6 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>
-        {/* Billing replaces the main card with its own left/right surfaces */}
+      <div className={`flex flex-col flex-1 min-h-0 gap-4 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>
+        {/* Jobs: list + client details side column (replaces the shared main card) */}
         <TabsContent
-          value="billing"
-          className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+          value="jobs"
+          className={`mt-0 flex min-h-0 flex-1 flex-col outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
         >
-          {mountedTabs.has('billing') ? (
-            <StripeConnectGate showAlert={false}>
-              <ClientBillingPanel
-                clientId={clientId}
-                activity={activity}
-                timezone={initialTimezone}
-              />
-            </StripeConnectGate>
-          ) : null}
-        </TabsContent>
-
-        {/* Schedules / other tabs share one main card (hidden on billing) */}
-        <Card
-          className={cn(
-            'flex-[7] flex flex-col p-6 min-h-0 max-md:flex-none max-md:p-4',
-            MOBILE_NATURAL_HEIGHT_CLASS,
-            activeTab === 'billing' && 'hidden'
-          )}
-        >
-          {/* Tab Content Area - Full card is now used for the active page */}
-
-          <TabsContent
-            value="jobs"
-            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+          <div
+            className={cn(
+              'flex min-h-0 flex-1 flex-col gap-4',
+              'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)] lg:items-stretch lg:gap-4'
+            )}
           >
-            <>
-              {/* Header row for Jobs tab */}
-              <div className="flex flex-col gap-3 mb-4 shrink-0">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            {/* Jobs list */}
+            <MainPageCard className="h-full min-h-0 gap-0 overflow-hidden p-4 sm:p-5 max-md:min-h-[16rem]">
+              <div className="mb-3 flex shrink-0 flex-col gap-3 sm:mb-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <SearchBar
                     value={jobSearchQuery}
                     onChange={setJobSearchQuery}
                     placeholder="Search jobs by title, crew, or status..."
-                    className="flex-1 max-w-md"
+                    className="max-w-md flex-1"
                   />
-                  <div className="flex items-center gap-3 sm:ml-auto">
+                  <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
                     <div className="flex items-center gap-2">
-                      <Switch
-                        checked={showArchived}
-                        onCheckedChange={setShowArchived}
-                      />
+                      <Switch checked={showArchived} onCheckedChange={setShowArchived} />
                       <span className="text-sm text-muted-foreground">Show archived</span>
                     </div>
                     <Button
@@ -769,138 +772,331 @@ export function ClientDetailPageClient({
                 </div>
               </div>
 
-              {/* Jobs List */}
               {visibleSchedules.length > 0 ? (
                 <ScrollArea
-                  className={`flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+                  className={`min-h-0 flex-1 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
                   viewportClassName={cn('scroll-fade', MOBILE_SCROLL_VIEWPORT_CLASS)}
                 >
-                  <div className="space-y-4">
-                  {visibleSchedules.map((schedule, index) => (
-                    <Fragment key={schedule.id}>
-                      {/* Job Card Row */}
-                      <div className="h-32 flex items-center mx-1 my-3 group max-md:h-auto max-md:my-2">
-                        {/* Your existing left accent bar */}
-                        <div className="h-full flex">
-                          {schedule.recurring_rule_id && (
-                            <div className="w-1 mr-2 rounded-full h-full bg-purple-400" />
-                          )}
-                        </div>
-
+                  {/* p-px keeps nested job card rings from clipping */}
+                  {/* Desktop: multi-section job rows */}
+                  <div className={cn('space-y-3 p-px', MOBILE_TABLE_DESKTOP_ONLY_CLASS)}>
+                    {visibleSchedules.map((schedule) => (
+                      <div
+                        key={schedule.id}
+                        className="group flex h-[7.25rem] items-center"
+                      >
+                        {schedule.recurring_rule_id ? (
+                          <div className="mr-2 h-full w-1 shrink-0 rounded-full bg-purple-400" />
+                        ) : null}
                         <Card
-                          className="flex flex-row flex-1 w-full h-full overflow-hidden hover:shadow-md transition-all bg-background hover:bg-card text-muted-foreground hover:text-foreground cursor-pointer max-md:h-auto max-md:flex-col"
-                          onClick={() => router.push(`/dashboard/clients/${clientId}/jobs/${schedule.id}`)}
+                          className="flex h-full w-full flex-1 cursor-pointer flex-row overflow-hidden bg-background text-muted-foreground transition-all hover:bg-card hover:text-foreground hover:shadow-md"
+                          onClick={() =>
+                            router.push(`/dashboard/clients/${clientId}/jobs/${schedule.id}`)
+                          }
                         >
-
-                          {/* SECTION 1: Title */}
-                          <div className="flex-1 flex flex-col min-w-0 max-md:w-full">
-                            <CardHeader className="px-6 max-md:px-4 max-md:py-3">
-                              <CardTitle className="flex items-center">
-                                <div>{schedule.title}</div>
-                                <div className="ml-4">
-                                  {schedule.recurring_rule_id && (
-                                    <div className="text-[10px] font-medium px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700 shrink-0">
-                                      RECURRING
-                                    </div>
-                                  )}
-                                </div>
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <CardHeader className="px-5 py-3">
+                              <CardTitle className="flex items-center gap-3 text-base">
+                                <span className="truncate">{schedule.title}</span>
+                                {schedule.recurring_rule_id ? (
+                                  <span className="shrink-0 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
+                                    RECURRING
+                                  </span>
+                                ) : null}
                               </CardTitle>
                             </CardHeader>
-
-                            <CardContent className="flex items-center flex-1 px-6">
-                            <div className="pr-2">
-                               <CalendarDays />
-                             </div>
-                             <div className="flex flex-col">
-                               <div className="text-muted-foreground min-w-[100px]">
-                                 {new Date(schedule.start_time).toLocaleDateString([], {
-                                   month: 'short', day: 'numeric'
-                                 })}
-                               </div>
-                               <div className="text-muted-foreground min-w-[100px]">
-                                 {new Date(schedule.start_time).toLocaleTimeString([], {
-                                   hour: 'numeric', minute: '2-digit'
-                                 })}
-                                 {' - '}
-                                 {new Date(schedule.end_time).toLocaleTimeString([], {
-                                   hour: 'numeric', minute: '2-digit'
-                                 })}
-                               </div>
-                             </div>
+                            <CardContent className="flex flex-1 items-center gap-2 px-5 pb-3">
+                              <CalendarDays className="size-4 shrink-0" />
+                              <div className="min-w-0 text-sm">
+                                <div>
+                                  {new Date(schedule.start_time).toLocaleDateString([], {
+                                    month: 'short',
+                                    day: 'numeric',
+                                  })}
+                                </div>
+                                <div className="text-muted-foreground">
+                                  {new Date(schedule.start_time).toLocaleTimeString([], {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  })}
+                                  {' – '}
+                                  {new Date(schedule.end_time).toLocaleTimeString([], {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  })}
+                                </div>
+                              </div>
                             </CardContent>
                           </div>
 
-                          {/* Vertical Separator */}
-                          <Separator orientation="vertical" className="h-auto max-md:hidden" />
+                          <Separator orientation="vertical" className="h-auto" />
 
-                          {/* SECTION 2: Status & Crew */}
-                          <div className="flex-1 flex flex-col min-w-0 max-md:w-full max-md:border-t max-md:pt-2">
-                            <CardHeader className="px-6 max-md:px-4 max-md:py-3">
-                              <CardTitle>Status & Crew</CardTitle>
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <CardHeader className="px-5 py-3">
+                              <CardTitle className="text-base">Status & Crew</CardTitle>
                             </CardHeader>
-
-                            <CardContent className="flex-1 px-6 flex items-center gap-2">
-                              <Users className="shrink-0" />
-                              <div className="flex items-center gap-2 flex-wrap">
+                            <CardContent className="flex flex-1 items-center gap-2 px-5 pb-3">
+                              <Users className="size-4 shrink-0" />
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
                                 <JobStatusBadge status={schedule.status} />
-                                {schedule.crew && (
-                                  <span className="text-sm">Assigned to {schedule.crew.name}</span>
-                                )}
+                                {schedule.crew ? (
+                                  <span className="truncate text-sm">
+                                    {schedule.crew.name}
+                                  </span>
+                                ) : null}
+                                {schedule.hasCrewConflict ? (
+                                  <span className="text-sm font-medium text-red-600">
+                                    Conflict
+                                  </span>
+                                ) : null}
                               </div>
                             </CardContent>
-
-                            <CardFooter className="px-6">
-                              {schedule.hasCrewConflict && (
-                                <div className="text-red-600 font-medium">Conflict</div>
-                              )}
-                            </CardFooter>
                           </div>
 
-                          {/* Vertical Separator */}
-                          <Separator orientation="vertical" className="h-auto max-md:hidden" />
+                          <Separator orientation="vertical" className="h-auto" />
 
-                          {/* SECTION 3: Price */}
-                          <div className="flex-1 flex flex-col min-w-0 max-md:w-full max-md:border-t max-md:pt-2">
-                            <CardHeader className="px-6 max-md:px-4 max-md:py-3">
-                              <CardTitle>Job Price</CardTitle>
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <CardHeader className="px-5 py-3">
+                              <CardTitle className="text-base">Job Price</CardTitle>
                             </CardHeader>
-
-                            <CardContent className="flex-1 px-6 flex items-center">
-                              <Banknote className="mr-2" />
-                              <div>
-                                {schedule.price > 0 ? (
-                                  <div className="text-2xl font-semibold text-green-600 tracking-tight">
-                                    ${schedule.price.toFixed(2)}
-                                  </div>
-                                ) : (
-                                  <div className="text-sm text-muted-foreground">No price set</div>
-                                )}
-                              </div>
+                            <CardContent className="flex flex-1 items-center gap-2 px-5 pb-3">
+                              <Banknote className="size-4 shrink-0" />
+                              {schedule.price > 0 ? (
+                                <span className="text-xl font-semibold tracking-tight text-green-600">
+                                  ${schedule.price.toFixed(2)}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">No price set</span>
+                              )}
                             </CardContent>
-
-                            <CardFooter className="px-6" />
                           </div>
                         </Card>
-
                       </div>
+                    ))}
+                  </div>
 
-
-                    </Fragment>
-                  ))}
+                  {/* Mobile: dense single-row cards */}
+                  <div className={cn('space-y-2 p-px', MOBILE_LIST_STACK_CLASS)}>
+                    {visibleSchedules.map((schedule) => (
+                      <MobileListCard
+                        key={schedule.id}
+                        className="p-3"
+                        onClick={() =>
+                          router.push(`/dashboard/clients/${clientId}/jobs/${schedule.id}`)
+                        }
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {schedule.recurring_rule_id ? (
+                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                              ) : null}
+                              <p className="truncate text-sm font-medium leading-snug">
+                                {schedule.title}
+                              </p>
+                            </div>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {new Date(schedule.start_time).toLocaleDateString([], {
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                              {' · '}
+                              {new Date(schedule.start_time).toLocaleTimeString([], {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                              {schedule.crew ? ` · ${schedule.crew.name}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <JobStatusBadge status={schedule.status} />
+                            {schedule.price > 0 ? (
+                              <span className="text-sm font-semibold tabular-nums text-green-600">
+                                ${schedule.price.toFixed(2)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </MobileListCard>
+                    ))}
                   </div>
                 </ScrollArea>
               ) : (
-                <div className="flex-1 flex items-center justify-center border border-dashed rounded-lg">
-                  <p className="text-muted-foreground">
-                    {archivedFiltered.length > 0 && jobSearchQuery.trim()
-                      ? 'No jobs match your search.'
-                      : 'No jobs scheduled yet for this client.'}
-                  </p>
+                <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  {archivedFiltered.length > 0 && jobSearchQuery.trim()
+                    ? 'No jobs match your search.'
+                    : 'No jobs scheduled yet for this client.'}
                 </div>
               )}
-            </>
-          </TabsContent>
+            </MainPageCard>
 
+            {/* Client details column — cards size to content; column scrolls via ScrollArea */}
+            <div
+              className={cn(
+                'flex h-full min-h-0 flex-col overflow-hidden',
+                MOBILE_NATURAL_HEIGHT_CLASS
+              )}
+            >
+              <ScrollArea
+                className={cn(
+                  'h-full min-h-0 w-full flex-1',
+                  MOBILE_NATURAL_HEIGHT_CLASS
+                )}
+                viewportClassName={cn('scroll-fade', MOBILE_SCROLL_VIEWPORT_CLASS)}
+              >
+                {/* p-px prevents card border/ring clipping at scroll edges */}
+                <div className="flex flex-col gap-4 p-px pb-1">
+                  <Card className="flex h-52 shrink-0 flex-col gap-0 overflow-hidden p-0 py-0 shadow-sm lg:h-56">
+                    <StaffActivityCard
+                      items={activity}
+                      timezone={initialTimezone}
+                      variant="client"
+                      embedded
+                      compact
+                      listClassName="h-full min-h-0 flex-1"
+                    />
+                  </Card>
+
+                  <Card className="flex shrink-0 flex-col gap-4 p-4 py-4 text-sm shadow-sm sm:p-5 sm:py-5">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold">Contact</h3>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={openAddressModal}
+                      >
+                        <Pencil className="mr-1 size-3" />
+                        Address
+                      </Button>
+                    </div>
+                    <div className="space-y-4">
+                      {[
+                        { label: 'Name', field: 'name', value: client.name },
+                        { label: 'Email', field: 'email', value: client.email },
+                        { label: 'Phone', field: 'phone', value: client.phone },
+                      ].map(({ label, field, value }) => (
+                        <div key={field} className="min-w-0">
+                          <div className="text-xs text-muted-foreground">{label}</div>
+                          {editingField === field ? (
+                            <Input
+                              value={tempValue}
+                              onChange={(e) => setTempValue(e.target.value)}
+                              onBlur={() => handleBlur(field)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleBlur(field)
+                                if (e.key === 'Escape') setEditingField(null)
+                              }}
+                              autoFocus
+                              className="mt-1"
+                            />
+                          ) : (
+                            <div
+                              onClick={() =>
+                                startEditing(field, (client as any)[field] || '')
+                              }
+                              className="-mx-1 cursor-pointer break-words rounded px-1 py-1 text-sm font-medium hover:bg-muted/50"
+                            >
+                              {value || (
+                                <span className="italic text-muted-foreground">
+                                  Click to add
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      <div className="min-w-0">
+                        <div className="text-xs text-muted-foreground">Address</div>
+                        <button
+                          type="button"
+                          onClick={openAddressModal}
+                          className="-mx-1 mt-0.5 w-full rounded px-1 py-1.5 text-left text-sm hover:bg-muted/50"
+                        >
+                          {displayAddress ? (
+                            <span className="flex items-start gap-1.5 font-medium leading-snug break-words">
+                              <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                              <span className="min-w-0">{displayAddress}</span>
+                            </span>
+                          ) : (
+                            <span className="italic text-muted-foreground">
+                              No address — click to add
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </Card>
+
+                  <Card className="flex shrink-0 flex-col gap-3 p-4 py-4 text-sm shadow-sm sm:p-5 sm:py-5">
+                    <h3 className="text-sm font-semibold">Notes</h3>
+                    <Textarea
+                      value={client.notes || ''}
+                      onChange={async (e) => {
+                        const newNotes = e.target.value
+                        setClient({ ...client, notes: newNotes })
+                        clearTimeout((window as any).notesTimeout)
+                        ;(window as any).notesTimeout = setTimeout(async () => {
+                          await updateClientAction({
+                            id: client.id,
+                            name: client.name,
+                            notes: newNotes,
+                          })
+                        }, 800)
+                      }}
+                      className="min-h-[8rem] resize-y text-sm"
+                      placeholder="Internal notes about this client…"
+                    />
+                  </Card>
+
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Billing replaces the main card with its own left/right surfaces */}
+        <TabsContent
+          value="billing"
+          className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+        >
+          {mountedTabs.has('billing') ? (
+            <StripeConnectGate showAlert={false}>
+              <ClientBillingPanel
+                clientId={clientId}
+                activity={activity}
+                timezone={initialTimezone}
+              />
+            </StripeConnectGate>
+          ) : null}
+        </TabsContent>
+
+        {/* Client portal management (company admin) */}
+        <TabsContent
+          value="portal"
+          className={`mt-0 flex min-h-0 flex-1 flex-col outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+        >
+          {mountedTabs.has('portal') ? (
+            <ClientPortalAccess
+              clientId={clientId}
+              clientEmail={client.email}
+              timezone={initialTimezone}
+            />
+          ) : null}
+        </TabsContent>
+
+        {/* Other tabs share one main card (hidden on jobs / billing / portal) */}
+        <Card
+          className={cn(
+            'flex min-h-0 flex-1 flex-col p-6 max-md:flex-none max-md:p-4',
+            MOBILE_NATURAL_HEIGHT_CLASS,
+            (activeTab === 'billing' ||
+              activeTab === 'jobs' ||
+              activeTab === 'portal') &&
+              'hidden'
+          )}
+        >
           <TabsContent
             value="estimates"
             className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
@@ -941,119 +1137,6 @@ export function ClientDetailPageClient({
             ) : null}
           </TabsContent>
         </Card>
-
-        {/* Contact + Notes — only on Jobs tab */}
-        {activeTab === 'jobs' && (
-        <>
-        <div className="flex-[3] grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0 max-md:flex-none">
-          <Card className="p-6 flex flex-col min-h-0">
-            <CardHeader className="pb-3 shrink-0">
-              <CardTitle className="font-semibold text-lg">
-                Contact Information
-              </CardTitle>
-            </CardHeader>
-            <ScrollArea
-              className={`flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
-              viewportClassName={cn('scroll-fade', MOBILE_SCROLL_VIEWPORT_CLASS)}
-            >
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-
-              {[
-                { label: 'Name', field: 'name', value: client.name },
-                { label: 'Email', field: 'email', value: client.email },
-                { label: 'Phone', field: 'phone', value: client.phone },
-              ].map(({ label, field, value }) => (
-                <div key={field}>
-                  <div className="text-sm text-muted-foreground">{label}</div>
-                  {editingField === field ? (
-                    <Input
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      onBlur={() => handleBlur(field)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleBlur(field)
-                        if (e.key === 'Escape') setEditingField(null)
-                      }}
-                      autoFocus
-                      className="mt-1"
-                    />
-                  ) : (
-                    <div
-                      onClick={() => startEditing(field, (client as any)[field] || '')}
-                      className="font-medium cursor-pointer hover:bg-muted/50 px-2 py-1 -mx-2 rounded"
-                    >
-                      {value || <span className="text-muted-foreground italic">Click to add</span>}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              <div className="md:col-span-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm text-muted-foreground">Address</div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                    onClick={openAddressModal}
-                  >
-                    <Pencil className="size-3 mr-1" />
-                    Edit
-                  </Button>
-                </div>
-                <button
-                  type="button"
-                  onClick={openAddressModal}
-                  className="mt-1 w-full text-left rounded-md px-2 py-2 -mx-2 hover:bg-muted/50 transition-colors"
-                >
-                  {displayAddress ? (
-                    <span className="flex items-start gap-2 font-medium text-sm leading-snug">
-                      <MapPin className="size-4 shrink-0 mt-0.5 text-muted-foreground" />
-                      <span>{displayAddress}</span>
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted-foreground italic">
-                      No address — click to add
-                    </span>
-                  )}
-                </button>
-              </div>
-
-            </CardContent>
-            </ScrollArea>
-          </Card>
-
-          <Card className="p-6 flex flex-col">
-            <CardHeader>
-              <CardTitle className="font-semibold text-lg">
-                Notes
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-            <Textarea
-              value={client.notes || ''}
-              onChange={async (e) => {
-                const newNotes = e.target.value
-                setClient({ ...client, notes: newNotes })
-                clearTimeout((window as any).notesTimeout)
-                ;(window as any).notesTimeout = setTimeout(async () => {
-                  await updateClientAction({ id: client.id, name: client.name, notes: newNotes })
-                }, 800)
-              }}
-              className="flex-1 min-h-[120px] resize-y"
-            />
-            </CardContent>
-          </Card>
-
-          <Card className="flex p-6">
-            <ClientPortalAccess clientId={clientId} clientEmail={client.email} />
-          </Card>
-        </div>
-
-
-        </>
-        )}
       </div>
 
       {/* Edit Address Modal */}

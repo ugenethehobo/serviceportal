@@ -20,7 +20,6 @@ import {
   type ActivityFeedItem,
   type ActivityPeriod,
 } from '@/lib/activity-feed'
-import { SCROLLABLE_MODAL_BODY_CLASS } from '@/lib/mobile-layout'
 import { cn } from '@/lib/utils'
 
 type ActivityFeedCardProps = {
@@ -207,14 +206,12 @@ export function ActivityFeedCard({
 
   const body =
     filtered.length === 0 ? (
-      <div className="px-4 py-10 text-center text-sm text-muted-foreground sm:px-5">
+      <div className="px-4 py-8 text-center text-sm text-muted-foreground sm:px-5">
         {emptyMessage}
       </div>
-    ) : embedded ? (
-      <div className={cn(SCROLLABLE_MODAL_BODY_CLASS, scrollClassName)}>{list}</div>
     ) : (
       <ScrollArea
-        className={`scroll-fade ${scrollClassName}`}
+        className={cn('min-h-0 scroll-fade', scrollClassName)}
         viewportClassName="scroll-fade"
       >
         {list}
@@ -223,15 +220,15 @@ export function ActivityFeedCard({
 
   if (embedded) {
     return (
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
         {header}
-        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{body}</div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{body}</div>
       </div>
     )
   }
 
   return (
-    <Card className="shadow-sm overflow-hidden flex flex-col">
+    <Card className="flex flex-col overflow-hidden shadow-sm">
       {header}
       {body}
     </Card>

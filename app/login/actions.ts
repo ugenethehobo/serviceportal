@@ -62,7 +62,7 @@ export async function verifyClientPortalLoginAction(userId: string) {
 
     const { data: profile } = await admin
       .from('profiles')
-      .select('role, client_id')
+      .select('role, client_id, portal_access_expires_at')
       .eq('id', userId)
       .single()
 
@@ -74,6 +74,14 @@ export async function verifyClientPortalLoginAction(userId: string) {
       return {
         ok: false as const,
         error: 'Portal account is incomplete. Ask your service provider to recreate your portal login.',
+      }
+    }
+
+    const { isPortalAccessExpired } = await import('@/lib/portal-users')
+    if (isPortalAccessExpired(profile.portal_access_expires_at)) {
+      return {
+        ok: false as const,
+        error: 'Portal access has expired. Contact your service provider.',
       }
     }
 
@@ -95,13 +103,7 @@ export async function verifyClientPortalLoginAction(userId: string) {
       }
     }
 
-    if (client.auth_user_id && client.auth_user_id !== userId) {
-      return {
-        ok: false as const,
-        error: 'This portal account is misconfigured. Contact your service provider.',
-      }
-    }
-
+    // Multi-login: any profile linked via client_id may sign in.
     if (!client.auth_user_id) {
       await admin
         .from('clients')

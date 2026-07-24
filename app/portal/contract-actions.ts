@@ -17,30 +17,32 @@ import {
   type ContractStatus,
 } from '@/lib/contracts'
 import { normalizeDocumentTemplate } from '@/lib/document-template'
-import { createSupabaseAdmin, getSessionProfile } from '@/lib/portal-auth'
+import { createSupabaseAdmin, resolvePortalSession } from '@/lib/portal-auth'
 
 async function requirePortalClient() {
-  const session = await getSessionProfile()
-  if (!session || session.profile.role !== 'client' || !session.profile.client_id) {
+  const portal = await resolvePortalSession()
+  if (!portal) {
     throw new Error('Unauthorized')
   }
 
-  const admin = createSupabaseAdmin()
-  const { data: client } = await admin
-    .from('clients')
-    .select('id, portal_enabled, company_id, name')
-    .eq('id', session.profile.client_id)
-    .single()
-
-  if (!client?.portal_enabled) {
+  if (!portal.isPreview && !portal.portalEnabled) {
     throw new Error('Portal access disabled')
   }
 
   return {
-    clientId: session.profile.client_id,
-    clientName: client.name || 'Client',
-    companyId: client.company_id as string,
+    clientId: portal.clientId,
+    clientName: portal.clientName,
+    companyId: portal.companyId,
+    isPreview: portal.isPreview,
   }
+}
+
+async function requirePortalClientWrite() {
+  const portal = await requirePortalClient()
+  if (portal.isPreview) {
+    throw new Error('Actions are disabled while previewing the portal as staff')
+  }
+  return portal
 }
 
 export type PortalContractSigningData = {
@@ -179,7 +181,7 @@ export async function signPortalContractAction(
   | { success: false; error: string }
 > {
   try {
-    const portal = await requirePortalClient()
+    const portal = await requirePortalClientWrite()
     const contract = await signContractByClient(contractId, portal.clientId, input)
 
     return {

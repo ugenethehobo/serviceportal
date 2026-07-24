@@ -3,6 +3,9 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { cache } from 'react'
 
+/** HttpOnly cookie: staff preview of a specific client portal. */
+export const PORTAL_PREVIEW_CLIENT_COOKIE = 'portal_preview_client_id'
+
 export type PortalProfile = {
   id: string
   role: string
@@ -132,6 +135,18 @@ export async function assertClientPortalAccess(clientId: string) {
     if (!client?.portal_enabled) {
       return { ok: false as const, error: 'Portal access disabled' }
     }
+    const { data: portalProfile } = await admin
+      .from('profiles')
+      .select('portal_access_expires_at')
+      .eq('id', session.userId)
+      .maybeSingle()
+    const { isPortalAccessExpired } = await import('@/lib/portal-users')
+    if (isPortalAccessExpired(portalProfile?.portal_access_expires_at)) {
+      return {
+        ok: false as const,
+        error: 'Portal access has expired. Contact your service provider.',
+      }
+    }
     return { ok: true as const, profile, mode: 'client' as const }
   }
 
@@ -144,6 +159,12 @@ export async function assertClientPortalAccess(clientId: string) {
       .eq('company_id', profile.company_id)
       .single()
     if (!client) return { ok: false as const, error: 'Client not found' }
+
+    const previewClientId = await getPortalPreviewClientIdFromCookies()
+    if (previewClientId && previewClientId === clientId) {
+      return { ok: true as const, profile, mode: 'staff_preview' as const }
+    }
+
     return { ok: true as const, profile, mode: 'staff' as const }
   }
 
@@ -180,53 +201,134 @@ export type PortalShellData = {
   companyName: string
   /** Storage path or legacy URL from companies.logo_url — resolve before display. */
   companyLogoRef: string | null
+  /** Staff viewing the portal as this client (read-only writes). */
+  isPreview?: boolean
+  /** Dashboard path to return to when leaving staff preview. */
+  previewReturnPath?: string | null
+}
+
+export type PortalSessionContext = {
+  profile: PortalProfile
+  clientId: string
+  companyId: string
+  clientName: string
+  portalEnabled: boolean
+  isPreview: boolean
+}
+
+export async function getPortalPreviewClientIdFromCookies(): Promise<string | null> {
+  const cookieStore = await cookies()
+  const value = cookieStore.get(PORTAL_PREVIEW_CLIENT_COOKIE)?.value?.trim()
+  return value || null
+}
+
+/**
+ * Resolve the active portal client for a real client login or staff preview cookie.
+ */
+export async function resolvePortalSession(): Promise<PortalSessionContext | null> {
+  const session = await getSessionProfile()
+  if (!session) return null
+
+  const { profile } = session
+  const admin = createSupabaseAdmin()
+
+  if (profile.role === 'client' && profile.client_id) {
+    const { data: portalProfile } = await admin
+      .from('profiles')
+      .select('portal_access_expires_at, client_id')
+      .eq('id', session.userId)
+      .maybeSingle()
+
+    if (!portalProfile?.client_id || portalProfile.client_id !== profile.client_id) {
+      return null
+    }
+
+    const { isPortalAccessExpired } = await import('@/lib/portal-users')
+    if (isPortalAccessExpired(portalProfile.portal_access_expires_at)) {
+      return null
+    }
+
+    const { data: client } = await admin
+      .from('clients')
+      .select('id, name, portal_enabled, auth_user_id, company_id')
+      .eq('id', profile.client_id)
+      .single()
+
+    if (!client?.company_id || client.portal_enabled === false) {
+      return null
+    }
+
+    // Multi-login: keep primary pointer for legacy callers when empty.
+    if (!client.auth_user_id) {
+      await admin
+        .from('clients')
+        .update({ auth_user_id: session.userId, portal_enabled: true })
+        .eq('id', profile.client_id)
+    }
+
+    return {
+      profile,
+      clientId: profile.client_id,
+      companyId: client.company_id,
+      clientName: client.name || 'Client',
+      portalEnabled: client.portal_enabled,
+      isPreview: false,
+    }
+  }
+
+  if (isStaffRole(profile.role) && profile.company_id) {
+    const previewClientId = await getPortalPreviewClientIdFromCookies()
+    if (!previewClientId) return null
+
+    const { data: client } = await admin
+      .from('clients')
+      .select('id, name, portal_enabled, company_id')
+      .eq('id', previewClientId)
+      .eq('company_id', profile.company_id)
+      .maybeSingle()
+
+    if (!client?.company_id) return null
+
+    // Staff may preview even when portal is disabled (to verify setup).
+    return {
+      profile,
+      clientId: client.id,
+      companyId: client.company_id,
+      clientName: client.name || 'Client',
+      portalEnabled: Boolean(client.portal_enabled),
+      isPreview: true,
+    }
+  }
+
+  return null
 }
 
 export const getPortalShellDataAction = cache(async (): Promise<
   { success: true; data: PortalShellData } | { success: false; error: string }
 > => {
-  const session = await getSessionProfile()
-  if (!session || session.profile.role !== 'client' || !session.profile.client_id) {
+  const portal = await resolvePortalSession()
+  if (!portal) {
     return { success: false, error: 'Not authenticated' }
   }
 
   const admin = createSupabaseAdmin()
-  const { data: client, error: clientError } = await admin
-    .from('clients')
-    .select('portal_enabled, name, auth_user_id, company_id, companies (name, logo_url)')
-    .eq('id', session.profile.client_id)
-    .single()
-
-  if (clientError || !client) {
-    return { success: false, error: 'Client not found' }
-  }
-
-  if (client.portal_enabled === false) {
-    return { success: false, error: 'Portal access disabled' }
-  }
-
-  if (client.auth_user_id && client.auth_user_id !== session.userId) {
-    return { success: false, error: 'Unauthorized' }
-  }
-
-  if (!client.auth_user_id) {
-    await admin
-      .from('clients')
-      .update({ auth_user_id: session.userId, portal_enabled: true })
-      .eq('id', session.profile.client_id)
-  }
-
-  const company = Array.isArray(client.companies)
-    ? client.companies[0]
-    : client.companies
+  const { data: company } = await admin
+    .from('companies')
+    .select('name, logo_url')
+    .eq('id', portal.companyId)
+    .maybeSingle()
 
   return {
     success: true,
     data: {
-      clientId: session.profile.client_id,
-      clientName: client.name,
+      clientId: portal.clientId,
+      clientName: portal.clientName,
       companyName: company?.name || 'Your service provider',
       companyLogoRef: company?.logo_url ?? null,
+      isPreview: portal.isPreview,
+      previewReturnPath: portal.isPreview
+        ? `/dashboard/clients/${portal.clientId}?tab=portal`
+        : null,
     },
   }
 })

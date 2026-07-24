@@ -1,5 +1,53 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js'
 
+/** Preset access windows for portal logins. `none` = never expires. */
+export type PortalAccessDuration = 'none' | '7d' | '30d' | '90d' | '1y'
+
+export const PORTAL_ACCESS_DURATION_LABELS: Record<PortalAccessDuration, string> = {
+  none: 'No time limit',
+  '7d': '7 days',
+  '30d': '30 days',
+  '90d': '90 days',
+  '1y': '1 year',
+}
+
+export function portalAccessExpiresAtFromDuration(
+  duration: PortalAccessDuration,
+  from: Date = new Date()
+): string | null {
+  if (duration === 'none') return null
+  const expires = new Date(from.getTime())
+  if (duration === '7d') expires.setUTCDate(expires.getUTCDate() + 7)
+  else if (duration === '30d') expires.setUTCDate(expires.getUTCDate() + 30)
+  else if (duration === '90d') expires.setUTCDate(expires.getUTCDate() + 90)
+  else if (duration === '1y') expires.setUTCFullYear(expires.getUTCFullYear() + 1)
+  return expires.toISOString()
+}
+
+export function isPortalAccessExpired(expiresAt: string | null | undefined): boolean {
+  if (!expiresAt) return false
+  const ms = Date.parse(expiresAt)
+  if (Number.isNaN(ms)) return false
+  return ms <= Date.now()
+}
+
+export function formatPortalAccessExpiry(
+  expiresAt: string | null | undefined,
+  timezone?: string
+): string {
+  if (!expiresAt) return 'No time limit'
+  if (isPortalAccessExpired(expiresAt)) return 'Expired'
+  try {
+    return new Date(expiresAt).toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      ...(timezone ? { timeZone: timezone } : {}),
+    })
+  } catch {
+    return new Date(expiresAt).toLocaleString()
+  }
+}
+
 export function createPortalSupabaseAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,7 +86,7 @@ export async function findProfilesByClientId(
 ) {
   const { data, error } = await supabaseAdmin
     .from('profiles')
-    .select('id, email, full_name, role, client_id, created_at')
+    .select('id, email, full_name, role, client_id, created_at, portal_access_expires_at')
     .eq('client_id', clientId)
     .eq('role', 'client')
     .order('created_at', { ascending: true })
@@ -102,20 +150,24 @@ export async function upsertClientPortalProfile(
     email: string
     companyId: string
     clientId: string
+    /** ISO timestamp, or null for no expiry. Omit to leave existing value on update. */
+    portalAccessExpiresAt?: string | null
   }
 ) {
-  const { error } = await supabaseAdmin.from('profiles').upsert(
-    {
-      id: data.userId,
-      full_name: data.fullName,
-      email: data.email,
-      company_id: data.companyId,
-      client_id: data.clientId,
-      status: 'Active',
-      role: 'client',
-    },
-    { onConflict: 'id' }
-  )
+  const row: Record<string, unknown> = {
+    id: data.userId,
+    full_name: data.fullName,
+    email: data.email,
+    company_id: data.companyId,
+    client_id: data.clientId,
+    status: 'Active',
+    role: 'client',
+  }
+  if (data.portalAccessExpiresAt !== undefined) {
+    row.portal_access_expires_at = data.portalAccessExpiresAt
+  }
+
+  const { error } = await supabaseAdmin.from('profiles').upsert(row, { onConflict: 'id' })
 
   if (error) throw error
 }

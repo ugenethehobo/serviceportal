@@ -202,9 +202,16 @@ export async function middleware(request: NextRequest) {
     }
 
     if (isPortalRoute && role !== 'client') {
-      const url = request.nextUrl.clone()
-      url.pathname = role === 'team_member' ? '/dashboard/team' : '/dashboard'
-      return NextResponse.redirect(url)
+      // Staff may enter the client portal only while previewing a client (cookie).
+      const previewClientId = request.cookies.get('portal_preview_client_id')?.value
+      const isStaffPreview =
+        Boolean(previewClientId) &&
+        (role === 'company_admin' || role === 'team_member')
+      if (!isStaffPreview) {
+        const url = request.nextUrl.clone()
+        url.pathname = role === 'team_member' ? '/dashboard/team' : '/dashboard'
+        return NextResponse.redirect(url)
+      }
     }
 
     if (isStaffRoute && role === 'client') {
