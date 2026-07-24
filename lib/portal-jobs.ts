@@ -2,13 +2,58 @@ import { formatCurrency, type BillingSummary } from '@/lib/billing'
 import {
   computeCanPay,
   computeImplicitFullBalancePayable,
+  type JobPaymentPlanType,
   type PlanProgressSummary,
 } from '@/lib/payment-plans'
 import { formatTimeInTimezone } from '@/lib/timezone'
 
+export type PortalJobInstallment = {
+  id: string
+  key: string
+  label: string
+  remaining: number
+  remainingFormatted: string
+  amountDue: number
+  amountDueFormatted: string
+  amountPaid: number
+  collectibleNow: boolean
+  status: string
+}
+
+/** Prefer next collectible installment label for portal copy (activity, billing rows). */
+export function portalDueNowLabel(job: {
+  amountDueNow: number
+  nextInstallmentLabel?: string | null
+  installments?: Array<{
+    label: string
+    remaining: number
+    collectibleNow: boolean
+    status: string
+  }>
+}): string | null {
+  if (job.amountDueNow <= 0) return null
+  if (job.nextInstallmentLabel?.trim()) return job.nextInstallmentLabel.trim()
+  const next = (job.installments || []).find(
+    (i) =>
+      i.status !== 'superseded' &&
+      i.collectibleNow &&
+      i.remaining > 0
+  )
+  return next?.label?.trim() || null
+}
+
+export type PortalCrewMember = {
+  id: string
+  fullName: string
+  avatarUrl: string | null
+  isLead: boolean
+}
+
 export type PortalJobCrew = {
   id: string
   name: string
+  leadId?: string | null
+  members?: PortalCrewMember[]
 } | null
 
 export type PortalJobSchedule = {
@@ -21,6 +66,147 @@ export type PortalJobSchedule = {
   price: number
   crew: PortalJobCrew
   serviceAddress: string
+}
+
+/** Account-level billing summary for the portal home Billing column. */
+export type PortalBillingOverview = {
+  totalCharged: number
+  totalChargedFormatted: string
+  totalPaid: number
+  totalPaidFormatted: string
+  /** Full ledger outstanding across visits. */
+  balanceDue: number
+  balanceDueFormatted: string
+  /** Collectible now across visits (payment-plan aware). */
+  amountDueNow: number
+  amountDueNowFormatted: string
+  jobs: Array<{
+    id: string
+    title: string
+    startTime: string
+    status: string
+    totalCharged: number
+    totalChargedFormatted: string
+    totalPaid: number
+    totalPaidFormatted: string
+    balanceDue: number
+    balanceDueFormatted: string
+    canPay: boolean
+    amountDueNow: number
+    amountDueNowFormatted: string
+    planType: JobPaymentPlanType | null
+    hasPaymentPlan: boolean
+    nextInstallmentLabel: string | null
+    /** Primary amount shown in the list (due now when collectible, else remaining). */
+    displayAmount: number
+    displayAmountFormatted: string
+    displayAmountKind: 'due_now' | 'outstanding' | 'billed' | 'paid'
+    installments: PortalJobInstallment[]
+  }>
+  recentPayments: Array<{
+    id: string
+    amount: number
+    amountFormatted: string
+    paymentDate: string
+    scheduleId: string
+    jobTitle: string
+    source: string | null
+  }>
+}
+
+export function buildPortalBillingOverview(
+  jobs: PortalJob[],
+  payments: Array<{
+    id: string
+    schedule_id: string
+    amount: number
+    payment_date: string
+    source?: string | null
+  }>,
+  schedulesById: Map<string, { id: string; title: string }>
+): PortalBillingOverview {
+  const billedJobs = jobs
+    .filter((job) => job.totalCharged > 0 || job.totalPaid > 0)
+    .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+
+  const totalCharged = billedJobs.reduce((sum, job) => sum + job.totalCharged, 0)
+  const totalPaid = billedJobs.reduce((sum, job) => sum + job.totalPaid, 0)
+  const balanceDue = billedJobs.reduce((sum, job) => sum + job.balanceDue, 0)
+  const amountDueNow = billedJobs.reduce((sum, job) => sum + Math.max(0, job.amountDueNow), 0)
+
+  const recentPayments = [...payments]
+    .sort((a, b) => {
+      if (a.payment_date !== b.payment_date) {
+        return a.payment_date < b.payment_date ? 1 : -1
+      }
+      return a.id < b.id ? 1 : -1
+    })
+    .slice(0, 8)
+    .map((payment) => {
+      const schedule = schedulesById.get(payment.schedule_id)
+      return {
+        id: payment.id,
+        amount: Number(payment.amount) || 0,
+        amountFormatted: formatCurrency(Number(payment.amount) || 0),
+        paymentDate: payment.payment_date,
+        scheduleId: payment.schedule_id,
+        jobTitle: schedule?.title || 'Visit',
+        source: payment.source ?? null,
+      }
+    })
+
+  return {
+    totalCharged,
+    totalChargedFormatted: formatCurrency(totalCharged),
+    totalPaid,
+    totalPaidFormatted: formatCurrency(totalPaid),
+    balanceDue,
+    balanceDueFormatted: formatCurrency(balanceDue),
+    amountDueNow,
+    amountDueNowFormatted: formatCurrency(amountDueNow),
+    jobs: billedJobs.map((job) => {
+      const installments = job.installments || []
+      const hasPaymentPlan =
+        Boolean(job.planType && job.planType !== 'full_balance') || installments.length > 0
+      const nextLabel = portalDueNowLabel(job)
+      let displayAmountKind: 'due_now' | 'outstanding' | 'billed' | 'paid' = 'billed'
+      let displayAmount = job.totalCharged
+      if (job.amountDueNow > 0) {
+        displayAmountKind = 'due_now'
+        displayAmount = job.amountDueNow
+      } else if (job.balanceDue > 0) {
+        displayAmountKind = 'outstanding'
+        displayAmount = job.balanceDue
+      } else if (job.totalPaid > 0 && job.balanceDue <= 0) {
+        displayAmountKind = 'paid'
+        displayAmount = job.totalPaid
+      }
+
+      return {
+        id: job.id,
+        title: job.title,
+        startTime: job.startTime,
+        status: job.status,
+        totalCharged: job.totalCharged,
+        totalChargedFormatted: formatCurrency(job.totalCharged),
+        totalPaid: job.totalPaid,
+        totalPaidFormatted: formatCurrency(job.totalPaid),
+        balanceDue: job.balanceDue,
+        balanceDueFormatted: formatCurrency(job.balanceDue),
+        canPay: job.canPay,
+        amountDueNow: job.amountDueNow,
+        amountDueNowFormatted: job.amountDueNowFormatted,
+        planType: job.planType ?? null,
+        hasPaymentPlan,
+        nextInstallmentLabel: nextLabel,
+        displayAmount,
+        displayAmountFormatted: formatCurrency(displayAmount),
+        displayAmountKind,
+        installments,
+      }
+    }),
+    recentPayments,
+  }
 }
 
 export type PortalJobBilling = {
@@ -38,14 +224,10 @@ export type PortalJobBilling = {
   isBillable: boolean
   lockPortalToDueNow?: boolean
   allowPayAhead?: boolean
-  /** Open installments for portal chips (detail only when loaded). */
-  installments?: Array<{
-    id: string
-    label: string
-    remaining: number
-    collectibleNow: boolean
-    status: string
-  }>
+  planType?: JobPaymentPlanType | null
+  nextInstallmentLabel?: string | null
+  /** Open installments for portal chips / billing overview. */
+  installments?: PortalJobInstallment[]
 }
 
 export type PortalJob = PortalJobSchedule & PortalJobBilling
@@ -84,12 +266,19 @@ export function buildPortalJobBillingFields(
       isBillable: billable,
       lockPortalToDueNow: plan.lockPortalToDueNow,
       allowPayAhead: plan.allowPayAhead,
+      planType: plan.planType,
+      nextInstallmentLabel: plan.nextInstallment?.label ?? null,
       installments: plan.installments
         .filter((i) => i.status !== 'superseded')
         .map((i) => ({
           id: i.id,
+          key: i.key,
           label: i.label,
           remaining: i.remaining,
+          remainingFormatted: formatCurrency(i.remaining),
+          amountDue: i.amountDue,
+          amountDueFormatted: formatCurrency(i.amountDue),
+          amountPaid: i.amountPaid,
           collectibleNow: i.collectibleNow,
           status: i.status,
         })),
@@ -120,6 +309,9 @@ export function buildPortalJobBillingFields(
     isBillable: billable,
     lockPortalToDueNow: false,
     allowPayAhead: true,
+    planType: null,
+    nextInstallmentLabel: null,
+    installments: undefined,
   }
 }
 

@@ -196,7 +196,7 @@ function CrewsPageContent({
       setIsAddModalOpen(false)
       await fetchData()
     } else {
-      toast.error(result.error || 'Failed to create crew')
+      toast.error(result.error || `Failed to create ${terms.singularLower}`)
     }
     setIsCreating(false)
   }
@@ -218,7 +218,7 @@ function CrewsPageContent({
       setEditingCrew(null)
       await fetchData()
     } else {
-      toast.error(result.error || 'Failed to update crew')
+      toast.error(result.error || `Failed to update ${terms.singularLower}`)
     }
     setIsCreating(false)
   }
@@ -235,7 +235,7 @@ function CrewsPageContent({
       setEditingCrew(null)
       await fetchData()
     } else {
-      toast.error(result.error || 'Failed to delete crew')
+      toast.error(result.error || `Failed to delete ${terms.singularLower}`)
     }
   }
 

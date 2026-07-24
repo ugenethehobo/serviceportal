@@ -19,13 +19,23 @@ const ICONS = {
   visit_upcoming: CalendarDays,
 } as const
 
+type PortalActivityCardProps = {
+  items: PortalActivityItem[]
+  timezone: string
+  embedded?: boolean
+  showHeader?: boolean
+  listClassName?: string
+  onItemNavigate?: () => void
+}
+
 export function PortalActivityCard({
   items,
   timezone,
-}: {
-  items: PortalActivityItem[]
-  timezone: string
-}) {
+  embedded,
+  showHeader,
+  listClassName,
+  onItemNavigate,
+}: PortalActivityCardProps) {
   return (
     <ActivityFeedCard
       items={items}
@@ -33,6 +43,10 @@ export function PortalActivityCard({
       title="Activity"
       description="Estimates, contracts, payments, and visits that need your attention"
       icons={ICONS}
+      embedded={embedded}
+      showHeader={showHeader}
+      listClassName={listClassName}
+      onItemNavigate={onItemNavigate}
     />
   )
 }

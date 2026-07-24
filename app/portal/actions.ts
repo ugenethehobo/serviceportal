@@ -6,11 +6,13 @@ import { getDisplayAddressFromClient } from '@/lib/address'
 import { calcBillingSummary, formatCurrency } from '@/lib/billing'
 import { buildPortalActivity } from '@/lib/portal-activity'
 import {
+  buildPortalBillingOverview,
   buildPortalJobBillingFields,
   isJobBillableForClient,
   partitionPortalJobs,
   sumBillableBalanceDue,
   toPayableJobRows,
+  type PortalCrewMember,
   type PortalJob,
 } from '@/lib/portal-jobs'
 import { syncEstimateDocument } from '@/lib/estimates-server'
@@ -58,14 +60,26 @@ async function requirePortalClientWrite() {
 }
 
 async function getPortalCompanyTimezone(companyId: string) {
+  const meta = await getPortalCompanyMeta(companyId)
+  return meta.timezone
+}
+
+async function getPortalCompanyMeta(companyId: string) {
   const admin = createSupabaseAdmin()
   const { data: company } = await admin
     .from('companies')
-    .select('timezone')
+    .select('timezone, crew_label')
     .eq('id', companyId)
     .single()
 
-  return company?.timezone || 'America/Chicago'
+  const { normalizeCrewLabel } = await import('@/lib/crew-terminology')
+
+  return {
+    timezone: company?.timezone || 'America/Chicago',
+    crewLabel: normalizeCrewLabel(
+      (company as { crew_label?: string | null } | null)?.crew_label
+    ),
+  }
 }
 
 async function getPortalClientAddress(clientId: string) {
@@ -122,7 +136,71 @@ function mapScheduleToPortalJob(
   }
 }
 
-async function fetchPortalJobsForClient(clientId: string): Promise<PortalJob[]> {
+async function attachCrewDetailsToJobs(
+  admin: ReturnType<typeof createSupabaseAdmin>,
+  jobs: PortalJob[],
+  companyId: string
+): Promise<PortalJob[]> {
+  const crewIds = [
+    ...new Set(jobs.map((job) => job.crew?.id).filter((id): id is string => Boolean(id))),
+  ]
+  if (crewIds.length === 0) return jobs
+
+  const [{ data: crews }, { data: profiles }] = await Promise.all([
+    admin.from('crews').select('id, name, crew_lead_id').in('id', crewIds),
+    admin
+      .from('profiles')
+      .select('id, full_name, avatar_url, crew_id')
+      .eq('company_id', companyId)
+      .in('crew_id', crewIds)
+      .neq('role', 'client'),
+  ])
+
+  const leadByCrew = new Map(
+    (crews || []).map((crew) => [crew.id as string, (crew.crew_lead_id as string | null) ?? null])
+  )
+  const membersByCrew = new Map<string, PortalCrewMember[]>()
+
+  for (const profile of profiles || []) {
+    const crewId = profile.crew_id as string | null
+    if (!crewId) continue
+    const leadId = leadByCrew.get(crewId) ?? null
+    const member: PortalCrewMember = {
+      id: profile.id as string,
+      fullName: (profile.full_name as string | null)?.trim() || 'Team member',
+      avatarUrl: (profile.avatar_url as string | null) ?? null,
+      isLead: Boolean(leadId && profile.id === leadId),
+    }
+    const list = membersByCrew.get(crewId) || []
+    list.push(member)
+    membersByCrew.set(crewId, list)
+  }
+
+  for (const [crewId, members] of membersByCrew) {
+    members.sort((a, b) => {
+      if (a.isLead !== b.isLead) return a.isLead ? -1 : 1
+      return a.fullName.localeCompare(b.fullName)
+    })
+    membersByCrew.set(crewId, members)
+  }
+
+  return jobs.map((job) => {
+    if (!job.crew) return job
+    return {
+      ...job,
+      crew: {
+        ...job.crew,
+        leadId: leadByCrew.get(job.crew.id) ?? null,
+        members: membersByCrew.get(job.crew.id) || [],
+      },
+    }
+  })
+}
+
+async function fetchPortalJobsForClient(
+  clientId: string,
+  companyId?: string
+): Promise<PortalJob[]> {
   const admin = createSupabaseAdmin()
 
   const { data: schedules, error } = await admin
@@ -164,7 +242,7 @@ async function fetchPortalJobsForClient(clientId: string): Promise<PortalJob[]> 
   const now = new Date()
   const { loadJobPaymentPlanProgress } = await import('@/lib/payment-plans-server')
 
-  return Promise.all(
+  const mapped = await Promise.all(
     jobs.map(async (job) => {
       const base = mapScheduleToPortalJob(job, lineItems, payments, serviceAddress, now)
       try {
@@ -187,14 +265,17 @@ async function fetchPortalJobsForClient(clientId: string): Promise<PortalJob[]> 
       }
     })
   )
+
+  if (!companyId) return mapped
+  return attachCrewDetailsToJobs(admin, mapped, companyId)
 }
 
 export async function getPortalHomeData() {
   const { clientId, companyId } = await requirePortalClient()
   // clientId exposed to client for payment flows (portal session only)
   const admin = createSupabaseAdmin()
-  const timezone = await getPortalCompanyTimezone(companyId)
-  const jobs = await fetchPortalJobsForClient(clientId)
+  const { timezone, crewLabel } = await getPortalCompanyMeta(companyId)
+  const jobs = await fetchPortalJobsForClient(clientId, companyId)
   const now = new Date()
   const { activeNow, comingUp } = partitionPortalJobs(jobs, now)
 
@@ -247,10 +328,16 @@ export async function getPortalHomeData() {
     payments: recentPayments || [],
     lineItems: allLineItems || [],
     schedulesById,
+    crewLabel,
     now,
   })
 
   const payableJobs = toPayableJobRows(jobs)
+  const billingOverview = buildPortalBillingOverview(
+    jobs,
+    recentPayments || [],
+    schedulesById
+  )
 
   return {
     clientId,
@@ -262,12 +349,13 @@ export async function getPortalHomeData() {
     balanceDueFormatted: formatCurrency(balanceDue),
     payableJobs,
     activity,
+    billingOverview,
   }
 }
 
 export async function getPortalJobsAction() {
   const { clientId, companyId } = await requirePortalClient()
-  const jobs = await fetchPortalJobsForClient(clientId)
+  const jobs = await fetchPortalJobsForClient(clientId, companyId)
   const timezone = await getPortalCompanyTimezone(companyId)
 
   return { jobs, timezone }

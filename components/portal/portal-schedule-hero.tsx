@@ -1,7 +1,10 @@
+'use client'
+
 import Link from 'next/link'
 import { JobStatusBadge } from '@/components/dashboard/job-status-badge'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { usePortalCrewTerminology } from '@/components/portal/portal-shell-context'
 import {
   formatPortalArrivalWindow,
   formatPortalJobDayHeading,
@@ -34,13 +37,14 @@ export function PortalScheduleHero({
   variant = 'featured',
   showPayButton = true,
 }: PortalScheduleHeroProps) {
+  const terms = usePortalCrewTerminology()
   const activeNow = isJobActiveNow(
     { status: job.status, startTime: job.startTime, endTime: job.endTime },
     new Date()
   )
   const dayHeading = formatPortalJobDayHeading(job.startTime, timezone)
   const arrivalWindow = formatPortalArrivalWindow(job.startTime, job.endTime, timezone)
-  const crewName = job.crew?.name || 'Crew being assigned'
+  const crewName = job.crew?.name || `${terms.singular} being assigned`
   const hasAddress = !!job.serviceAddress?.trim()
 
   if (variant === 'compact') {
@@ -70,13 +74,13 @@ export function PortalScheduleHero({
         activeNow ? 'border-primary/40 bg-primary/5' : ''
       }`}
     >
-      <div className="p-5 sm:p-6 space-y-5">
+      <div className="space-y-5 p-5 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-2 min-w-0">
+          <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               {activeNow ? (
                 <Badge className="gap-1">
-                  <span className="size-1.5 rounded-full bg-current animate-pulse" />
+                  <span className="size-1.5 animate-pulse rounded-full bg-current" />
                   Happening now
                 </Badge>
               ) : (
@@ -84,13 +88,13 @@ export function PortalScheduleHero({
               )}
               <JobStatusBadge status={job.status} />
             </div>
-            <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">{job.title}</h2>
+            <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">{job.title}</h2>
           </div>
 
           {showPayButton && job.canPay && (
             <Link
               href={`/portal/jobs/${job.id}?pay=1`}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80 w-full sm:w-auto shrink-0"
+              className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80 sm:w-auto"
             >
               <CreditCard className="size-4" />
               Pay {job.balanceDueFormatted}
@@ -98,37 +102,39 @@ export function PortalScheduleHero({
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-lg border bg-background/80 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Arrival window
             </p>
-            <p className="mt-2 text-lg font-semibold inline-flex items-center gap-2">
-              <Clock className="size-4 text-muted-foreground shrink-0" />
+            <p className="mt-2 inline-flex items-center gap-2 text-lg font-semibold">
+              <Clock className="size-4 shrink-0 text-muted-foreground" />
               {arrivalWindow}
             </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Your crew is scheduled during this time.
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your {terms.singularLower} is scheduled during this time.
             </p>
           </div>
 
           <div className="rounded-lg border bg-background/80 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Assigned crew
+              Assigned {terms.singularLower}
             </p>
-            <p className="mt-2 text-lg font-semibold inline-flex items-center gap-2">
-              <Users className="size-4 text-muted-foreground shrink-0" />
+            <p className="mt-2 inline-flex items-center gap-2 text-lg font-semibold">
+              <Users className="size-4 shrink-0 text-muted-foreground" />
               {crewName}
             </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {job.crew ? 'This team is assigned to your visit.' : 'Your provider will confirm the crew shortly.'}
+            <p className="mt-1 text-sm text-muted-foreground">
+              {job.crew
+                ? `This ${terms.singularLower} is assigned to your visit.`
+                : `Your provider will confirm the ${terms.singularLower} shortly.`}
             </p>
           </div>
         </div>
 
         {hasAddress && (
           <div className="rounded-lg border bg-background/80 p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground inline-flex items-center gap-1.5">
+            <p className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               <MapPin className="size-3.5" />
               Service location
             </p>

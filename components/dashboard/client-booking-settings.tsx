@@ -5,6 +5,7 @@ import {
   getBookingSettingsAction,
   updateBookingSettingsAction,
 } from '@/app/booking-actions'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,6 +26,7 @@ interface ClientBookingSettingsProps {
 }
 
 export function ClientBookingSettings({ embedded = false }: ClientBookingSettingsProps = {}) {
+  const terms = useDashboardCrewTerminology()
   const [bookingMode, setBookingMode] = useState<BookingMode>('request_form')
   const [bookingSlug, setBookingSlug] = useState('')
   const [bookingUrl, setBookingUrl] = useState('')
@@ -130,7 +132,7 @@ export function ClientBookingSettings({ embedded = false }: ClientBookingSetting
           <BookingModeOption
             value="online_booking"
             title="Online booking"
-            description="Clients pick a package and time. Crew is auto-assigned."
+            description={`Clients pick a package and time. ${terms.singular} is auto-assigned.`}
             icon={CalendarClock}
             selected={bookingMode === 'online_booking'}
           />

@@ -30,6 +30,7 @@ import {
 } from '@/lib/booking-slots'
 import type { BookableService } from '@/lib/booking'
 import { cn } from '@/lib/utils'
+import { getCrewTerminology } from '@/lib/crew-terminology'
 import { ServicePackageRequestSelector } from '@/components/booking/service-package-request-selector'
 import { CompanyLogoImage } from '@/components/dashboard/company-logo-image'
 import { CalendarDays, CheckCircle2, ClipboardList, Loader2, Users } from 'lucide-react'
@@ -54,6 +55,7 @@ export function PublicBookingPageClient({
   data,
   dateOptions,
 }: PublicBookingPageClientProps) {
+  const terms = getCrewTerminology(data.crewLabel)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -301,7 +303,7 @@ export function PublicBookingPageClient({
             </CardTitle>
             <CardDescription>
               {data.bookingMode === 'online_booking'
-                ? 'Choose a service and available time. We assign the best crew automatically.'
+                ? `Choose a service and available time. We assign the best ${terms.singularLower} automatically.`
                 : 'Select the services you need, tell us what you want done, and we will reach out to schedule.'}
             </CardDescription>
           </CardHeader>
@@ -364,8 +366,8 @@ export function PublicBookingPageClient({
                   <div className="space-y-1">
                     <p className="font-medium">Online scheduling is temporarily unavailable</p>
                     <p className="text-amber-900/90">
-                      {data.companyName} has not finished setting up crews for booking yet. Please
-                      contact them directly to schedule your visit.
+                      {data.companyName} has not finished setting up {terms.pluralLower} for
+                      booking yet. Please contact them directly to schedule your visit.
                     </p>
                   </div>
                 </div>

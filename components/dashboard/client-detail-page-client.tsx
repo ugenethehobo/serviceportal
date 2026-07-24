@@ -38,6 +38,7 @@ import {
   syncScheduleStatusesAction,
   updateClientAction,
 } from '@/app/action'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 import { SOLO_CREW_NAME } from '@/lib/company-operations'
 import { PageLoadingSkeleton } from '@/components/ui/page-loading-skeleton'
 import { toast } from 'sonner'
@@ -141,6 +142,7 @@ export function ClientDetailPageClient({
   initialActivity,
   initialTimezone,
 }: ClientDetailPageClientProps) {
+  const terms = useDashboardCrewTerminology()
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -436,7 +438,7 @@ export function ClientDetailPageClient({
 
       if (conflicts && conflicts.length > 0) {
         setConflictInfo({
-          message: "This crew has a conflict with the selected time range.",
+          message: `This ${terms.singularLower} has a conflict with the selected time range.`,
         })
         setNewJob(prev => ({ ...prev, crewId: '' }))
         refreshAvailableCrews(newJob.startTime, newJob.endTime)
@@ -735,7 +737,7 @@ export function ClientDetailPageClient({
                   <SearchBar
                     value={jobSearchQuery}
                     onChange={setJobSearchQuery}
-                    placeholder="Search jobs by title, crew, or status..."
+                    placeholder={`Search jobs by title, ${terms.singularLower}, or status...`}
                     className="max-w-md flex-1 max-md:max-w-none"
                   />
                   <div className="flex flex-wrap items-center gap-3 max-md:w-full max-md:flex-col max-md:items-stretch sm:ml-auto">
@@ -895,7 +897,7 @@ export function ClientDetailPageClient({
                             </p>
                             {schedule.crew ? (
                               <p className="text-sm text-muted-foreground">
-                                Crew: {schedule.crew.name}
+                                {terms.singular}: {schedule.crew.name}
                               </p>
                             ) : null}
                           </div>

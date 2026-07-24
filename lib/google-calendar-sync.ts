@@ -8,6 +8,7 @@ import {
 } from '@/lib/google-calendar-oauth'
 import { getDisplayAddressFromClient } from '@/lib/address'
 import { formatForDatetimeLocal } from '@/lib/timezone'
+import { getCrewTerminology } from '@/lib/crew-terminology'
 
 const SERVICE_PORTAL_SCHEDULE_PROPERTY = 'service_portal_schedule_id'
 
@@ -24,6 +25,8 @@ export type GoogleCalendarJobSnapshot = {
   client_name: string | null
   client_address: string | null
   crew_name: string | null
+  /** Optional company plural field-team label for description copy. */
+  crew_label?: string | null
 }
 
 export function shouldExportScheduleToGoogleCalendar(status: string): boolean {
@@ -34,9 +37,10 @@ export function buildGoogleCalendarEventPayload(job: GoogleCalendarJobSnapshot) 
   const summaryParts = [job.title.trim()]
   if (job.client_name?.trim()) summaryParts.push(job.client_name.trim())
 
+  const crewWord = getCrewTerminology(job.crew_label).singular
   const descriptionParts = [
     job.description?.trim() || null,
-    job.crew_name ? `Crew: ${job.crew_name}` : null,
+    job.crew_name ? `${crewWord}: ${job.crew_name}` : null,
     `Service Portal job: ${job.id}`,
   ].filter(Boolean)
 
@@ -217,7 +221,7 @@ async function loadScheduleSnapshot(
 
   const { data: company } = await supabaseAdmin
     .from('companies')
-    .select('timezone')
+    .select('timezone, crew_label')
     .eq('id', client.company_id)
     .single()
 
@@ -234,6 +238,7 @@ async function loadScheduleSnapshot(
     client_name: client.name,
     client_address: getDisplayAddressFromClient(client),
     crew_name: crew?.name ?? null,
+    crew_label: (company as { crew_label?: string | null } | null)?.crew_label ?? null,
   }
 }
 

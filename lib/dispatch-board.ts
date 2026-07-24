@@ -1,5 +1,6 @@
 import { getDisplayAddressFromClient } from '@/lib/address'
 import { SOLO_CREW_NAME } from '@/lib/company-operations'
+import { getCrewTerminology } from '@/lib/crew-terminology'
 import { formatTimeInTimezone } from '@/lib/timezone'
 
 export const DISPATCH_UNASSIGNED_COLUMN_ID = 'unassigned'
@@ -101,15 +102,17 @@ export function getDispatchPageTitle(isSoloBusiness: boolean) {
 
 export function getDispatchPageDescription(
   isSoloBusiness: boolean,
-  viewerMode: DispatchViewerMode = 'admin'
+  viewerMode: DispatchViewerMode = 'admin',
+  crewLabel?: string | null
 ) {
   if (isSoloBusiness) {
     return 'Plan your day — drag unassigned jobs onto yourself, or pull them off when plans change.'
   }
+  const { pluralLower, singularLower } = getCrewTerminology(crewLabel)
   if (viewerMode === 'crew_lead') {
-    return 'As crew lead, pull unassigned jobs onto your crew or release them back. Admins can reassign across all crews.'
+    return `As ${singularLower} lead, pull unassigned jobs onto your ${singularLower} or release them back. Admins can reassign across all ${pluralLower}.`
   }
-  return 'Assign jobs to crews for the day. Drag cards between columns to reassign. Add helpers on the job page when a stop needs more techs.'
+  return `Assign jobs to ${pluralLower} for the day. Drag cards between columns to reassign. Add helpers on the job page when a stop needs more techs.`
 }
 
 export function getDispatchCrewColumnLabel(

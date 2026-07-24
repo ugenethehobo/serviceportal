@@ -7665,6 +7665,8 @@ export async function updateCompanySettingsAction(data: {
   revalidatePath('/dashboard/settings')
   revalidatePath('/dashboard/crews')
   revalidatePath('/dashboard/routes')
+  // Client portal shell + copy use companies.crew_label
+  revalidatePath('/portal')
 
   const mapReady =
     'latitude' in geocodeFields &&

@@ -201,6 +201,11 @@ export type PortalShellData = {
   companyName: string
   /** Storage path or legacy URL from companies.logo_url — resolve before display. */
   companyLogoRef: string | null
+  /**
+   * Company-custom plural field-team label (e.g. "Crews", "Teams").
+   * Used for portal copy via getCrewTerminology.
+   */
+  crewLabel: string
   /** Staff viewing the portal as this client (read-only writes). */
   isPreview?: boolean
   /** Dashboard path to return to when leaving staff preview. */
@@ -314,9 +319,11 @@ export const getPortalShellDataAction = cache(async (): Promise<
   const admin = createSupabaseAdmin()
   const { data: company } = await admin
     .from('companies')
-    .select('name, logo_url')
+    .select('name, logo_url, crew_label')
     .eq('id', portal.companyId)
     .maybeSingle()
+
+  const { normalizeCrewLabel } = await import('@/lib/crew-terminology')
 
   return {
     success: true,
@@ -325,6 +332,9 @@ export const getPortalShellDataAction = cache(async (): Promise<
       clientName: portal.clientName,
       companyName: company?.name || 'Your service provider',
       companyLogoRef: company?.logo_url ?? null,
+      crewLabel: normalizeCrewLabel(
+        (company as { crew_label?: string | null } | null)?.crew_label
+      ),
       isPreview: portal.isPreview,
       previewReturnPath: portal.isPreview
         ? `/dashboard/clients/${portal.clientId}?tab=portal`

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { JobStatusBadge } from '@/components/dashboard/job-status-badge'
 import { MapsNavigateButton } from '@/components/dashboard/maps-navigate-button'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -112,7 +113,8 @@ export function JobDetailsPanel({
       <span className="text-muted-foreground font-normal italic">Not set</span>
     )
 
-  const crewLabel = job.crew?.name || (
+  const terms = useDashboardCrewTerminology()
+  const crewNameLabel = job.crew?.name || (
     <span className="text-muted-foreground font-normal italic">Unassigned</span>
   )
 
@@ -167,7 +169,7 @@ export function JobDetailsPanel({
             : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4'
         }
       >
-        <DetailMetric icon={Users} label="Crew" value={crewLabel} />
+        <DetailMetric icon={Users} label={terms.singular} value={crewNameLabel} />
         <DetailMetric icon={DollarSign} label="Quoted price" value={priceLabel} />
         {!isTeamMember && (
           <DetailMetric

@@ -15,6 +15,7 @@ export default async function PortalHomePage() {
       balanceDueFormatted={data.balanceDueFormatted}
       payableJobs={data.payableJobs}
       activity={data.activity}
+      billingOverview={data.billingOverview}
     />
   )
 }

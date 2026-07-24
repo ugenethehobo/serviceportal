@@ -16,6 +16,7 @@ import type { DashboardOverviewData } from '@/lib/dashboard-overview'
 import type { DashboardMapData } from '@/lib/dashboard-map'
 import { MOBILE_MAP_MIN_HEIGHT_CLASS, MOBILE_PAGE_ROOT_CLASS } from '@/lib/mobile-layout'
 import { cn } from '@/lib/utils'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 
 const LiveCrewLocationsMap = dynamic(
   () =>
@@ -37,6 +38,7 @@ interface DashboardPageClientProps {
 }
 
 export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
+  const terms = useDashboardCrewTerminology()
   const [data, setData] = useState(initialData)
   const [mapData, setMapData] = useState<DashboardMapData | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
@@ -103,7 +105,7 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
         description={
           isClosedDay
             ? `Closed today${data.closedDayLabel ? ` (${data.closedDayLabel})` : ''} — month-to-date performance and your next open days.`
-            : 'Live crew activity, today\'s schedule, and job site locations.'
+            : `Live ${terms.singularLower} activity, today's schedule, and job site locations.`
         }
         actions={
           <>

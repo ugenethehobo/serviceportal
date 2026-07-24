@@ -28,6 +28,7 @@ import {
   getDispatchPageTitle,
   isDispatchJobEditableByViewer,
 } from '@/lib/dispatch-board'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -283,6 +284,7 @@ function DispatchColumnView({
 }
 
 export function DispatchBoard({ embedded = false }: DispatchBoardProps) {
+  const crewTerms = useDashboardCrewTerminology()
   const [dayOffset, setDayOffset] = useState(0)
   const [board, setBoard] = useState<DispatchBoardData | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -372,7 +374,11 @@ export function DispatchBoard({ embedded = false }: DispatchBoardProps) {
     ? getDispatchPageTitle(board.isSoloBusiness)
     : 'Dispatch'
   const description = board
-    ? getDispatchPageDescription(board.isSoloBusiness, board.viewerMode)
+    ? getDispatchPageDescription(
+        board.isSoloBusiness,
+        board.viewerMode,
+        crewTerms.plural
+      )
     : 'Assign work for the day.'
 
   const viewer = board
@@ -504,8 +510,8 @@ export function DispatchBoard({ embedded = false }: DispatchBoardProps) {
           {board.isSoloBusiness
             ? 'Drag jobs onto You to put them on your day, or to Unassigned to free the slot. On mobile, use the menu on each card.'
             : board.viewerMode === 'crew_lead'
-              ? 'As lead, drag between Unassigned and your crew only. On mobile, use the assign menu. Open a job to add multi-tech helpers.'
-              : 'Drag jobs between crews or Unassigned. On mobile, use the assign menu on each card. Travel-buffer conflicts are blocked. Add helpers on the job page when a stop needs more techs.'}
+              ? `As lead, drag between Unassigned and your ${crewTerms.singularLower} only. On mobile, use the assign menu. Open a job to add multi-tech helpers.`
+              : `Drag jobs between ${crewTerms.pluralLower} or Unassigned. On mobile, use the assign menu on each card. Travel-buffer conflicts are blocked. Add helpers on the job page when a stop needs more techs.`}
         </p>
       ) : null}
     </div>

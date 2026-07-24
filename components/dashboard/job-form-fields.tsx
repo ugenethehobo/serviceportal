@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 
 export interface JobFormValues {
   title: string
@@ -54,6 +55,7 @@ export function JobFormFields({
   isSoloBusiness = false,
   soloCrewName,
 }: JobFormFieldsProps) {
+  const terms = useDashboardCrewTerminology()
   const isDisabled = (field: keyof JobFormValues) => disabledFields[field] ?? false
 
   return (
@@ -63,7 +65,7 @@ export function JobFormFields({
           <p className="font-medium">{conflictInfo.message}</p>
           {conflictInfo.suggestedCrews && conflictInfo.suggestedCrews.length > 0 && (
             <div className="mt-2">
-              <p className="font-medium">Suggested crews:</p>
+              <p className="font-medium">Suggested {terms.pluralLower}:</p>
               <ul className="list-disc pl-5">
                 {conflictInfo.suggestedCrews.map((crew) => (
                   <li key={crew.id}>{crew.name}</li>
@@ -164,7 +166,7 @@ export function JobFormFields({
         </div>
       ) : (
         <div>
-          <Label>Assign Crew</Label>
+          <Label>Assign {terms.singular}</Label>
           <Select
             value={values.crewId}
             onValueChange={(value) => onCrewChange(value ?? '')}

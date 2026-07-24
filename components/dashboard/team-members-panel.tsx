@@ -9,6 +9,7 @@ import {
   updateCompanyTeamMemberAction,
   type CompanyTeamMember,
 } from '@/app/action'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 import { getCompanySubscriptionAccessAction } from '@/app/action'
 import { ImageAttachmentField } from '@/components/admin/image-attachment-field'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -63,6 +64,7 @@ function roleLabel(role: string) {
 }
 
 export function TeamMembersPanel() {
+  const terms = useDashboardCrewTerminology()
   const supabase = createClient()
   const [members, setMembers] = useState<CompanyTeamMember[]>([])
   const [seatsUsed, setSeatsUsed] = useState(0)
@@ -469,7 +471,7 @@ export function TeamMembersPanel() {
                 onFileSelect={handlePhotoFileSelect}
                 onRemove={handlePhotoRemove}
                 idleTitle="Upload profile photo"
-                idleDescription="Shown on the dashboard and in crew views"
+                idleDescription={`Shown on the dashboard and in ${terms.singularLower} views`}
               />
             </div>
 
@@ -500,7 +502,7 @@ export function TeamMembersPanel() {
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
               This will permanently delete <strong>{memberToDelete?.name}</strong>, remove them
-              from any crews, and revoke their login access.
+              from any {terms.pluralLower}, and revoke their login access.
             </p>
             <div className="flex justify-end gap-2 mt-4">
               <Button

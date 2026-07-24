@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { FolderPhotosPanel } from '@/components/dashboard/folder-photos-panel'
+import { PortalInstallmentSchedule } from '@/components/portal/portal-installment-schedule'
 import { PortalJobPayPanel } from '@/components/portal/portal-job-pay-panel'
 import { PortalScheduleHero } from '@/components/portal/portal-schedule-hero'
 import { Card } from '@/components/ui/card'
@@ -41,8 +42,13 @@ interface PortalJobDetailBilling {
   lockPortalToDueNow?: boolean
   installments?: Array<{
     id: string
+    key?: string
     label: string
     remaining: number
+    remainingFormatted?: string
+    amountDue?: number
+    amountDueFormatted?: string
+    amountPaid?: number
     collectibleNow: boolean
     status: string
   }>
@@ -206,6 +212,32 @@ export function PortalJobDetail({
           </p>
         </Card>
       </div>
+
+      {(billing.installments?.length ?? 0) > 0 && (
+        <Card className="space-y-3 p-5 shadow-sm">
+          <div>
+            <h2 className="font-semibold">Payment plan</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              How this visit is split into installments
+            </p>
+          </div>
+          <PortalInstallmentSchedule
+            density="comfortable"
+            installments={(billing.installments || []).map((inst) => ({
+              id: inst.id,
+              label: inst.label,
+              remaining: inst.remaining,
+              remainingFormatted:
+                inst.remainingFormatted || formatCurrency(inst.remaining),
+              amountDueFormatted:
+                inst.amountDueFormatted ||
+                formatCurrency(inst.amountDue ?? inst.remaining),
+              collectibleNow: inst.collectibleNow,
+              status: inst.status,
+            }))}
+          />
+        </Card>
+      )}
 
       {billing.payments.length > 0 && (
         <Card className="shadow-sm overflow-hidden">

@@ -4,7 +4,12 @@ import {
   type ActivityFeedItem,
   type ActivityPeriod,
 } from '@/lib/activity-feed'
-import { isJobBillableForClient, type PortalJob } from '@/lib/portal-jobs'
+import { getCrewTerminology } from '@/lib/crew-terminology'
+import {
+  isJobBillableForClient,
+  portalDueNowLabel,
+  type PortalJob,
+} from '@/lib/portal-jobs'
 
 export type { ActivityPeriod as PortalActivityPeriod }
 export {
@@ -71,10 +76,14 @@ export function buildPortalActivity(input: {
   payments: RawPayment[]
   lineItems: RawLineItem[]
   schedulesById: Map<string, ScheduleMeta>
+  /** Company custom plural crew label (e.g. "Teams"). */
+  crewLabel?: string | null
   now?: Date
   limit?: number
 }): PortalActivityItem[] {
   const now = input.now ?? new Date()
+  const crewTerms = getCrewTerminology(input.crewLabel)
+  const crewTbd = `${crewTerms.singular} TBD`
   const items: PortalActivityItem[] = []
 
   for (const contract of input.contracts || []) {
@@ -129,10 +138,11 @@ export function buildPortalActivity(input: {
     if (!job.canPay || job.amountDueNow <= 0) continue
 
     const lineAt = latestLineBySchedule.get(job.id)
+    const installmentLabel = portalDueNowLabel(job)
     items.push({
       id: `payment-due-${job.id}`,
       type: 'payment_due',
-      title: 'Balance due',
+      title: installmentLabel ? `${installmentLabel} due` : 'Balance due',
       description: `${job.title} — ${job.amountDueNowFormatted}`,
       href: `/portal/jobs/${job.id}?pay=1`,
       occurredAt: lineAt || job.endTime,
@@ -163,7 +173,7 @@ export function buildPortalActivity(input: {
           id: `visit-${job.id}`,
           type: 'visit_upcoming',
           title: 'Upcoming visit',
-          description: `${job.title} — ${job.crew?.name || 'Crew TBD'}`,
+          description: `${job.title} — ${job.crew?.name || crewTbd}`,
           href: `/portal/jobs/${job.id}`,
           occurredAt: job.startTime,
         })

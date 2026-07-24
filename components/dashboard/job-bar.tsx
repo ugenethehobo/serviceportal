@@ -7,6 +7,7 @@ import {
   HoverCardTrigger,
 } from '@/components/ui/hover-card'
 import { Badge } from '@/components/ui/badge'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 import {
   minutesToTimelinePercent,
   parseTimeToMinutes,
@@ -42,6 +43,7 @@ export function JobBar({
   laneHeight = 36,
   laneGap = 4,
 }: JobBarProps) {
+  const terms = useDashboardCrewTerminology()
   const timelineStart = parseTimeToMinutes(businessHours.start)
   const timelineEnd = parseTimeToMinutes(businessHours.end)
   const clippedStart = Math.max(startMinutes, timelineStart)
@@ -104,7 +106,7 @@ export function JobBar({
               </div>
             </div>
             <div className="text-sm">
-              <span className="font-medium">Crew:</span> {crew}
+              <span className="font-medium">{terms.singular}:</span> {crew}
             </div>
             <div className="text-sm">
               <span className="font-medium">Location:</span> {location}

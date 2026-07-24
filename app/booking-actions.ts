@@ -61,6 +61,8 @@ export type PublicBookingPageData = {
   timezone: string
   services: BookableService[]
   hasBookableCrews: boolean
+  /** Company-custom plural field-team label (e.g. "Crews", "Teams"). */
+  crewLabel: string
 }
 
 async function getCompanyByBookingSlug(slug: string) {
@@ -72,6 +74,7 @@ async function getCompanyByBookingSlug(slug: string) {
       name,
       logo_url,
       timezone,
+      crew_label,
       business_hours_start,
       business_hours_end,
       business_open_weekdays,
@@ -118,6 +121,7 @@ export async function getPublicBookingPageAction(
     company.business_open_weekdays
   )
   const bookingSettings = normalizeBookingSettings(company.booking_settings)
+  const { normalizeCrewLabel } = await import('@/lib/crew-terminology')
 
   return {
     success: true,
@@ -133,6 +137,9 @@ export async function getPublicBookingPageAction(
       timezone: company.timezone || 'America/Chicago',
       services: (services || []) as BookableService[],
       hasBookableCrews: (crewCount || 0) > 0,
+      crewLabel: normalizeCrewLabel(
+        (company as { crew_label?: string | null }).crew_label
+      ),
     },
   }
 }
@@ -334,7 +341,14 @@ export async function getPublicBookingSlotsAction(input: {
     .order('name', { ascending: true })
 
   if (!crews || crews.length === 0) {
-    return { success: false as const, error: 'No crews are configured for booking' }
+    const { getCrewTerminology } = await import('@/lib/crew-terminology')
+    const terms = getCrewTerminology(
+      (company as { crew_label?: string | null }).crew_label
+    )
+    return {
+      success: false as const,
+      error: `No ${terms.pluralLower} are configured for booking`,
+    }
   }
 
   const dayBounds = getCompanyDayBounds(

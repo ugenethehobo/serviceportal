@@ -59,8 +59,8 @@ export function PortalShell({ shellData, children }: PortalShellProps) {
         />
         <PortalScrollMain className="flex-1 min-h-0 min-w-0">
           {shellData.isPreview ? (
-            <div className="sticky top-0 z-20 border-b border-amber-300/60 bg-amber-50 px-4 py-2.5 text-amber-950 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-50">
-              <div className="mx-auto flex max-w-5xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="sticky top-0 z-20 border-b border-amber-300/60 bg-amber-50 px-4 py-2.5 text-amber-950 sm:px-6 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-50">
+              <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-2 text-sm">
                   <Eye className="mt-0.5 size-4 shrink-0" />
                   <div>
@@ -86,7 +86,8 @@ export function PortalShell({ shellData, children }: PortalShellProps) {
               </div>
             </div>
           ) : null}
-          <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 max-md:p-4 max-md:pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+          {/* Full main-column width (match dashboard) — no max-w centering */}
+          <div className="w-full min-w-0 p-4 sm:p-6 max-md:pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
             {children}
           </div>
         </PortalScrollMain>

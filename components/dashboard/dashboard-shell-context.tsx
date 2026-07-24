@@ -5,10 +5,15 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from 'react'
 import { getDashboardShellDataAction } from '@/app/action'
+import {
+  getCrewTerminology,
+  type CrewTerminology,
+} from '@/lib/crew-terminology'
 import type { BetaSunsetWarning } from '@/lib/platform-release-schedule'
 import type { CompanySubscriptionAccess } from '@/lib/platform-trial'
 
@@ -87,4 +92,13 @@ export function useDashboardShell() {
     throw new Error('useDashboardShell must be used within DashboardShellProvider')
   }
   return context
+}
+
+/** Company-custom field-team wording for staff dashboard UI. */
+export function useDashboardCrewTerminology(): CrewTerminology {
+  const { data } = useDashboardShell()
+  return useMemo(
+    () => getCrewTerminology(data?.crewLabel),
+    [data?.crewLabel]
+  )
 }

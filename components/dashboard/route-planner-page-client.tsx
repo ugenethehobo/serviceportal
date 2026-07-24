@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getRoutePlannerDataAction } from '@/app/action'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 import { optimizeCrewDayRouteAction } from '@/app/route-optimize-actions'
 import { MainPageCard } from '@/components/ui/main-page-card'
 import { Button } from '@/components/ui/button'
@@ -242,6 +243,7 @@ function MobileRouteStopsPanel({
   optimizingCrewId: string | null
   onOptimize: (crewId: string) => void
 }) {
+  const terms = useDashboardCrewTerminology()
   const [expanded, setExpanded] = useState(false)
 
   const visibleRoutes = useMemo(
@@ -265,7 +267,7 @@ function MobileRouteStopsPanel({
           <div className="flex items-center justify-between gap-2 border-b px-2.5 py-1.5">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               {totalJobStops} {totalJobStops === 1 ? 'stop' : 'stops'} · {visibleRoutes.length}{' '}
-              {visibleRoutes.length === 1 ? 'crew' : 'crews'}
+              {visibleRoutes.length === 1 ? terms.singularLower : terms.pluralLower}
             </p>
             <button
               type="button"
@@ -279,7 +281,7 @@ function MobileRouteStopsPanel({
             <div className="space-y-2 p-1.5">
               {visibleRoutes.length === 0 ? (
                 <p className="px-2 py-3 text-center text-xs text-muted-foreground">
-                  Select a crew below to view stops.
+                  {`Select a ${terms.singularLower} below to view stops.`}
                 </p>
               ) : (
                 visibleRoutes.map((route) => {
@@ -518,6 +520,7 @@ interface RoutePlannerPageClientProps {
 }
 
 export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientProps) {
+  const terms = useDashboardCrewTerminology()
   const [data, setData] = useState(initialData)
   const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -675,7 +678,9 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
                       <MarkerTooltip>
                         <div className="space-y-0.5">
                           <div className="font-medium">{data.companyName}</div>
-                          <div className="text-background/80">Start & end for all crews</div>
+                          <div className="text-background/80">
+                            {`Start & end for all ${terms.pluralLower}`}
+                          </div>
                         </div>
                       </MarkerTooltip>
                     </MapMarker>
@@ -731,7 +736,7 @@ export function RoutePlannerPageClient({ initialData }: RoutePlannerPageClientPr
               <MapPin className="mb-3 size-10 text-muted-foreground/60" />
               <p className="text-sm font-medium">No routes for today</p>
               <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                Assign crews to scheduled jobs with client addresses to see daily routes.
+                {`Assign ${terms.pluralLower} to scheduled jobs with client addresses to see daily routes.`}
               </p>
             </div>
           )}

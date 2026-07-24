@@ -11,6 +11,7 @@ import {
   cancelJobAction,
   deleteJobAction,
 } from '@/app/action'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 import {
   completeFieldJobAction,
   startFieldJobAction,
@@ -108,6 +109,7 @@ export function JobDetailPageClient({
   initialSoloCrewId,
   initialCompanyId,
 }: JobDetailPageClientProps) {
+  const terms = useDashboardCrewTerminology()
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -306,7 +308,9 @@ export function JobDetailPageClient({
         .gte('end_time', startUTC)
 
       if (conflicts && conflicts.length > 0) {
-        setConflictInfo({ message: 'This crew has a conflict with the selected time range.' })
+        setConflictInfo({
+          message: `This ${terms.singularLower} has a conflict with the selected time range.`,
+        })
         setFormValues((prev) => ({ ...prev, crewId: '' }))
         refreshAvailableCrews(formValues.startTime, formValues.endTime, jobId)
       }
@@ -352,7 +356,10 @@ export function JobDetailPageClient({
     } else {
       if (result.suggestedCrews && result.suggestedCrews.length > 0) {
         setAvailableCrews(result.suggestedCrews)
-        setConflictInfo({ message: result.error || 'Crew conflict', suggestedCrews: result.suggestedCrews })
+        setConflictInfo({
+          message: result.error || `${terms.singular} conflict`,
+          suggestedCrews: result.suggestedCrews,
+        })
       } else {
         toast.error(result.error || 'Failed to update job')
       }

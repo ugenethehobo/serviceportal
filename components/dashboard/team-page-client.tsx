@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { getTeamMemberDashboardAction } from '@/app/action'
+import { useDashboardCrewTerminology } from '@/components/dashboard/dashboard-shell-context'
 import {
   completeFieldJobAction,
   startFieldJobAction,
@@ -293,6 +294,7 @@ export function TeamPageClient({
   variant = 'team_member',
   embedded = false,
 }: TeamPageClientProps) {
+  const terms = useDashboardCrewTerminology()
   const isSoloOwner = variant === 'solo_owner'
   const [data, setData] = useState(initialData)
   const [error, setError] = useState<string | null>(null)
@@ -468,12 +470,12 @@ export function TeamPageClient({
         <Card className={`${contentInset} p-8 text-center`}>
           <CalendarDays className="size-10 mx-auto text-muted-foreground mb-3" />
           <h2 className="text-lg font-semibold tracking-tight">
-            {isSoloOwner ? 'Schedule not ready' : 'No crew assigned'}
+            {isSoloOwner ? 'Schedule not ready' : `No ${terms.singularLower} assigned`}
           </h2>
           <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
             {isSoloOwner
               ? 'Turn solo business mode off and on again in Settings → Company if your schedule does not load.'
-              : 'Ask your company admin to assign you to a crew in the Crews page before jobs appear here.'}
+              : `Ask your company admin to assign you to a ${terms.singularLower} in the ${terms.plural} page before jobs appear here.`}
           </p>
         </Card>
       ) : data.jobs.length === 0 ? (
