@@ -6,6 +6,7 @@ import { getDisplayAddressFromClient } from '@/lib/address'
 import { calcBillingSummary, formatCurrency } from '@/lib/billing'
 import { buildPortalActivity } from '@/lib/portal-activity'
 import {
+  buildPortalJobBillingFields,
   isJobBillableForClient,
   partitionPortalJobs,
   sumBillableBalanceDue,
@@ -106,17 +107,11 @@ function mapScheduleToPortalJob(
     serviceAddress,
   }
   const billable = isJobBillableForClient(scheduleShape, now)
-  const displayBalance = billable ? summary.balanceDue : 0
+  const billingFields = buildPortalJobBillingFields(summary, lines.length, billable)
 
   return {
     ...scheduleShape,
-    balanceDue: displayBalance,
-    balanceDueFormatted: formatCurrency(displayBalance),
-    canPay: billable && summary.balanceDue > 0 && lines.length > 0,
-    isPaid: lines.length > 0 && summary.balanceDue <= 0,
-    totalCharged: summary.totalCharged,
-    totalPaid: summary.totalPaid,
-    isBillable: billable,
+    ...billingFields,
   }
 }
 
@@ -160,7 +155,31 @@ async function fetchPortalJobsForClient(clientId: string): Promise<PortalJob[]> 
   }
 
   const now = new Date()
-  return jobs.map((job) => mapScheduleToPortalJob(job, lineItems, payments, serviceAddress, now))
+  const { loadJobPaymentPlanProgress } = await import('@/lib/payment-plans-server')
+
+  return Promise.all(
+    jobs.map(async (job) => {
+      const base = mapScheduleToPortalJob(job, lineItems, payments, serviceAddress, now)
+      try {
+        const plan = await loadJobPaymentPlanProgress(admin, job.id, {
+          status: job.status,
+          startTime: job.start_time,
+        })
+        if (!plan) return base
+        const lines = lineItems.filter((l) => l.schedule_id === job.id)
+        const pays = payments.filter((p) => p.schedule_id === job.id)
+        const summary = calcBillingSummary(lines, pays)
+        const billable = isJobBillableForClient(
+          { status: job.status, startTime: job.start_time },
+          now
+        )
+        const fields = buildPortalJobBillingFields(summary, lines.length, billable, plan)
+        return { ...base, ...fields }
+      } catch {
+        return base
+      }
+    })
+  )
 }
 
 export async function getPortalHomeData() {
@@ -300,11 +319,28 @@ export async function getPortalJobBillingAction(scheduleId: string) {
     { status: schedule.status, startTime: schedule.start_time },
     new Date()
   )
-  const canPay = billable && summary.balanceDue > 0 && (lineItems?.length ?? 0) > 0
-  const portalSummary = {
-    ...summary,
-    balanceDue: billable ? summary.balanceDue : 0,
+
+  let plan = null as Awaited<
+    ReturnType<
+      typeof import('@/lib/payment-plans-server').loadJobPaymentPlanProgress
+    >
+  >
+  try {
+    const { loadJobPaymentPlanProgress } = await import('@/lib/payment-plans-server')
+    plan = await loadJobPaymentPlanProgress(admin, scheduleId, {
+      status: schedule.status,
+      startTime: schedule.start_time,
+    })
+  } catch (error) {
+    console.error('getPortalJobBilling plan load error:', error)
   }
+
+  const billingFields = buildPortalJobBillingFields(
+    summary,
+    lineItems?.length ?? 0,
+    billable,
+    plan
+  )
 
   return {
     success: true as const,
@@ -318,9 +354,19 @@ export async function getPortalJobBillingAction(scheduleId: string) {
       listPrice: schedule.price || 0,
       lineItems: lineItems || [],
       payments: payments || [],
-      summary: portalSummary,
-      canPay,
+      // Ledger balance always truthful (K10)
+      summary: {
+        totalCharged: summary.totalCharged,
+        totalPaid: summary.totalPaid,
+        balanceDue: summary.balanceDue,
+      },
+      amountDueNow: billingFields.amountDueNow,
+      maxPayableNow: billingFields.maxPayableNow,
+      canPay: billingFields.canPay,
       isBillable: billable,
+      lockPortalToDueNow: billingFields.lockPortalToDueNow ?? false,
+      allowPayAhead: billingFields.allowPayAhead ?? true,
+      installments: billingFields.installments || [],
       crew: crew ? { id: crew.id, name: crew.name } : null,
       serviceAddress,
     },

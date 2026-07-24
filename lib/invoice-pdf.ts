@@ -11,6 +11,15 @@ interface InvoicePaymentRow {
   amount: number
 }
 
+interface InvoiceInstallmentRow {
+  label: string
+  amountDue: number
+  amountPaid: number
+  remaining: number
+  statusLabel: string
+  dueDate: string | null
+}
+
 interface InvoicePdfData {
   invoice: {
     number: string
@@ -26,6 +35,8 @@ interface InvoicePdfData {
     amount: number
   }>
   payments: InvoicePaymentRow[]
+  /** Non-default payment plan schedule; omitted or empty skips the PDF section. */
+  installments?: InvoiceInstallmentRow[]
   summary: {
     totalCharged: number
     totalPaid: number
@@ -86,6 +97,7 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     },
     lineItems: data.lineItems,
     payments: data.payments,
+    installments: data.installments,
     summary: data.summary,
   })
 }

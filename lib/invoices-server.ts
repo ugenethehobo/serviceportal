@@ -238,6 +238,34 @@ export async function syncJobInvoiceDocument(scheduleId: string) {
       })
     : null
 
+  let installments:
+    | Array<{
+        label: string
+        amountDue: number
+        amountPaid: number
+        remaining: number
+        statusLabel: string
+        dueDate: string | null
+      }>
+    | undefined
+
+  try {
+    const {
+      shouldShowInvoiceInstallmentSchedule,
+      toInvoiceInstallmentRows,
+    } = await import('@/lib/payment-plans')
+    const { loadJobPaymentPlanProgress } = await import('@/lib/payment-plans-server')
+    const plan = await loadJobPaymentPlanProgress(supabaseAdmin, scheduleId, {
+      status: String(schedule.status || ''),
+      startTime: schedule.start_time ? String(schedule.start_time) : new Date().toISOString(),
+    })
+    if (shouldShowInvoiceInstallmentSchedule(plan)) {
+      installments = toInvoiceInstallmentRows(plan)
+    }
+  } catch (error) {
+    console.error('syncJobInvoiceDocument payment plan load error:', error)
+  }
+
   const { loadCompanyLogoBytesForPdf } = await import('@/lib/document-template-logo-server')
   const logoBytes = await loadCompanyLogoBytesForPdf(companyId)
 
@@ -251,6 +279,7 @@ export async function syncJobInvoiceDocument(scheduleId: string) {
     },
     lineItems,
     payments: payments || [],
+    installments,
     summary,
     company: {
       name: (company as { name?: string })?.name || 'Company',

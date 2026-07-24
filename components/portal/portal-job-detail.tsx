@@ -34,8 +34,18 @@ interface PortalJobDetailBilling {
     totalPaid: number
     balanceDue: number
   }
+  amountDueNow: number
+  maxPayableNow: number
   canPay: boolean
   isBillable: boolean
+  lockPortalToDueNow?: boolean
+  installments?: Array<{
+    id: string
+    label: string
+    remaining: number
+    collectibleNow: boolean
+    status: string
+  }>
   crew: PortalJobCrew
   serviceAddress: string
 }
@@ -85,7 +95,7 @@ export function PortalJobDetail({
           crew: billing.crew,
           serviceAddress: billing.serviceAddress,
           canPay: billing.canPay,
-          balanceDueFormatted: formatCurrency(billing.summary.balanceDue),
+          balanceDueFormatted: formatCurrency(billing.amountDueNow),
         }}
         timezone={timezone}
         showPayButton={!showPaymentFirst}
@@ -97,18 +107,28 @@ export function PortalJobDetail({
             <PortalJobPayPanel
               scheduleId={jobId}
               clientId={clientId}
+              amountDueNow={billing.amountDueNow}
+              maxPayableNow={billing.maxPayableNow}
               balanceDue={billing.summary.balanceDue}
               totalCharged={billing.summary.totalCharged}
               lineItemCount={billing.lineItems.length}
+              canPay={billing.canPay}
+              lockPortalToDueNow={billing.lockPortalToDueNow}
+              installments={billing.installments}
               autoStart={autoPay}
             />
           </div>
           <PortalJobPayPanel
             scheduleId={jobId}
             clientId={clientId}
+            amountDueNow={billing.amountDueNow}
+            maxPayableNow={billing.maxPayableNow}
             balanceDue={billing.summary.balanceDue}
             totalCharged={billing.summary.totalCharged}
             lineItemCount={billing.lineItems.length}
+            canPay={billing.canPay}
+            lockPortalToDueNow={billing.lockPortalToDueNow}
+            installments={billing.installments}
             autoStart={autoPay}
             compact
           />

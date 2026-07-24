@@ -67,6 +67,15 @@ export type DocumentRenderData = {
     method: string
     amount: number
   }>
+  /** Payment plan schedule (non-default plans only). Ledger balance stays in summary.totals. */
+  installments?: Array<{
+    label: string
+    amountDue: number
+    amountPaid: number
+    remaining: number
+    statusLabel: string
+    dueDate: string | null
+  }>
   summary: {
     totalCharged?: number
     totalPaid?: number
@@ -122,6 +131,7 @@ export async function renderDocumentPdf(data: DocumentRenderData): Promise<Uint8
   const tableElement = visibleElements.find((element) => element.fieldKey === 'table.line_items')
   const trailingFieldKeys = new Set([
     'payments.section',
+    'installments.section',
     'summary.totals',
     'summary.total',
     'footer.text',
@@ -322,6 +332,8 @@ function renderField(ctx: RenderContext, element: DocumentElement, topY: number)
       )
     case 'payments.section':
       return renderPaymentsSection(ctx, element, topY)
+    case 'installments.section':
+      return renderInstallmentsSection(ctx, element, topY)
     case 'summary.totals':
       return renderInvoiceTotals(ctx, element, topY)
     case 'summary.total':
@@ -664,6 +676,70 @@ function renderPaymentsSection(
   )
 
   return currentTopY + 20
+}
+
+function renderInstallmentsSection(
+  ctx: RenderContext,
+  element: DocumentElement,
+  topY: number
+): number {
+  if (ctx.data.kind !== 'invoice') return topY
+
+  const installments = ctx.data.installments || []
+  if (installments.length === 0) return topY
+
+  let currentTopY = topY
+  const colX = {
+    desc: element.x,
+    status: element.x + 280,
+    amount: element.x + 420,
+  }
+  const muted = resolveBrandColor(ctx.data.template, 'muted')
+  const accentColor = resolveBrandColor(ctx.data.template, 'accent')
+
+  drawTextBlock(
+    ctx,
+    { ...element, fontWeight: 'bold', fontSize: 10 },
+    currentTopY,
+    'Payment schedule'
+  )
+  currentTopY += 16
+
+  for (const row of installments) {
+    const rowPdfY = pdfY(ctx, textBaselineFromTop(currentTopY, 9))
+    const duePart = row.dueDate
+      ? ` · due ${new Date(
+          row.dueDate.includes('T') ? row.dueDate : `${row.dueDate}T12:00:00`
+        ).toLocaleDateString()}`
+      : ''
+    const label = `${row.label}${duePart}`
+    drawAlignedText(ctx.page, label, colX.desc, rowPdfY, 9, ctx.fonts.regular, muted)
+    drawAlignedText(
+      ctx.page,
+      row.statusLabel,
+      colX.status,
+      rowPdfY,
+      9,
+      ctx.fonts.regular,
+      muted
+    )
+    const amountText =
+      row.remaining > 0.009 && row.amountPaid > 0.009
+        ? `${formatCurrency(row.remaining)} left`
+        : formatCurrency(row.amountDue)
+    drawAlignedText(
+      ctx.page,
+      amountText,
+      colX.amount,
+      rowPdfY,
+      9,
+      ctx.fonts.regular,
+      accentColor
+    )
+    currentTopY += 14
+  }
+
+  return currentTopY + 12
 }
 
 function renderInvoiceTotals(ctx: RenderContext, element: DocumentElement, topY: number): number {

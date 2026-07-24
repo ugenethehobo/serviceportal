@@ -1,3 +1,9 @@
+import { formatCurrency, type BillingSummary } from '@/lib/billing'
+import {
+  computeCanPay,
+  computeImplicitFullBalancePayable,
+  type PlanProgressSummary,
+} from '@/lib/payment-plans'
 import { formatTimeInTimezone } from '@/lib/timezone'
 
 export type PortalJobCrew = {
@@ -18,16 +24,104 @@ export type PortalJobSchedule = {
 }
 
 export type PortalJobBilling = {
+  /** Always ledger totalCharged − totalPaid (never zeroed for collectibility). */
   balanceDue: number
   balanceDueFormatted: string
+  /** Collectible now (drives Pay CTAs). */
+  amountDueNow: number
+  amountDueNowFormatted: string
+  maxPayableNow: number
   canPay: boolean
   isPaid: boolean
   totalCharged: number
   totalPaid: number
   isBillable: boolean
+  lockPortalToDueNow?: boolean
+  allowPayAhead?: boolean
+  /** Open installments for portal chips (detail only when loaded). */
+  installments?: Array<{
+    id: string
+    label: string
+    remaining: number
+    collectibleNow: boolean
+    status: string
+  }>
 }
 
 export type PortalJob = PortalJobSchedule & PortalJobBilling
+
+/**
+ * Map ledger summary + billable gate into portal billing fields.
+ * When `plan` is provided, amountDueNow / maxPayableNow / canPay come from the plan.
+ */
+export function buildPortalJobBillingFields(
+  summary: BillingSummary,
+  lineItemCount: number,
+  billable: boolean,
+  plan?: PlanProgressSummary | null
+): PortalJobBilling {
+  if (plan) {
+    const canPay = computeCanPay({
+      balanceDue: summary.balanceDue,
+      lineItemCount,
+      billable,
+      plan: {
+        allowPayAhead: plan.allowPayAhead,
+        amountDueNow: plan.amountDueNow,
+        hasCollectibleNow: plan.hasCollectibleNow,
+      },
+    })
+    return {
+      balanceDue: summary.balanceDue,
+      balanceDueFormatted: formatCurrency(summary.balanceDue),
+      amountDueNow: plan.amountDueNow,
+      amountDueNowFormatted: formatCurrency(plan.amountDueNow),
+      maxPayableNow: plan.maxPayableNow,
+      canPay,
+      isPaid: lineItemCount > 0 && summary.balanceDue <= 0,
+      totalCharged: summary.totalCharged,
+      totalPaid: summary.totalPaid,
+      isBillable: billable,
+      lockPortalToDueNow: plan.lockPortalToDueNow,
+      allowPayAhead: plan.allowPayAhead,
+      installments: plan.installments
+        .filter((i) => i.status !== 'superseded')
+        .map((i) => ({
+          id: i.id,
+          label: i.label,
+          remaining: i.remaining,
+          collectibleNow: i.collectibleNow,
+          status: i.status,
+        })),
+    }
+  }
+
+  const imp = computeImplicitFullBalancePayable({
+    totalCharged: summary.totalCharged,
+    totalPaid: summary.totalPaid,
+    billable,
+  })
+  const canPay = computeCanPay({
+    balanceDue: imp.balanceDue,
+    lineItemCount,
+    billable,
+    plan: null,
+  })
+  return {
+    balanceDue: imp.balanceDue,
+    balanceDueFormatted: formatCurrency(imp.balanceDue),
+    amountDueNow: imp.amountDueNow,
+    amountDueNowFormatted: formatCurrency(imp.amountDueNow),
+    maxPayableNow: imp.maxPayableNow,
+    canPay,
+    isPaid: lineItemCount > 0 && imp.balanceDue <= 0,
+    totalCharged: summary.totalCharged,
+    totalPaid: summary.totalPaid,
+    isBillable: billable,
+    lockPortalToDueNow: false,
+    allowPayAhead: true,
+  }
+}
 
 export type PortalJobPartitions = {
   activeNow: PortalJob[]
@@ -217,12 +311,13 @@ export function findFirstPayableJob(jobs: PortalJob[]) {
 
 export function getPayableJobs(jobs: PortalJob[]) {
   return jobs
-    .filter((job) => job.canPay && job.balanceDue > 0)
+    .filter((job) => job.canPay && job.amountDueNow > 0)
     .sort((a, b) => new Date(b.endTime).getTime() - new Date(a.endTime).getTime())
 }
 
+/** Sum of amounts collectible now across payable jobs (CTA / home balance). */
 export function sumBillableBalanceDue(jobs: PortalJob[]) {
-  return getPayableJobs(jobs).reduce((sum, job) => sum + job.balanceDue, 0)
+  return getPayableJobs(jobs).reduce((sum, job) => sum + job.amountDueNow, 0)
 }
 
 export type PortalPayableJob = {
@@ -236,7 +331,8 @@ export function toPayableJobRows(jobs: PortalJob[]): PortalPayableJob[] {
   return getPayableJobs(jobs).map((job) => ({
     id: job.id,
     title: job.title,
-    balanceDue: job.balanceDue,
-    balanceDueFormatted: job.balanceDueFormatted,
+    // Payable list shows amount due now (what Pay will collect by default)
+    balanceDue: job.amountDueNow,
+    balanceDueFormatted: job.amountDueNowFormatted,
   }))
 }

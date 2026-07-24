@@ -57,15 +57,27 @@ export async function POST(request: Request) {
       const scheduleId = paymentIntent.metadata?.schedule_id
       const clientId = paymentIntent.metadata?.client_id
       const companyId = paymentIntent.metadata?.company_id
+      const installmentId = paymentIntent.metadata?.installment_id || null
 
       if (scheduleId && clientId && companyId) {
-        await recordStripePayment({
+        const result = await recordStripePayment({
           scheduleId,
           clientId,
           companyId,
           amount: paymentIntent.amount_received / 100,
           paymentIntentId: paymentIntent.id,
+          installmentId,
         })
+        // Do not throw on LEDGER_OVERPAYMENT — money is on Stripe; ops refunds manually (K21).
+        // Returning 5xx would cause infinite webhook retries without fixing the ledger.
+        if (!result.success) {
+          console.error('[LEDGER_OVERPAYMENT] webhook recorded refuse', {
+            ...result,
+            action: 'manual_refund_in_stripe_dashboard',
+            opsHint:
+              'PaymentIntent succeeded on Stripe but was not written to billing_payments. Refund in Stripe Dashboard; do not retry webhook to force a ledger row.',
+          })
+        }
       }
     }
 
@@ -77,7 +89,12 @@ export async function POST(request: Request) {
           : charge.payment_intent?.id
 
       if (paymentIntentId) {
-        await handleStripeRefund(paymentIntentId, charge.amount_refunded / 100)
+        // Pass charge total + cumulative refunded so successive partial refunds stay correct
+        await handleStripeRefund(
+          paymentIntentId,
+          charge.amount_refunded / 100,
+          charge.amount / 100
+        )
       }
     }
 

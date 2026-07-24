@@ -113,6 +113,12 @@ export const DOCUMENT_FIELD_DEFINITIONS: DocumentFieldDefinition[] = [
     group: 'Totals',
   },
   {
+    key: 'installments.section',
+    label: 'Payment schedule',
+    kinds: ['invoice'],
+    group: 'Totals',
+  },
+  {
     key: 'summary.totals',
     label: 'Invoice totals',
     kinds: ['invoice'],

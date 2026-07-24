@@ -2992,6 +2992,60 @@ export async function getJobBillingAction(scheduleId: string, clientId: string) 
       }
     }
 
+    const {
+      loadJobPaymentPlanProgress,
+      isJobPaymentPlansEnabled,
+    } = await import('@/lib/payment-plans-server')
+    const {
+      computeCanPay,
+      computeImplicitFullBalancePayable,
+    } = await import('@/lib/payment-plans')
+    const { isJobBillableForClient } = await import('@/lib/portal-jobs')
+
+    const billable = isJobBillableForClient(
+      { status: schedule.status, startTime: schedule.start_time },
+      new Date()
+    )
+    const paymentPlan = isJobPaymentPlansEnabled()
+      ? await loadJobPaymentPlanProgress(supabaseAdmin, scheduleId, {
+          status: schedule.status,
+          startTime: schedule.start_time,
+        })
+      : null
+
+    let amountDueNow: number
+    let maxPayableNow: number
+    let canPay: boolean
+
+    if (paymentPlan) {
+      amountDueNow = paymentPlan.amountDueNow
+      maxPayableNow = paymentPlan.maxPayableNow
+      canPay = computeCanPay({
+        balanceDue: summary.balanceDue,
+        lineItemCount: (lineItems || []).length,
+        billable,
+        plan: {
+          allowPayAhead: paymentPlan.allowPayAhead,
+          amountDueNow: paymentPlan.amountDueNow,
+          hasCollectibleNow: paymentPlan.hasCollectibleNow,
+        },
+      })
+    } else {
+      const imp = computeImplicitFullBalancePayable({
+        totalCharged: summary.totalCharged,
+        totalPaid: summary.totalPaid,
+        billable,
+      })
+      amountDueNow = imp.amountDueNow
+      maxPayableNow = imp.maxPayableNow
+      canPay = computeCanPay({
+        balanceDue: summary.balanceDue,
+        lineItemCount: (lineItems || []).length,
+        billable,
+        plan: null,
+      })
+    }
+
     return {
       success: true,
       billing: {
@@ -3004,6 +3058,11 @@ export async function getJobBillingAction(scheduleId: string, clientId: string) 
         payments: payments || [],
         summary,
         invoiceDocument: invoiceDocument || null,
+        amountDueNow,
+        maxPayableNow,
+        canPay,
+        paymentPlan,
+        recurringRuleId: schedule.recurring_rule_id ?? null,
       },
     }
   } catch (error: any) {
@@ -3110,6 +3169,13 @@ export async function addBillingLineItemAction(data: {
     if (error) throw error
 
     try {
+      const { rebalanceJobPaymentPlan } = await import('@/lib/payment-plans-server')
+      await rebalanceJobPaymentPlan(supabaseAdmin, data.scheduleId)
+    } catch (planError) {
+      console.error('addBillingLineItemAction plan rebalance error:', planError)
+    }
+
+    try {
       await refreshJobInvoice(data.scheduleId)
     } catch (invoiceError) {
       console.error('addBillingLineItemAction invoice sync error:', invoiceError)
@@ -3163,6 +3229,13 @@ export async function updateBillingLineItemAction(data: {
     if (error) throw error
 
     try {
+      const { rebalanceJobPaymentPlan } = await import('@/lib/payment-plans-server')
+      await rebalanceJobPaymentPlan(supabaseAdmin, data.scheduleId)
+    } catch (planError) {
+      console.error('updateBillingLineItemAction plan rebalance error:', planError)
+    }
+
+    try {
       await refreshJobInvoice(data.scheduleId)
     } catch (invoiceError) {
       console.error('updateBillingLineItemAction invoice sync error:', invoiceError)
@@ -3204,6 +3277,13 @@ export async function deleteBillingLineItemAction(
     if (error) throw error
 
     try {
+      const { rebalanceJobPaymentPlan } = await import('@/lib/payment-plans-server')
+      await rebalanceJobPaymentPlan(supabaseAdmin, scheduleId)
+    } catch (planError) {
+      console.error('deleteBillingLineItemAction plan rebalance error:', planError)
+    }
+
+    try {
       await refreshJobInvoice(scheduleId)
     } catch (invoiceError) {
       console.error('deleteBillingLineItemAction invoice sync error:', invoiceError)
@@ -3229,6 +3309,7 @@ export async function addBillingPaymentAction(data: {
   paymentDate: string
   method: string
   notes?: string
+  installmentId?: string
 }) {
   const access = await verifyScheduleCompanyAccess(data.scheduleId, data.clientId)
   if (!access.ok) return { success: false, error: access.error }
@@ -3268,22 +3349,62 @@ export async function addBillingPaymentAction(data: {
       }
     }
 
-    const { data: payment, error } = await supabaseAdmin
-      .from('billing_payments')
-      .insert({
-        schedule_id: data.scheduleId,
-        client_id: data.clientId,
-        company_id: access.companyId,
-        amount: roundedAmount,
-        payment_date: data.paymentDate,
-        method: data.method,
-        notes: data.notes?.trim() || null,
-        source: 'manual',
-      })
-      .select()
-      .single()
+    const { validateManualPaymentAgainstPlan, refreshInstallmentStatuses } = await import(
+      '@/lib/payment-plans-server'
+    )
+    const planCheck = await validateManualPaymentAgainstPlan(supabaseAdmin, {
+      scheduleId: data.scheduleId,
+      amount: roundedAmount,
+      installmentId: data.installmentId || null,
+      balanceDue: summary.balanceDue,
+      schedule: { status: schedule.status, startTime: schedule.start_time },
+    })
+    if (!planCheck.ok) {
+      return { success: false, error: planCheck.error }
+    }
 
-    if (error) throw error
+    const insertRow: Record<string, unknown> = {
+      schedule_id: data.scheduleId,
+      client_id: data.clientId,
+      company_id: access.companyId,
+      amount: roundedAmount,
+      payment_date: data.paymentDate,
+      method: data.method,
+      notes: data.notes?.trim() || null,
+      source: 'manual',
+    }
+    if (data.installmentId) {
+      insertRow.installment_id = data.installmentId
+    }
+
+    let payment: Record<string, unknown> | null = null
+    {
+      const { data: inserted, error } = await supabaseAdmin
+        .from('billing_payments')
+        .insert(insertRow)
+        .select()
+        .single()
+
+      if (error) {
+        if (
+          data.installmentId &&
+          (error.message?.includes('installment_id') || error.code === '42703')
+        ) {
+          delete insertRow.installment_id
+          const retry = await supabaseAdmin
+            .from('billing_payments')
+            .insert(insertRow)
+            .select()
+            .single()
+          if (retry.error) throw retry.error
+          payment = retry.data
+        } else {
+          throw error
+        }
+      } else {
+        payment = inserted
+      }
+    }
 
     const { notifyPaymentReceived } = await import('@/lib/notifications-server')
     const { data: company } = await supabaseAdmin
@@ -3305,6 +3426,12 @@ export async function addBillingPaymentAction(data: {
         paymentMethod: data.method,
       })
     })
+
+    try {
+      await refreshInstallmentStatuses(supabaseAdmin, data.scheduleId)
+    } catch (planError) {
+      console.error('addBillingPaymentAction installment refresh error:', planError)
+    }
 
     try {
       await refreshJobInvoice(data.scheduleId)
@@ -3363,6 +3490,13 @@ export async function deleteBillingPaymentAction(
     if (error) throw error
 
     try {
+      const { refreshInstallmentStatuses } = await import('@/lib/payment-plans-server')
+      await refreshInstallmentStatuses(supabaseAdmin, scheduleId)
+    } catch (planError) {
+      console.error('deleteBillingPaymentAction installment refresh error:', planError)
+    }
+
+    try {
       await refreshJobInvoice(scheduleId)
     } catch (invoiceError) {
       console.error('deleteBillingPaymentAction invoice sync error:', invoiceError)
@@ -3377,6 +3511,172 @@ export async function deleteBillingPaymentAction(
   } catch (error: any) {
     console.error('deleteBillingPaymentAction error:', error)
     return { success: false, error: error.message }
+  }
+}
+
+export async function setJobPaymentPlanAction(data: {
+  scheduleId: string
+  clientId: string
+  companyId: string
+  template: import('@/lib/payment-plans').JobPaymentPlanTemplate
+  applyMode?: 'this_visit' | 'all_future'
+  includeCustomized?: boolean
+  confirmReallocate?: boolean
+}) {
+  const access = await verifyScheduleCompanyAccess(data.scheduleId, data.clientId)
+  if (!access.ok) return { success: false as const, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false as const, error: 'Unauthorized' }
+  }
+
+  try {
+    const { setJobPaymentPlan } = await import('@/lib/payment-plans-server')
+    const supabaseAdmin = createSupabaseAdmin()
+    const result = await setJobPaymentPlan(supabaseAdmin, {
+      scheduleId: data.scheduleId,
+      clientId: data.clientId,
+      companyId: access.companyId,
+      template: data.template,
+      applyMode: data.applyMode || 'this_visit',
+      includeCustomized: data.includeCustomized,
+      confirmReallocate: data.confirmReallocate,
+    })
+
+    if (!result.success) {
+      return { success: false as const, error: result.error || 'Could not set payment plan' }
+    }
+
+    revalidatePath(`/dashboard/clients/${data.clientId}`)
+    revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.scheduleId}`)
+
+    return {
+      success: true as const,
+      allocatedExistingPayments: result.allocatedExistingPayments,
+      allFuture: result.allFuture,
+    }
+  } catch (error: any) {
+    console.error('setJobPaymentPlanAction error:', error)
+    return { success: false as const, error: error.message }
+  }
+}
+
+export async function resetJobPaymentPlanAction(data: {
+  scheduleId: string
+  clientId: string
+  companyId: string
+  confirmReallocate?: boolean
+}) {
+  const access = await verifyScheduleCompanyAccess(data.scheduleId, data.clientId)
+  if (!access.ok) return { success: false as const, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false as const, error: 'Unauthorized' }
+  }
+
+  try {
+    const { resetJobPaymentPlan } = await import('@/lib/payment-plans-server')
+    const supabaseAdmin = createSupabaseAdmin()
+    const result = await resetJobPaymentPlan(supabaseAdmin, {
+      scheduleId: data.scheduleId,
+      clientId: data.clientId,
+      companyId: access.companyId,
+      confirmReallocate: data.confirmReallocate,
+    })
+
+    if (!result.success) {
+      return { success: false as const, error: result.error || 'Could not reset payment plan' }
+    }
+
+    revalidatePath(`/dashboard/clients/${data.clientId}`)
+    revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.scheduleId}`)
+
+    return {
+      success: true as const,
+      allocatedExistingPayments: result.allocatedExistingPayments,
+    }
+  } catch (error: any) {
+    console.error('resetJobPaymentPlanAction error:', error)
+    return { success: false as const, error: error.message }
+  }
+}
+
+export async function getCompanyJobPaymentSettingsAction(companyId: string) {
+  const access = await verifyCompanyStaff()
+  if (!access.ok) return { success: false as const, error: access.error }
+  if (access.companyId !== companyId) {
+    return { success: false as const, error: 'Unauthorized' }
+  }
+
+  try {
+    const { getCompanyJobPaymentSettings } = await import('@/lib/payment-plans-server')
+    const supabaseAdmin = createSupabaseAdmin()
+    const settings = await getCompanyJobPaymentSettings(supabaseAdmin, companyId)
+    return { success: true as const, settings }
+  } catch (error: any) {
+    console.error('getCompanyJobPaymentSettingsAction error:', error)
+    return { success: false as const, error: error.message }
+  }
+}
+
+export async function updateCompanyJobPaymentSettingsAction(
+  companyId: string,
+  settings: { defaultPlan: import('@/lib/payment-plans').JobPaymentPlanTemplate }
+) {
+  const access = await verifyCompanyStaff()
+  if (!access.ok) return { success: false as const, error: access.error }
+  if (access.companyId !== companyId) {
+    return { success: false as const, error: 'Unauthorized' }
+  }
+  // Prefer admin for company-wide billing policy
+  if (access.session.profile.role !== 'company_admin') {
+    return { success: false as const, error: 'Only company admins can change payment plan defaults' }
+  }
+
+  try {
+    const { updateCompanyJobPaymentSettings } = await import('@/lib/payment-plans-server')
+    const supabaseAdmin = createSupabaseAdmin()
+    const saved = await updateCompanyJobPaymentSettings(supabaseAdmin, companyId, settings)
+    revalidatePath('/dashboard/settings')
+    return { success: true as const, settings: saved }
+  } catch (error: any) {
+    console.error('updateCompanyJobPaymentSettingsAction error:', error)
+    return { success: false as const, error: error.message }
+  }
+}
+
+export async function relinkBillingPaymentInstallmentAction(data: {
+  paymentId: string
+  scheduleId: string
+  clientId: string
+  companyId: string
+  installmentId: string | null
+}) {
+  const access = await verifyScheduleCompanyAccess(data.scheduleId, data.clientId)
+  if (!access.ok) return { success: false as const, error: access.error }
+  if (access.companyId !== data.companyId) {
+    return { success: false as const, error: 'Unauthorized' }
+  }
+
+  try {
+    const { relinkBillingPaymentInstallment } = await import('@/lib/payment-plans-server')
+    const supabaseAdmin = createSupabaseAdmin()
+    const result = await relinkBillingPaymentInstallment(supabaseAdmin, {
+      paymentId: data.paymentId,
+      scheduleId: data.scheduleId,
+      installmentId: data.installmentId,
+    })
+
+    if (!result.ok) {
+      return { success: false as const, error: result.error }
+    }
+
+    revalidatePath(`/dashboard/clients/${data.clientId}`)
+    revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.scheduleId}`)
+    revalidatePath('/dashboard/payments')
+
+    return { success: true as const }
+  } catch (error: any) {
+    console.error('relinkBillingPaymentInstallmentAction error:', error)
+    return { success: false as const, error: error.message }
   }
 }
 

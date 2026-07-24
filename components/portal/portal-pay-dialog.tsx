@@ -12,6 +12,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { formatCurrency } from '@/lib/billing'
+import {
+  MOBILE_FULL_WIDTH_BUTTON_CLASS,
+  SCROLLABLE_MODAL_BODY_CLASS,
+  SCROLLABLE_MODAL_HEADER_CLASS,
+  SCROLLABLE_MODAL_SHELL_MD,
+} from '@/lib/mobile-layout'
+import { cn } from '@/lib/utils'
 import type { PortalPayableJob } from '@/lib/portal-jobs'
 import { ArrowLeft, CreditCard, Lock } from 'lucide-react'
 import { toast } from 'sonner'
@@ -96,7 +103,13 @@ export function PortalPayDialog({
       })
       const data = await res.json()
       if (!res.ok) {
-        toast.error(data.error || 'Payment could not be recorded')
+        toast.error(
+          data.code === 'LEDGER_OVERPAYMENT'
+            ? data.error ||
+                'This payment could not be recorded because it would exceed the job balance. Contact the business for a refund if you were charged.'
+            : data.error || 'Payment could not be recorded',
+          data.code === 'LEDGER_OVERPAYMENT' ? { duration: 8000 } : undefined
+        )
         return
       }
       toast.success('Payment successful — thank you!')
@@ -123,53 +136,63 @@ export function PortalPayDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={SCROLLABLE_MODAL_SHELL_MD} showCloseButton>
         {showPaymentStep ? (
           <>
-            <DialogHeader>
-              <button
+            <DialogHeader
+              className={cn('border-b px-6 pt-5 pb-4', SCROLLABLE_MODAL_HEADER_CLASS)}
+            >
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={backToList}
-                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit -mt-1 mb-1"
+                className="-ml-2 mb-1 h-auto w-fit gap-1.5 px-2 text-muted-foreground"
               >
                 <ArrowLeft className="size-3.5" />
                 Back to all balances
-              </button>
-              <DialogTitle>{payingJob.title}</DialogTitle>
+              </Button>
+              <DialogTitle className="truncate">{payingJob.title}</DialogTitle>
               <DialogDescription className="sr-only">
                 Pay {payingJob.balanceDueFormatted} for {payingJob.title}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4">
-              <div>
-                <p className="text-3xl font-bold tracking-tight">{payingJob.balanceDueFormatted}</p>
-                <p className="text-sm text-muted-foreground mt-1 inline-flex items-center gap-1.5">
-                  <Lock className="size-3.5" />
-                  Secure card payment
-                </p>
-              </div>
+            <div className={cn(SCROLLABLE_MODAL_BODY_CLASS, 'px-4 py-5 sm:px-6')}>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-3xl font-bold tracking-tight">
+                    {payingJob.balanceDueFormatted}
+                  </p>
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Lock className="size-3.5" />
+                    Secure card payment
+                  </p>
+                </div>
 
-              {isLoadingIntent ? (
-                <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
-                  Preparing secure checkout...
-                </div>
-              ) : paymentSession ? (
-                <div className="rounded-lg border p-4">
-                  <StripePaymentForm
-                    clientSecret={paymentSession.clientSecret}
-                    amountLabel={paymentSession.amountLabel}
-                    stripeAccountId={paymentSession.stripeAccountId}
-                    onSuccess={handlePaymentSuccess}
-                    onCancel={backToList}
-                  />
-                </div>
-              ) : null}
+                {isLoadingIntent ? (
+                  <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
+                    Preparing secure checkout...
+                  </div>
+                ) : paymentSession ? (
+                  <div className="rounded-lg border p-4">
+                    <StripePaymentForm
+                      clientSecret={paymentSession.clientSecret}
+                      amountLabel={paymentSession.amountLabel}
+                      stripeAccountId={paymentSession.stripeAccountId}
+                      onSuccess={handlePaymentSuccess}
+                      onCancel={backToList}
+                    />
+                  </div>
+                ) : null}
+              </div>
             </div>
           </>
         ) : (
           <>
-            <DialogHeader>
+            <DialogHeader
+              className={cn('border-b px-6 pt-5 pb-4', SCROLLABLE_MODAL_HEADER_CLASS)}
+            >
               <DialogTitle>Pay your balance</DialogTitle>
               <DialogDescription>
                 {jobs.length === 1
@@ -178,33 +201,37 @@ export function PortalPayDialog({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="rounded-lg border bg-muted/30 px-4 py-3">
-              <p className="text-sm text-muted-foreground">Total due</p>
-              <p className="text-2xl font-bold tracking-tight">{totalFormatted}</p>
-            </div>
+            <div className={cn(SCROLLABLE_MODAL_BODY_CLASS, 'space-y-4 px-4 py-5 sm:px-6')}>
+              <div className="rounded-lg border bg-muted/30 px-4 py-3">
+                <p className="text-sm text-muted-foreground">Total due</p>
+                <p className="text-2xl font-bold tracking-tight">{totalFormatted}</p>
+              </div>
 
-            <ul className="space-y-2">
-              {jobs.map((job) => (
-                <li
-                  key={job.id}
-                  className="flex items-center gap-3 rounded-lg border p-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{job.title}</p>
-                    <p className="text-sm text-muted-foreground">{job.balanceDueFormatted}</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    className="shrink-0 gap-1.5"
-                    onClick={() => startPayment(job)}
-                    disabled={isLoadingIntent}
+              <ul className="space-y-2">
+                {jobs.map((job) => (
+                  <li
+                    key={job.id}
+                    className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"
                   >
-                    <CreditCard className="size-3.5" />
-                    Pay
-                  </Button>
-                </li>
-              ))}
-            </ul>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{job.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {job.balanceDueFormatted}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className={cn('shrink-0 gap-1.5', MOBILE_FULL_WIDTH_BUTTON_CLASS)}
+                      onClick={() => void startPayment(job)}
+                      disabled={isLoadingIntent}
+                    >
+                      <CreditCard className="size-3.5" />
+                      Pay
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </>
         )}
       </DialogContent>

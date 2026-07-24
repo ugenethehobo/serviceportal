@@ -694,17 +694,41 @@ export function ClientDetailPageClient({
       </div>
     </div>
 
-      <StaffActivityCard
-        items={activity}
-        timezone={initialTimezone}
-        variant="client"
-      />
+      {activeTab !== 'billing' ? (
+        <StaffActivityCard
+          items={activity}
+          timezone={initialTimezone}
+          variant="client"
+          listClassName="max-h-48"
+          compact
+        />
+      ) : null}
 
       {/* Main Content */}
       <div className={`flex flex-col flex-1 min-h-0 gap-6 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>
-        {/* Schedules */}
+        {/* Billing replaces the main card with its own left/right surfaces */}
+        <TabsContent
+          value="billing"
+          className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+        >
+          {mountedTabs.has('billing') ? (
+            <StripeConnectGate showAlert={false}>
+              <ClientBillingPanel
+                clientId={clientId}
+                activity={activity}
+                timezone={initialTimezone}
+              />
+            </StripeConnectGate>
+          ) : null}
+        </TabsContent>
+
+        {/* Schedules / other tabs share one main card (hidden on billing) */}
         <Card
-          className={`flex-[7] flex flex-col p-6 min-h-0 max-md:flex-none max-md:p-4 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+          className={cn(
+            'flex-[7] flex flex-col p-6 min-h-0 max-md:flex-none max-md:p-4',
+            MOBILE_NATURAL_HEIGHT_CLASS,
+            activeTab === 'billing' && 'hidden'
+          )}
         >
           {/* Tab Content Area - Full card is now used for the active page */}
 
@@ -887,17 +911,6 @@ export function ClientDetailPageClient({
                 onConvertToJob={handleConvertToJob}
                 onDocumentsChange={() => setDocumentsRefreshKey((k) => k + 1)}
               />
-            ) : null}
-          </TabsContent>
-
-          <TabsContent
-            value="billing"
-            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
-          >
-            {mountedTabs.has('billing') ? (
-              <StripeConnectGate>
-                <ClientBillingPanel clientId={clientId} />
-              </StripeConnectGate>
             ) : null}
           </TabsContent>
 

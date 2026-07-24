@@ -21,6 +21,8 @@ export interface BillingPayment {
   notes: string | null
   source?: 'manual' | 'stripe'
   stripe_payment_intent_id?: string | null
+  /** Optional link to billing_installments (multi-payment plans). */
+  installment_id?: string | null
   created_at: string
 }
 
@@ -46,6 +48,16 @@ export interface JobBillingData {
   payments: BillingPayment[]
   summary: BillingSummary
   invoiceDocument?: JobInvoiceDocument | null
+  /** Collectibility-aware (from plan or implicit full_balance). */
+  amountDueNow?: number
+  maxPayableNow?: number
+  canPay?: boolean
+  /** Present when a job_payment_plans row exists. */
+  paymentPlan?: import('@/lib/payment-plans').PlanProgressSummary | null
+  /** Banner after attaching plan with existing payments (FIFO note). */
+  paymentPlanAllocatedExisting?: boolean
+  /** When set, job is part of a recurring series (all_future apply UI). */
+  recurringRuleId?: string | null
 }
 
 export const PAYMENT_METHODS = [

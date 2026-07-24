@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { getClientBillingAction } from '@/app/action'
 import { formatCurrency } from '@/lib/billing'
 import { Badge } from '@/components/ui/badge'
+import { MainPageCard } from '@/components/ui/main-page-card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
 import {
@@ -16,19 +17,30 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { StaffActivityCard } from '@/components/dashboard/staff-activity-card'
+import { StripeConnectAlert } from '@/components/dashboard/stripe-connect-gate'
+import type { ActivityFeedItem } from '@/lib/activity-feed'
 import {
   MOBILE_LIST_STACK_CLASS,
   MOBILE_NATURAL_HEIGHT_CLASS,
+  MOBILE_SCROLL_VIEWPORT_CLASS,
   MOBILE_TABLE_DESKTOP_ONLY_CLASS,
 } from '@/lib/mobile-layout'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { ExternalLink } from 'lucide-react'
 
 interface ClientBillingPanelProps {
   clientId: string
+  activity?: ActivityFeedItem[]
+  timezone?: string
 }
 
-export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
+export function ClientBillingPanel({
+  clientId,
+  activity = [],
+  timezone = 'America/New_York',
+}: ClientBillingPanelProps) {
   const router = useRouter()
   const [billing, setBilling] = useState<{
     summary: { totalCharged: number; totalPaid: number; balanceDue: number }
@@ -45,7 +57,18 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
   const fetchBilling = useCallback(async () => {
     const result = await getClientBillingAction(clientId)
     if (result.success && result.billing) {
-      setBilling(result.billing as any)
+      setBilling(
+        result.billing as {
+          summary: { totalCharged: number; totalPaid: number; balanceDue: number }
+          jobs: Array<{
+            scheduleId: string
+            title: string
+            startTime: string
+            status: string
+            summary: { totalCharged: number; totalPaid: number; balanceDue: number }
+          }>
+        }
+      )
     } else {
       toast.error(result.error || 'Failed to load billing')
     }
@@ -53,7 +76,7 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
   }, [clientId])
 
   useEffect(() => {
-    fetchBilling()
+    void fetchBilling()
   }, [fetchBilling])
 
   if (isLoading) {
@@ -68,35 +91,59 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
     (j) => j.summary.totalCharged > 0 || j.summary.totalPaid > 0
   )
 
-  return (
-    <div className={`flex flex-col gap-6 flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
-          Clients pay job balances through the client portal. Record cash payments on individual job billing tabs.
-        </p>
+  const activityColumn = (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <StripeConnectAlert />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-background">
+        <StaffActivityCard
+          items={activity}
+          timezone={timezone}
+          variant="client"
+          embedded
+          compact
+          listClassName="max-h-full min-h-0 flex-1"
+        />
+      </div>
+    </div>
+  )
+
+  const summaryStrip = (
+    <div className="grid shrink-0 grid-cols-3 gap-2 sm:gap-3">
+      <SummaryCard label="Total billed" value={formatCurrency(billing.summary.totalCharged)} />
+      <SummaryCard label="Total paid" value={formatCurrency(billing.summary.totalPaid)} />
+      <SummaryCard
+        label="Balance due"
+        value={formatCurrency(billing.summary.balanceDue)}
+        highlight={billing.summary.balanceDue > 0}
+      />
+    </div>
+  )
+
+  const jobsSection = (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold">Jobs with billing</h3>
+          <p className="text-xs text-muted-foreground">
+            Open a job to record cash or manage installments.
+          </p>
+        </div>
         <Link
           href="/dashboard/payments"
-          className="text-sm font-medium inline-flex items-center gap-1.5 hover:underline shrink-0 max-md:min-h-11 max-md:items-center"
+          className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium hover:underline max-md:min-h-10"
         >
-          View all transactions
+          All transactions
           <ExternalLink className="size-3.5" />
         </Link>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <SummaryCard label="Total Billed" value={formatCurrency(billing.summary.totalCharged)} />
-        <SummaryCard label="Total Paid" value={formatCurrency(billing.summary.totalPaid)} />
-        <SummaryCard
-          label="Balance Due"
-          value={formatCurrency(billing.summary.balanceDue)}
-          highlight={billing.summary.balanceDue > 0}
-        />
       </div>
 
       {jobsWithBilling.length > 0 ? (
         <>
           <ScrollArea
-            className={`border rounded-lg flex-1 min-h-0 ${MOBILE_TABLE_DESKTOP_ONLY_CLASS}`}
+            className={cn(
+              'min-h-0 flex-1 rounded-lg border',
+              MOBILE_TABLE_DESKTOP_ONLY_CLASS
+            )}
             viewportClassName="scroll-fade"
           >
             <Table>
@@ -108,7 +155,7 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
                   <TableHead className="text-right">Charged</TableHead>
                   <TableHead className="text-right">Paid</TableHead>
                   <TableHead className="text-right">Balance</TableHead>
-                  <TableHead className="w-24" />
+                  <TableHead className="w-20" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -123,18 +170,27 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
                         {job.status.replace('_', ' ')}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">{formatCurrency(job.summary.totalCharged)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(job.summary.totalPaid)}</TableCell>
-                    <TableCell className={`text-right font-medium ${job.summary.balanceDue > 0 ? 'text-orange-600' : ''}`}>
+                    <TableCell className="text-right">
+                      {formatCurrency(job.summary.totalCharged)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(job.summary.totalPaid)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        'text-right font-medium',
+                        job.summary.balanceDue > 0 && 'text-orange-600'
+                      )}
+                    >
                       {formatCurrency(job.summary.balanceDue)}
                     </TableCell>
                     <TableCell>
                       <Link
                         href={`/dashboard/clients/${clientId}/jobs/${job.scheduleId}?tab=billing`}
-                        className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+                        className="inline-flex items-center gap-1 text-sm font-medium hover:underline"
                       >
+                        Open
                         <ExternalLink className="size-3.5" />
-                        Billing
                       </Link>
                     </TableCell>
                   </TableRow>
@@ -153,30 +209,26 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
                   )
                 }
               >
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-medium leading-snug">{job.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="mt-0.5 text-xs text-muted-foreground">
                         {new Date(job.startTime).toLocaleDateString()}
                       </p>
                     </div>
-                    <Badge variant="outline" className="capitalize shrink-0">
+                    <Badge variant="outline" className="shrink-0 capitalize">
                       {job.status.replace('_', ' ')}
                     </Badge>
                   </div>
                   <MobileListCardRow
-                    label="Charged"
-                    value={formatCurrency(job.summary.totalCharged)}
-                  />
-                  <MobileListCardRow
-                    label="Paid"
-                    value={formatCurrency(job.summary.totalPaid)}
-                  />
-                  <MobileListCardRow
                     label="Balance"
                     value={
-                      <span className={job.summary.balanceDue > 0 ? 'text-orange-600' : undefined}>
+                      <span
+                        className={
+                          job.summary.balanceDue > 0 ? 'text-orange-600' : undefined
+                        }
+                      >
                         {formatCurrency(job.summary.balanceDue)}
                       </span>
                     }
@@ -187,10 +239,49 @@ export function ClientBillingPanel({ clientId }: ClientBillingPanelProps) {
           </div>
         </>
       ) : (
-        <div className="border border-dashed rounded-lg p-8 text-center text-muted-foreground text-sm flex-1 flex items-center justify-center">
+        <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
           No billing activity yet. Add line items on individual job billing tabs.
         </div>
       )}
+    </div>
+  )
+
+  return (
+    <div
+      className={cn(
+        'flex min-h-0 flex-1 flex-col gap-4',
+        MOBILE_NATURAL_HEIGHT_CLASS
+      )}
+    >
+      {/* Desktop: two page-level cards (replace the parent main card) */}
+      <div className="hidden min-h-0 flex-1 gap-4 lg:grid lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
+        <MainPageCard className="min-h-0 gap-0 overflow-hidden p-3 sm:p-4">
+          {activityColumn}
+        </MainPageCard>
+        <MainPageCard className="min-h-0 gap-4 overflow-hidden p-4 sm:p-5">
+          {summaryStrip}
+          {jobsSection}
+        </MainPageCard>
+      </div>
+
+      {/* Mobile / tablet: stacked page-level cards */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:hidden">
+        <StripeConnectAlert />
+        {summaryStrip}
+        <MainPageCard className="max-h-[40vh] min-h-[12rem] gap-0 overflow-hidden p-0">
+          <StaffActivityCard
+            items={activity}
+            timezone={timezone}
+            variant="client"
+            embedded
+            compact
+            listClassName={cn('max-h-full min-h-0 flex-1', MOBILE_SCROLL_VIEWPORT_CLASS)}
+          />
+        </MainPageCard>
+        <MainPageCard className="min-h-0 flex-1 gap-4 p-4">
+          {jobsSection}
+        </MainPageCard>
+      </div>
     </div>
   )
 }
@@ -205,9 +296,16 @@ function SummaryCard({
   highlight?: boolean
 }) {
   return (
-    <div className="rounded-lg border p-4">
-      <div className="text-sm text-muted-foreground">{label}</div>
-      <div className={`text-2xl font-semibold tracking-tight mt-1 ${highlight ? 'text-orange-600' : ''}`}>
+    <div className="rounded-lg border bg-muted/20 px-2.5 py-2 sm:px-3 sm:py-2.5">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
+        {label}
+      </div>
+      <div
+        className={cn(
+          'mt-0.5 text-base font-semibold tracking-tight tabular-nums sm:text-lg',
+          highlight && 'text-orange-600'
+        )}
+      >
         {value}
       </div>
     </div>

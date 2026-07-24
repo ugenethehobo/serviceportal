@@ -70,6 +70,7 @@ Enable the Google Calendar API in [Google Cloud Console](https://console.cloud.g
 |----------|---------|
 | `TEXTBELT_API_KEY` | SMS via Textbelt. Defaults to `textbelt` (1 free SMS/day). |
 | `OSRM_BASE_URL` | OSRM server base URL for route geometry. Defaults to the public demo server. |
+| `ENABLE_JOB_PAYMENT_PLANS` | Kill switch for plan materialize/rebalance/plan UI. Default: enabled when unset. Set `false` only for emergency rollback; leave unset in normal production. |
 
 ## Supabase Auth (password reset)
 
@@ -147,6 +148,7 @@ All SQL files live in `supabase/`. Run them in the **Supabase SQL editor** (or v
 | 34 | `schedule-helpers-schema.sql` | Multi-tech job helpers (`schedule_helpers`) for field ops P4 |
 | 35 | `crew-label-schema.sql` | Customizable `crew_label` on `companies` (default "Crews") |
 | 36 | `portal-multi-login-schema.sql` | Multiple client portal logins per client (drop unique on `profiles.client_id`) |
+| 37 | `job-payment-plan-schema.sql` | Multi-payment job plans (`job_payment_plans`, `billing_installments`, company/series templates) |
 
 > **Security:** Run `production-rls-hardening.sql` before exposing the app to real customers. It replaces the global `company-logos` read policy with company-scoped storage policies.
 
@@ -165,6 +167,7 @@ All SQL files live in `supabase/`. Run them in the **Supabase SQL editor** (or v
 | Company branding (background/accent) fails | `personalization-schema.sql` + `user-backgrounds-storage.sql` |
 | Custom crew label / nav still says wrong name | `crew-label-schema.sql` |
 | Cannot add second portal login for a client | `portal-multi-login-schema.sql` |
+| Job payment plans / installments missing | `job-payment-plan-schema.sql` |
 | Cross-tenant data visible in browser | `production-rls-hardening.sql` |
 
 ## Storage buckets
@@ -191,6 +194,15 @@ Register two webhook endpoints in the Stripe Dashboard (or one endpoint with sep
 | `{APP_URL}/api/stripe/billing/webhook` | Billing: `customer.subscription.updated`, `customer.subscription.deleted`, `checkout.session.completed` |
 
 Set `STRIPE_WEBHOOK_SECRET` and `STRIPE_BILLING_WEBHOOK_SECRET` to the corresponding signing secrets.
+
+### Ledger overpayment refuse (`LEDGER_OVERPAYMENT`)
+
+If a card payment succeeds on Stripe but the app refuses to write `billing_payments` (double-charge race past job balance):
+
+1. Logs: search for `[LEDGER_OVERPAYMENT]` — includes `paymentIntentId`, `scheduleId`, `amount`, `balanceDue`.
+2. **Do not** force a ledger row. Refund the PaymentIntent (or excess) in **Stripe Dashboard** for the connected account.
+3. Client toast/API message already tells them to contact the business for a refund.
+4. Webhook returns 200 on refuse so Stripe does not retry forever.
 
 ## Cron jobs
 

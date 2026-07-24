@@ -33,6 +33,8 @@ type ActivityFeedCardProps = {
   emptyMessage?: string
   /** When true, omits the outer Card — for sheets and embedded panels. */
   embedded?: boolean
+  /** Denser rows and header for sidebars / billing columns. */
+  compact?: boolean
   /** Override scroll region height; defaults to max-h-72 for standalone cards. */
   listClassName?: string
   showHeader?: boolean
@@ -49,6 +51,7 @@ export function ActivityFeedCard({
   defaultPeriod = '30d',
   emptyMessage = 'Nothing in this period — try a longer range.',
   embedded = false,
+  compact = false,
   listClassName,
   showHeader = true,
   onItemNavigate,
@@ -60,20 +63,35 @@ export function ActivityFeedCard({
     [items, period]
   )
 
-  const scrollClassName = listClassName ?? 'max-h-72'
+  const scrollClassName =
+    listClassName ?? (compact ? 'max-h-full min-h-0 flex-1' : 'max-h-72')
 
   const header = showHeader ? (
-    <div className="px-5 py-4 border-b flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 shrink-0">
-      <div>
-        <h2 className="font-semibold text-lg">{title}</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+    <div
+      className={cn(
+        'flex shrink-0 flex-col gap-2 border-b sm:flex-row sm:items-start sm:justify-between',
+        compact ? 'gap-2 px-3 py-2.5' : 'gap-3 px-5 py-4'
+      )}
+    >
+      <div className="min-w-0">
+        <h2 className={cn('font-semibold', compact ? 'text-sm' : 'text-lg')}>{title}</h2>
+        {!compact && description ? (
+          <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+        ) : null}
       </div>
       <Select
         value={period}
         onValueChange={(value) => setPeriod((value ?? defaultPeriod) as ActivityPeriod)}
       >
-        <SelectTrigger className="w-[140px] shrink-0 max-md:w-full max-md:min-w-0">
-          <SelectValue />
+        <SelectTrigger
+          className={cn(
+            'shrink-0 max-md:w-full max-md:min-w-0',
+            compact ? 'h-8 w-full sm:w-[7.5rem]' : 'w-[140px]'
+          )}
+        >
+          <SelectValue>
+            {ACTIVITY_PERIOD_LABELS[period] || ACTIVITY_PERIOD_LABELS['30d']}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {(Object.keys(ACTIVITY_PERIOD_LABELS) as ActivityPeriod[]).map((key) => (
@@ -85,13 +103,15 @@ export function ActivityFeedCard({
       </Select>
     </div>
   ) : (
-    <div className="shrink-0 border-b px-4 py-3 max-md:px-4 sm:px-5">
+    <div className="shrink-0 border-b px-3 py-2 sm:px-4">
       <Select
         value={period}
         onValueChange={(value) => setPeriod((value ?? defaultPeriod) as ActivityPeriod)}
       >
         <SelectTrigger className="w-full max-md:min-w-0">
-          <SelectValue />
+          <SelectValue>
+            {ACTIVITY_PERIOD_LABELS[period] || ACTIVITY_PERIOD_LABELS['30d']}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {(Object.keys(ACTIVITY_PERIOD_LABELS) as ActivityPeriod[]).map((key) => (
@@ -115,52 +135,66 @@ export function ActivityFeedCard({
               onClick={() => onItemNavigate?.()}
               className={cn(
                 'flex w-full min-w-0 transition-colors hover:bg-muted/40',
-                embedded
-                  ? 'flex-col gap-2 px-4 py-3 sm:px-5 sm:py-3.5'
-                  : 'flex-col items-start gap-2 px-5 py-4 max-md:gap-3 sm:flex-row sm:items-start'
+                compact
+                  ? 'items-start gap-2 px-3 py-2'
+                  : embedded
+                    ? 'flex-col gap-2 px-4 py-3 sm:px-5 sm:py-3.5'
+                    : 'flex-col items-start gap-2 px-5 py-4 max-md:gap-3 sm:flex-row sm:items-start'
               )}
             >
               <div
                 className={cn(
-                  'flex min-w-0 gap-3',
-                  embedded ? 'w-full items-start' : 'flex-1 items-start'
+                  'flex min-w-0 gap-2.5',
+                  compact || embedded ? 'w-full items-start' : 'flex-1 items-start',
+                  !compact && !embedded && 'gap-3'
                 )}
               >
                 <div
-                  className={`shrink-0 rounded-lg p-2 ${
+                  className={cn(
+                    'shrink-0 rounded-md',
+                    compact ? 'p-1.5' : 'rounded-lg p-2',
                     item.urgent
                       ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300'
                       : 'bg-muted text-muted-foreground'
-                  }`}
+                  )}
                 >
-                  {Icon ? <Icon className="size-4" /> : null}
+                  {Icon ? <Icon className={compact ? 'size-3.5' : 'size-4'} /> : null}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium break-words">{item.title}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p
+                      className={cn(
+                        'font-medium break-words',
+                        compact ? 'text-xs leading-snug' : 'text-sm'
+                      )}
+                    >
+                      {item.title}
+                    </p>
                     {item.urgent && (
                       <Badge variant="secondary" className="text-[10px]">
                         Action needed
                       </Badge>
                     )}
                   </div>
-                  <p
-                    className={cn(
-                      'mt-0.5 text-sm text-muted-foreground',
-                      embedded ? 'break-words' : 'truncate'
-                    )}
-                  >
-                    {item.description}
-                  </p>
-                  {embedded ? (
-                    <span className="mt-1 block text-xs text-muted-foreground">
+                  {!compact ? (
+                    <p
+                      className={cn(
+                        'mt-0.5 text-sm text-muted-foreground',
+                        embedded ? 'break-words' : 'truncate'
+                      )}
+                    >
+                      {item.description}
+                    </p>
+                  ) : null}
+                  {compact || embedded ? (
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
                       {formatActivityWhen(item.occurredAt, timezone)}
                     </span>
                   ) : null}
                 </div>
               </div>
-              {!embedded ? (
-                <span className="shrink-0 pt-0.5 text-xs text-muted-foreground max-md:self-end sm:pt-0.5">
+              {!embedded && !compact ? (
+                <span className="shrink-0 pt-0.5 text-xs text-muted-foreground max-md:self-end">
                   {formatActivityWhen(item.occurredAt, timezone)}
                 </span>
               ) : null}

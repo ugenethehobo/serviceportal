@@ -562,7 +562,25 @@ export function JobDetailPageClient({
         </div>
       )}
 
-      <MainPageCard className="min-h-0 flex-1 overflow-hidden p-4 sm:p-6">
+      {/* Billing replaces the main page card with its own left/right surfaces */}
+      <TabsContent
+        value="billing"
+        className={cn(
+          'mt-0 flex min-h-0 flex-1 flex-col outline-none',
+          MOBILE_NATURAL_HEIGHT_CLASS
+        )}
+      >
+        <StripeConnectGate showAlert={false}>
+          <JobBillingPanel scheduleId={jobId} clientId={clientId} />
+        </StripeConnectGate>
+      </TabsContent>
+
+      <MainPageCard
+        className={cn(
+          'min-h-0 flex-1 overflow-hidden p-4 sm:p-6',
+          activeTab === 'billing' && 'hidden'
+        )}
+      >
         <TabsContent
           value="details"
           className={cn(
@@ -605,18 +623,6 @@ export function JobDetailPageClient({
               </div>
             )}
           </MainPageCardScroll>
-        </TabsContent>
-
-        <TabsContent
-          value="billing"
-          className={cn(
-            'mt-0 flex min-h-0 flex-1 flex-col outline-none',
-            MOBILE_NATURAL_HEIGHT_CLASS
-          )}
-        >
-          <StripeConnectGate>
-            <JobBillingPanel scheduleId={jobId} clientId={clientId} />
-          </StripeConnectGate>
         </TabsContent>
 
         <TabsContent

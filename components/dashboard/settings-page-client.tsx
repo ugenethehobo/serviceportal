@@ -73,6 +73,14 @@ const StripeConnectSettings = dynamic(
   { loading: sectionLoading }
 )
 
+const CompanyJobPaymentSettings = dynamic(
+  () =>
+    import('@/components/dashboard/company-job-payment-settings').then((m) => ({
+      default: m.CompanyJobPaymentSettings,
+    })),
+  { loading: sectionLoading }
+)
+
 const PlatformSubscriptionSettings = dynamic(
   () =>
     import('@/components/dashboard/platform-subscription-settings').then((m) => ({
@@ -197,7 +205,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: 'billing',
     label: 'Payments',
-    description: 'Stripe Connect for client payments.',
+    description: 'Stripe Connect and default job payment plans.',
     icon: CreditCard,
     adminOnly: true,
   },
@@ -667,11 +675,15 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
                     <div>
                       <h2 className="text-xl font-semibold tracking-tight">Client payments</h2>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Connect Stripe to enable invoicing and client payments.
+                        Connect Stripe to enable invoicing and client payments. Set company-wide
+                        deposit and installment defaults below.
                       </p>
                     </div>
                     <Suspense fallback={<PageLoadingSkeleton />}>
                       <StripeConnectSettings embedded />
+                    </Suspense>
+                    <Suspense fallback={<PageLoadingSkeleton />}>
+                      <CompanyJobPaymentSettings />
                     </Suspense>
                   </div>
                 ) : null}

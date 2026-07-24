@@ -2,8 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { buildClientActivityForStaff, buildCompanyActivity } from '@/lib/staff-activity'
 import type { ActivityFeedItem } from '@/lib/activity-feed'
 import type { PortalJob } from '@/lib/portal-jobs'
-import { calcBillingSummary, formatCurrency } from '@/lib/billing'
-import { isJobBillableForClient } from '@/lib/portal-jobs'
+import { calcBillingSummary } from '@/lib/billing'
+import { buildPortalJobBillingFields, isJobBillableForClient } from '@/lib/portal-jobs'
 import { getDisplayAddressFromClient } from '@/lib/address'
 
 const COMPANY_ACTIVITY_LOOKBACK_DAYS = 60
@@ -46,17 +46,11 @@ function mapScheduleToPortalJob(
     serviceAddress,
   }
   const billable = isJobBillableForClient(scheduleShape, now)
-  const displayBalance = billable ? summary.balanceDue : 0
+  const billingFields = buildPortalJobBillingFields(summary, lines.length, billable)
 
   return {
     ...scheduleShape,
-    balanceDue: displayBalance,
-    balanceDueFormatted: formatCurrency(displayBalance),
-    canPay: billable && summary.balanceDue > 0 && lines.length > 0,
-    isPaid: lines.length > 0 && summary.balanceDue <= 0,
-    totalCharged: summary.totalCharged,
-    totalPaid: summary.totalPaid,
-    isBillable: billable,
+    ...billingFields,
   }
 }
 

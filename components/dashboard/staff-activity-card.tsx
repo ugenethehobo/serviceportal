@@ -32,6 +32,7 @@ type StaffActivityCardProps = {
   timezone: string
   variant?: 'company' | 'client'
   embedded?: boolean
+  compact?: boolean
   showHeader?: boolean
   listClassName?: string
   onItemNavigate?: () => void
@@ -42,6 +43,7 @@ export function StaffActivityCard({
   timezone,
   variant = 'company',
   embedded = false,
+  compact = false,
   showHeader = true,
   listClassName,
   onItemNavigate,
@@ -54,7 +56,9 @@ export function StaffActivityCard({
       description={
         variant === 'company'
           ? 'Payments, contracts, estimates, leads, and client messages across your business'
-          : 'Estimates, contracts, payments, and visits for this client'
+          : compact
+            ? ''
+            : 'Estimates, contracts, payments, and visits for this client'
       }
       icons={STAFF_ACTIVITY_ICONS}
       emptyMessage={
@@ -63,6 +67,7 @@ export function StaffActivityCard({
           : 'Nothing in this period — try a longer range.'
       }
       embedded={embedded}
+      compact={compact}
       showHeader={showHeader}
       listClassName={listClassName}
       onItemNavigate={onItemNavigate}

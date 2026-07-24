@@ -84,7 +84,7 @@ function JobRow({ job, timezone }: { job: PortalJob; timezone: string }) {
             {(job.canPay || job.isPaid) && (
               <p className="mt-2 text-sm font-medium">
                 {job.canPay ? (
-                  <span className="text-orange-600">{job.balanceDueFormatted} due</span>
+                  <span className="text-orange-600">{job.amountDueNowFormatted} due</span>
                 ) : (
                   <span className="text-green-700">Paid in full</span>
                 )}
@@ -109,7 +109,7 @@ function JobRow({ job, timezone }: { job: PortalJob; timezone: string }) {
           {job.canPay && (
             <Button size="lg" onClick={openPayment} className="w-full sm:w-auto gap-2">
               <CreditCard className="size-4" />
-              Pay {job.balanceDueFormatted}
+              Pay {job.amountDueNowFormatted}
             </Button>
           )}
         </div>

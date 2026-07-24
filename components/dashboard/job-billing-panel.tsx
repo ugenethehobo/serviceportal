@@ -11,7 +11,21 @@ import {
   deleteBillingPaymentAction,
   sendJobInvoiceAction,
   generateJobInvoiceAction,
+  relinkBillingPaymentInstallmentAction,
 } from '@/app/action'
+import { JobPaymentPlanEditor } from '@/components/dashboard/job-payment-plan-editor'
+import { StripeConnectAlert } from '@/components/dashboard/stripe-connect-gate'
+import { MainPageCard } from '@/components/ui/main-page-card'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,20 +51,36 @@ import {
   type JobBillingData,
   type BillingLineItem,
 } from '@/lib/billing'
+import { formatInstallmentStatusLabel } from '@/lib/payment-plans'
+import {
+  MOBILE_FULL_WIDTH_BUTTON_CLASS,
+  MOBILE_LIST_STACK_CLASS,
+  MOBILE_NATURAL_HEIGHT_CLASS,
+  MOBILE_SCROLL_VIEWPORT_CLASS,
+  MOBILE_SELECT_TRIGGER_CLASS,
+  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
+  MOBILE_TOOLBAR_ROW_CLASS,
+} from '@/lib/mobile-layout'
+import { cn } from '@/lib/utils'
 import { DocumentViewerDialog } from '@/components/dashboard/document-viewer-dialog'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MobileListCard, MobileListCardRow } from '@/components/ui/mobile-list-card'
-import {
-  MOBILE_LIST_STACK_CLASS,
-  MOBILE_NATURAL_HEIGHT_CLASS,
-  MOBILE_SCROLL_VIEWPORT_CLASS,
-  MOBILE_TABLE_DESKTOP_ONLY_CLASS,
-  MOBILE_TOOLBAR_ROW_CLASS,
-} from '@/lib/mobile-layout'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { Banknote, Copy, ExternalLink, FileText, Loader2, Mail, Trash2, User, X, Check } from 'lucide-react'
+import {
+  AlertTriangle,
+  Banknote,
+  Copy,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Mail,
+  Trash2,
+  User,
+  X,
+  Check,
+} from 'lucide-react'
 
 interface JobBillingPanelProps {
   scheduleId: string
@@ -65,10 +95,17 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
   const [isLoading, setIsLoading] = useState(true)
   const [editingLineId, setEditingLineId] = useState<string | null>(null)
   const [showPaymentForm, setShowPaymentForm] = useState(false)
+  const [showPlanEditor, setShowPlanEditor] = useState(false)
+  const [fifoBanner, setFifoBanner] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isSendingInvoice, setIsSendingInvoice] = useState(false)
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false)
   const [invoiceViewerOpen, setInvoiceViewerOpen] = useState(false)
+  const [relinkingPaymentId, setRelinkingPaymentId] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<
+    null | { kind: 'line'; id: string } | { kind: 'payment'; id: string }
+  >(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const [lineForm, setLineForm] = useState({
     description: '',
@@ -81,6 +118,7 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
     paymentDate: new Date().toISOString().slice(0, 10),
     method: 'cash',
     notes: '',
+    installmentId: '',
   })
 
   const fetchBilling = useCallback(async () => {
@@ -174,25 +212,91 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
     setIsSaving(false)
   }
 
-  const handleDeleteLine = async (id: string) => {
-    if (!confirm('Delete this line item?')) return
-    const result = await deleteBillingLineItemAction(id, scheduleId, clientId, companyId)
-    if (result.success) {
-      toast.success('Line item deleted')
-      await fetchBilling()
-    } else {
-      toast.error(result.error || 'Failed to delete line item')
+  const requestDeleteLine = (id: string) => {
+    setPendingDelete({ kind: 'line', id })
+  }
+
+  const requestDeletePayment = (id: string, source?: string) => {
+    if (source === 'stripe') {
+      toast.error('Client portal payments cannot be deleted here')
+      return
     }
+    setPendingDelete({ kind: 'payment', id })
+  }
+
+  const confirmPendingDelete = async () => {
+    if (!pendingDelete) return
+    setIsDeleting(true)
+    if (pendingDelete.kind === 'line') {
+      const result = await deleteBillingLineItemAction(
+        pendingDelete.id,
+        scheduleId,
+        clientId,
+        companyId
+      )
+      if (result.success) {
+        toast.success('Line item deleted')
+        await fetchBilling()
+      } else {
+        toast.error(result.error || 'Failed to delete line item')
+      }
+    } else {
+      const result = await deleteBillingPaymentAction(
+        pendingDelete.id,
+        scheduleId,
+        clientId,
+        companyId
+      )
+      if (result.success) {
+        toast.success('Payment deleted')
+        await fetchBilling()
+      } else {
+        toast.error(result.error || 'Failed to delete payment')
+      }
+    }
+    setIsDeleting(false)
+    setPendingDelete(null)
   }
 
   const openRecordCash = () => {
+    const dueNow = billing?.amountDueNow
+    const balance = billing?.summary.balanceDue
+    const defaultAmount =
+      dueNow != null && dueNow > 0
+        ? String(dueNow)
+        : balance
+          ? String(balance)
+          : ''
+    const nextInstallment =
+      billing?.paymentPlan?.installments.find(
+        (i) => i.status !== 'paid' && i.status !== 'superseded' && i.remaining > 0
+      ) || null
     setPaymentForm({
-      amount: billing?.summary.balanceDue ? String(billing.summary.balanceDue) : '',
+      amount: defaultAmount,
       paymentDate: new Date().toISOString().slice(0, 10),
       method: 'cash',
       notes: '',
+      installmentId: nextInstallment?.id || '',
     })
     setShowPaymentForm(true)
+  }
+
+  const handleRelinkPayment = async (paymentId: string, installmentId: string | null) => {
+    setRelinkingPaymentId(paymentId)
+    const result = await relinkBillingPaymentInstallmentAction({
+      paymentId,
+      scheduleId,
+      clientId,
+      companyId,
+      installmentId,
+    })
+    if (result.success) {
+      toast.success(installmentId ? 'Payment linked to installment' : 'Payment unlinked')
+      await fetchBilling()
+    } else {
+      toast.error(result.error || 'Could not update payment link')
+    }
+    setRelinkingPaymentId(null)
   }
 
   const copyPaymentLink = async () => {
@@ -251,6 +355,7 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
       paymentDate: paymentForm.paymentDate,
       method: paymentForm.method,
       notes: paymentForm.notes,
+      installmentId: paymentForm.installmentId || undefined,
     })
 
     if (result.success) {
@@ -262,21 +367,6 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
     }
 
     setIsSaving(false)
-  }
-
-  const handleDeletePayment = async (id: string, source?: string) => {
-    if (source === 'stripe') {
-      toast.error('Client portal payments cannot be deleted here')
-      return
-    }
-    if (!confirm('Delete this payment?')) return
-    const result = await deleteBillingPaymentAction(id, scheduleId, clientId, companyId)
-    if (result.success) {
-      toast.success('Payment deleted')
-      await fetchBilling()
-    } else {
-      toast.error(result.error || 'Failed to delete payment')
-    }
   }
 
   if (isLoading) {
@@ -292,82 +382,220 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
   const ownerPaymentMethods = PAYMENT_METHODS.filter((m) =>
     ['cash', 'check', 'other'].includes(m.value)
   )
+  const plan = billing.paymentPlan
+  const openInstallments =
+    plan?.installments.filter((i) => i.status !== 'superseded') || []
+  const installmentLabelById = new Map(
+    (plan?.installments || []).map((i) => [i.id, i.label])
+  )
+  const installmentSelectLabel = (installmentId: string | null | undefined) => {
+    if (!installmentId) return 'Auto (FIFO)'
+    return installmentLabelById.get(installmentId) || 'Linked installment'
+  }
+  const paymentFormInstallmentLabel = (() => {
+    if (!paymentForm.installmentId) return 'Auto (FIFO order)'
+    const inst = openInstallments.find((i) => i.id === paymentForm.installmentId)
+    if (!inst) return installmentSelectLabel(paymentForm.installmentId)
+    return `${inst.label} · ${formatCurrency(inst.remaining)} left`
+  })()
+  const methodLabel = (method: string) => {
+    if (method === 'card') return 'Card'
+    return PAYMENT_METHODS.find((m) => m.value === method)?.label || method
+  }
 
   return (
-    <div className={`flex flex-col gap-6 flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <SummaryCard label="Total Charged" value={formatCurrency(summary.totalCharged)} />
-        <SummaryCard label="Total Paid" value={formatCurrency(summary.totalPaid)} />
-        <SummaryCard
-          label="Balance Due"
-          value={formatCurrency(summary.balanceDue)}
-          highlight={summary.balanceDue > 0}
-        />
-      </div>
+    <div
+      className={cn(
+        'flex min-h-0 flex-1 flex-col gap-4',
+        MOBILE_NATURAL_HEIGHT_CLASS
+      )}
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:grid lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
+        {/* Left: overview — page-level surface (not nested in MainPageCard) */}
+        <MainPageCard className="gap-3 overflow-y-auto p-3 sm:p-4 lg:min-h-0">
+          <StripeConnectAlert />
 
-      {billing.lineItems.length > 0 && (
-        <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 text-sm">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-            <div className="flex items-start gap-3 min-w-0">
-              <User className="size-4 mt-0.5 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="font-medium">
-                  {summary.balanceDue > 0
-                    ? `Balance due: ${formatCurrency(summary.balanceDue)}`
-                    : 'Paid in full'}
-                </p>
-                <p className="text-muted-foreground mt-0.5">
-                  The invoice PDF lives on the Documents tab under Invoices. Send notifies your
-                  client; payment links work when a balance is due.
-                </p>
-              </div>
+          <div className="grid grid-cols-3 gap-2">
+            <SummaryCard label="Charged" value={formatCurrency(summary.totalCharged)} />
+            <SummaryCard label="Paid" value={formatCurrency(summary.totalPaid)} />
+            <SummaryCard
+              label="Balance"
+              value={formatCurrency(summary.balanceDue)}
+              highlight={summary.balanceDue > 0}
+            />
+          </div>
+
+          {(plan?.needsAttention || fifoBanner) && (
+            <div className="flex flex-col gap-2">
+              {plan?.needsAttention && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <div>
+                    <p className="font-medium">Plan needs attention</p>
+                    <p className="mt-0.5 text-amber-900/80 dark:text-amber-100/80">
+                      {plan.needsAttentionReason ||
+                        'Installment amounts may not match the job total.'}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {fifoBanner && (
+                <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <div>
+                    <p className="font-medium">Payments re-allocated</p>
+                    <p className="mt-0.5 text-sky-900/80 dark:text-sky-100/80">
+                      Existing payments were applied oldest-first. Re-link below if needed.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex flex-wrap gap-2 shrink-0">
-              <Button
-                size="sm"
-                onClick={() => void handleCreateInvoice()}
-                disabled={isGeneratingInvoice}
+          )}
+
+          <section className="space-y-2.5 rounded-lg border p-3">
+        <div className={MOBILE_TOOLBAR_ROW_CLASS}>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold">Payment plan</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {plan
+                ? plan.planType === 'deposit_remainder'
+                  ? 'Deposit + remainder'
+                  : plan.planType === 'custom_installments'
+                    ? 'Custom installments'
+                    : 'Full balance'
+                : 'Full remaining balance when billable'}
+              {billing.amountDueNow != null && billing.amountDueNow > 0
+                ? ` · Due now ${formatCurrency(billing.amountDueNow)}`
+                : ''}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className={cn('shrink-0', MOBILE_FULL_WIDTH_BUTTON_CLASS)}
+            onClick={() => setShowPlanEditor(true)}
+          >
+            {plan ? 'Edit…' : 'Set plan…'}
+          </Button>
+        </div>
+
+        {openInstallments.length > 0 ? (
+          <div className="space-y-2">
+            {openInstallments.map((inst) => (
+              <div
+                key={inst.id}
+                className="rounded-md border bg-background/80 px-2.5 py-2 text-xs"
               >
-                {isGeneratingInvoice ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <FileText className="size-4" />
-                )}
-                {isGeneratingInvoice ? 'Creating…' : 'Create invoice'}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleSendInvoice}
-                disabled={isSendingInvoice}
-              >
-                <Mail className="size-4" />
-                {isSendingInvoice ? 'Sending…' : 'Send invoice'}
-              </Button>
-              {billing.invoiceDocument && (
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm leading-snug">{inst.label}</p>
+                    {inst.collectibleNow ? (
+                      <Badge variant="secondary" className="mt-1 text-[10px]">
+                        Collectible
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 text-[10px]">
+                    {formatInstallmentStatusLabel(inst.status)}
+                  </Badge>
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-muted-foreground">
+                  <span>
+                    Due{' '}
+                    {inst.dueDate
+                      ? new Date(inst.dueDate + 'T00:00:00').toLocaleDateString()
+                      : '—'}
+                  </span>
+                  <span className="text-right tabular-nums">
+                    {formatCurrency(inst.amountDue)}
+                  </span>
+                  <span>Paid {formatCurrency(inst.amountPaid)}</span>
+                  <span className="text-right font-medium text-foreground tabular-nums">
+                    {formatCurrency(inst.remaining)} left
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Optional deposit or installments so clients can pay before the visit.
+          </p>
+        )}
+          </section>
+
+          {billing.lineItems.length > 0 && (
+            <div className="space-y-2.5 rounded-lg border bg-muted/30 p-3 text-sm">
+              <div className="flex items-start gap-2">
+                <User className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    {summary.balanceDue > 0
+                      ? `Balance due: ${formatCurrency(summary.balanceDue)}`
+                      : 'Paid in full'}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Invoice PDF is on Documents. Payment links work when balance is due.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => void handleCreateInvoice()}
+                  disabled={isGeneratingInvoice}
+                >
+                  {isGeneratingInvoice ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <FileText className="size-4" />
+                  )}
+                  {isGeneratingInvoice ? 'Creating…' : 'Create invoice'}
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setInvoiceViewerOpen(true)}
+                  className="w-full justify-start"
+                  onClick={() => void handleSendInvoice()}
+                  disabled={isSendingInvoice}
                 >
-                  <ExternalLink className="size-4" />
-                  View PDF
+                  <Mail className="size-4" />
+                  {isSendingInvoice ? 'Sending…' : 'Send invoice'}
                 </Button>
-              )}
-              {summary.balanceDue > 0 && (
-                <Button size="sm" variant="outline" onClick={copyPaymentLink}>
-                  <Copy className="size-4" />
-                  Copy payment link
-                </Button>
-              )}
+                {billing.invoiceDocument && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => setInvoiceViewerOpen(true)}
+                  >
+                    <ExternalLink className="size-4" />
+                    View PDF
+                  </Button>
+                )}
+                {summary.balanceDue > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => void copyPaymentLink()}
+                  >
+                    <Copy className="size-4" />
+                    Copy payment link
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </MainPageCard>
 
+        {/* Right: line items + payments — page-level surface */}
+        <MainPageCard className="min-h-0 overflow-hidden p-0">
       <ScrollArea
-        className={`flex-1 min-h-0 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
-        viewportClassName={`scroll-fade ${MOBILE_SCROLL_VIEWPORT_CLASS}`}
+        className={cn('min-h-0 flex-1', MOBILE_NATURAL_HEIGHT_CLASS)}
+        viewportClassName={cn('scroll-fade p-4', MOBILE_SCROLL_VIEWPORT_CLASS)}
       >
         <div className="flex flex-col gap-6">
         <section>
@@ -451,7 +679,7 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                             <Button variant="ghost" size="icon-xs" onClick={() => openEditLine(item)}>
                               Edit
                             </Button>
-                            <Button variant="ghost" size="icon-xs" onClick={() => handleDeleteLine(item.id)}>
+                            <Button variant="ghost" size="icon-xs" onClick={() => requestDeleteLine(item.id)}>
                               <Trash2 className="size-3.5" />
                             </Button>
                           </div>
@@ -540,7 +768,7 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                           variant="ghost"
                           size="sm"
                           className="text-destructive"
-                          onClick={() => handleDeleteLine(item.id)}
+                          onClick={() => requestDeleteLine(item.id)}
                         >
                           <Trash2 className="size-3.5" />
                           Delete
@@ -651,6 +879,7 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                   <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Method</TableHead>
+                    <TableHead>Installment</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead className="w-12" />
@@ -663,12 +892,46 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                         {new Date(payment.payment_date + 'T00:00:00').toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2 capitalize">
-                          {payment.method}
+                        <div className="flex items-center gap-2">
+                          {methodLabel(payment.method)}
                           {payment.source === 'stripe' && (
                             <Badge variant="secondary" className="text-[10px]">Client Portal</Badge>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {openInstallments.length > 0 || payment.installment_id ? (
+                          <Select
+                            value={payment.installment_id || '__fifo__'}
+                            disabled={relinkingPaymentId === payment.id}
+                            onValueChange={(value) => {
+                              const next = value === '__fifo__' || !value ? null : value
+                              void handleRelinkPayment(payment.id, next)
+                            }}
+                          >
+                            <SelectTrigger className="h-8 min-w-[10rem] max-w-[14rem]">
+                              <SelectValue>
+                                {installmentSelectLabel(payment.installment_id)}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent alignItemWithTrigger={false}>
+                              <SelectItem value="__fifo__">Auto (FIFO)</SelectItem>
+                              {openInstallments.map((inst) => (
+                                <SelectItem key={inst.id} value={inst.id}>
+                                  {inst.label}
+                                </SelectItem>
+                              ))}
+                              {payment.installment_id &&
+                              !openInstallments.some((i) => i.id === payment.installment_id) ? (
+                                <SelectItem value={payment.installment_id}>
+                                  {installmentSelectLabel(payment.installment_id)} (unavailable)
+                                </SelectItem>
+                              ) : null}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {payment.notes || '—'}
@@ -681,7 +944,7 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                           <Button
                             variant="ghost"
                             size="icon-xs"
-                            onClick={() => handleDeletePayment(payment.id, payment.source)}
+                            onClick={() => requestDeletePayment(payment.id, payment.source)}
                           >
                             <Trash2 className="size-3.5" />
                           </Button>
@@ -690,7 +953,7 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                     </TableRow>
                   ))}
                   <TableRow>
-                    <TableCell colSpan={3} className="text-right font-medium">Total Paid</TableCell>
+                    <TableCell colSpan={4} className="text-right font-medium">Total Paid</TableCell>
                     <TableCell className="text-right font-semibold text-green-600">
                       {formatCurrency(summary.totalPaid)}
                     </TableCell>
@@ -705,9 +968,9 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                 <MobileListCard key={payment.id}>
                   <div className="space-y-2">
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium capitalize">{payment.method}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                      <div className="min-w-0">
+                        <p className="font-medium">{methodLabel(payment.method)}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
                           {new Date(payment.payment_date + 'T00:00:00').toLocaleDateString()}
                         </p>
                       </div>
@@ -719,6 +982,41 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                       label="Amount"
                       value={formatCurrency(payment.amount)}
                     />
+                    {openInstallments.length > 0 || payment.installment_id ? (
+                      <div className="min-w-0">
+                        <Label className="text-xs text-muted-foreground">Installment</Label>
+                        <Select
+                          value={payment.installment_id || '__fifo__'}
+                          disabled={relinkingPaymentId === payment.id}
+                          onValueChange={(value) => {
+                            const next = value === '__fifo__' || !value ? null : value
+                            void handleRelinkPayment(payment.id, next)
+                          }}
+                        >
+                          <SelectTrigger
+                            className={cn('mt-1 w-full', MOBILE_SELECT_TRIGGER_CLASS)}
+                          >
+                            <SelectValue>
+                              {installmentSelectLabel(payment.installment_id)}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent alignItemWithTrigger={false}>
+                            <SelectItem value="__fifo__">Auto (FIFO)</SelectItem>
+                            {openInstallments.map((inst) => (
+                              <SelectItem key={inst.id} value={inst.id}>
+                                {inst.label}
+                              </SelectItem>
+                            ))}
+                            {payment.installment_id &&
+                            !openInstallments.some((i) => i.id === payment.installment_id) ? (
+                              <SelectItem value={payment.installment_id}>
+                                {installmentSelectLabel(payment.installment_id)} (unavailable)
+                              </SelectItem>
+                            ) : null}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null}
                     {payment.notes ? (
                       <MobileListCardRow label="Notes" value={payment.notes} />
                     ) : null}
@@ -728,7 +1026,7 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                           variant="ghost"
                           size="sm"
                           className="text-destructive"
-                          onClick={() => handleDeletePayment(payment.id, payment.source)}
+                          onClick={() => requestDeletePayment(payment.id, payment.source)}
                         >
                           <Trash2 className="size-3.5" />
                           Delete
@@ -777,17 +1075,19 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                     onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
                     className="mt-1"
                   />
-                  <button
+                  <Button
                     type="button"
-                    className="text-xs text-muted-foreground hover:text-foreground mt-1 underline underline-offset-2"
+                    variant="link"
+                    size="sm"
+                    className="mt-1 h-auto px-0 text-xs"
                     onClick={() =>
                       setPaymentForm({ ...paymentForm, amount: String(summary.balanceDue) })
                     }
                   >
                     Fill full balance ({formatCurrency(summary.balanceDue)})
-                  </button>
+                  </Button>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <Label className="text-xs">Payment date</Label>
                   <DatePicker
                     value={paymentForm.paymentDate}
@@ -795,23 +1095,25 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                     className="mt-1"
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <Label className="text-xs">Method</Label>
                   <Select
                     value={paymentForm.method}
                     onValueChange={(value) => setPaymentForm({ ...paymentForm, method: value ?? 'cash' })}
                   >
-                    <SelectTrigger className="mt-1 w-full">
-                      <SelectValue />
+                    <SelectTrigger className={cn('mt-1 w-full', MOBILE_SELECT_TRIGGER_CLASS)}>
+                      <SelectValue>
+                        {methodLabel(paymentForm.method)}
+                      </SelectValue>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent alignItemWithTrigger={false}>
                       {ownerPaymentMethods.map((m) => (
                         <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <Label className="text-xs">Notes</Label>
                   <Input
                     value={paymentForm.notes}
@@ -820,10 +1122,48 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
                     className="mt-1"
                   />
                 </div>
+                {openInstallments.length > 0 && (
+                  <div className="min-w-0 sm:col-span-2">
+                    <Label className="text-xs">Apply to installment (optional)</Label>
+                    <Select
+                      value={paymentForm.installmentId || '__fifo__'}
+                      onValueChange={(value) =>
+                        setPaymentForm({
+                          ...paymentForm,
+                          installmentId: value === '__fifo__' || !value ? '' : value,
+                        })
+                      }
+                    >
+                      <SelectTrigger className={cn('mt-1 w-full', MOBILE_SELECT_TRIGGER_CLASS)}>
+                        <SelectValue>{paymentFormInstallmentLabel}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectItem value="__fifo__">Auto (FIFO order)</SelectItem>
+                        {openInstallments.map((inst) => (
+                          <SelectItem key={inst.id} value={inst.id}>
+                            {inst.label} · {formatCurrency(inst.remaining)} left
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
-                <Button size="sm" onClick={handleSavePayment} disabled={isSaving}>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={MOBILE_FULL_WIDTH_BUTTON_CLASS}
+                  onClick={() => setShowPaymentForm(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className={MOBILE_FULL_WIDTH_BUTTON_CLASS}
+                  onClick={handleSavePayment}
+                  disabled={isSaving}
+                >
                   {isSaving ? 'Saving...' : 'Record Payment'}
                 </Button>
               </div>
@@ -832,6 +1172,24 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
         </section>
         </div>
       </ScrollArea>
+        </MainPageCard>
+      </div>
+
+      <JobPaymentPlanEditor
+        open={showPlanEditor}
+        onOpenChange={setShowPlanEditor}
+        scheduleId={scheduleId}
+        clientId={clientId}
+        companyId={companyId}
+        previewTotal={summary.totalCharged || billing.listPrice || 1000}
+        paymentPlan={plan || null}
+        isRecurring={Boolean(billing.recurringRuleId)}
+        hasPayments={billing.payments.length > 0}
+        onSaved={({ allocatedExistingPayments }) => {
+          if (allocatedExistingPayments) setFifoBanner(true)
+          void fetchBilling()
+        }}
+      />
 
       {billing.invoiceDocument && (
         <DocumentViewerDialog
@@ -846,6 +1204,46 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
           onOpenChange={setInvoiceViewerOpen}
         />
       )}
+
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setPendingDelete(null)
+        }}
+      >
+        <AlertDialogContent size="default">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingDelete?.kind === 'payment' ? 'Delete payment?' : 'Delete line item?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete?.kind === 'payment'
+                ? 'This removes the payment from the job ledger. This cannot be undone.'
+                : 'This removes the charge from the job. Payment plan amounts may rebalance.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={isDeleting}
+              onClick={(e) => {
+                e.preventDefault()
+                void confirmPendingDelete()
+              }}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -860,9 +1258,16 @@ function SummaryCard({
   highlight?: boolean
 }) {
   return (
-    <div className="rounded-lg border p-4">
-      <div className="text-sm text-muted-foreground">{label}</div>
-      <div className={`text-2xl font-semibold tracking-tight mt-1 ${highlight ? 'text-orange-600' : ''}`}>
+    <div className="rounded-lg border bg-muted/20 px-2 py-2">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div
+        className={cn(
+          'mt-0.5 text-sm font-semibold tracking-tight tabular-nums sm:text-base',
+          highlight && 'text-orange-600'
+        )}
+      >
         {value}
       </div>
     </div>

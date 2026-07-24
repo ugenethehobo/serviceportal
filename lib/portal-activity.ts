@@ -125,15 +125,15 @@ export function buildPortalActivity(input: {
   }
 
   for (const job of input.jobs) {
-    if (!job.canPay || job.balanceDue <= 0) continue
-    if (!isJobBillableForClient(job, now)) continue
+    // canPay already encodes collectibility (including pre-visit deposits when plans exist)
+    if (!job.canPay || job.amountDueNow <= 0) continue
 
     const lineAt = latestLineBySchedule.get(job.id)
     items.push({
       id: `payment-due-${job.id}`,
       type: 'payment_due',
       title: 'Balance due',
-      description: `${job.title} — ${job.balanceDueFormatted}`,
+      description: `${job.title} — ${job.amountDueNowFormatted}`,
       href: `/portal/jobs/${job.id}?pay=1`,
       occurredAt: lineAt || job.endTime,
       urgent: true,
