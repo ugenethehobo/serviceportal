@@ -10,6 +10,7 @@ import {
   ACCENT_COLOR_STORAGE_KEY,
   buildAccentBootstrapSnippet,
   buildBackgroundBootstrapSnippet,
+  buildSurfaceBootstrapSnippet,
 } from "@/lib/personalization";
 import { getUserPersonalization } from "@/lib/personalization-server";
 import { THEME_STORAGE_KEY } from "@/lib/theme";
@@ -79,7 +80,12 @@ export default async function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('${THEME_STORAGE_KEY}')||'${initialTheme}';if(t==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}${buildBackgroundBootstrapSnippet(initialPersonalization.backgroundImageUrl)}${buildAccentBootstrapSnippet(ACCENT_COLOR_STORAGE_KEY, initialPersonalization.accentColor)}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('${THEME_STORAGE_KEY}')||'${initialTheme}';if(t==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}${buildBackgroundBootstrapSnippet(initialPersonalization.backgroundImageUrl)}${buildAccentBootstrapSnippet(ACCENT_COLOR_STORAGE_KEY, initialPersonalization.accentColor)}${buildSurfaceBootstrapSnippet({
+              cardColor: initialPersonalization.cardColor,
+              textColor: initialPersonalization.textColor,
+              backgroundColor: initialPersonalization.backgroundColor,
+              backgroundImageUrl: initialPersonalization.backgroundImageUrl,
+            })}}catch(e){}})();`,
           }}
         />
       </head>

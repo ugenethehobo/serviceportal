@@ -1,7 +1,7 @@
 import { cache } from 'react'
 import { createSupabaseAdmin, getSessionProfile, isStaffRole } from '@/lib/portal-auth'
 import {
-  normalizeAccentColor,
+  normalizeHexColor,
   type PersonalizationState,
 } from '@/lib/personalization'
 
@@ -62,38 +62,58 @@ export async function getPersonalizationCompanyId(
   return null
 }
 
+const EMPTY_PERSONALIZATION: PersonalizationState = {
+  accentColor: null,
+  backgroundImageUrl: null,
+  backgroundColor: null,
+  cardColor: null,
+  textColor: null,
+}
+
 export async function getCompanyPersonalization(
   companyId: string
 ): Promise<PersonalizationState> {
   const supabaseAdmin = createSupabaseAdmin()
   const { data: company } = await supabaseAdmin
     .from('companies')
-    .select('accent_color, background_image_url')
+    .select(
+      'accent_color, background_image_url, background_color, card_color, text_color'
+    )
     .eq('id', companyId)
     .single()
 
   if (!company) {
-    return { accentColor: null, backgroundImageUrl: null }
+    return { ...EMPTY_PERSONALIZATION }
   }
 
-  const accentColor = normalizeAccentColor(company.accent_color)
-  const backgroundImageUrl = await resolveBackgroundDisplayUrl(company.background_image_url)
+  const row = company as {
+    accent_color?: string | null
+    background_image_url?: string | null
+    background_color?: string | null
+    card_color?: string | null
+    text_color?: string | null
+  }
+
+  const backgroundImageUrl = await resolveBackgroundDisplayUrl(row.background_image_url)
 
   return {
-    accentColor,
+    accentColor: normalizeHexColor(row.accent_color),
     backgroundImageUrl,
+    backgroundColor: normalizeHexColor(row.background_color),
+    cardColor: normalizeHexColor(row.card_color),
+    textColor: normalizeHexColor(row.text_color),
   }
 }
 
 export const getUserPersonalization = cache(async (): Promise<PersonalizationState> => {
   const session = await getSessionProfile()
   if (!session) {
-    return { accentColor: null, backgroundImageUrl: null }
+    return { ...EMPTY_PERSONALIZATION }
   }
 
   const companyId = await getPersonalizationCompanyId(session)
   if (!companyId) {
-    return { accentColor: null, backgroundImageUrl: null }
+    return { ...EMPTY_PERSONALIZATION }
   }
 
   return getCompanyPersonalization(companyId)

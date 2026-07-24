@@ -8,7 +8,6 @@ import {
   TRIAL_EXPIRED_ERROR,
   verifyStaffSubscriptionAccess,
 } from '@/lib/portal-auth'
-import { normalizeAccentColor } from '@/lib/personalization'
 import { createSupabaseAdmin } from '@/lib/portal-auth'
 
 async function verifyOnboardingAdmin() {
@@ -76,6 +75,9 @@ export async function getOnboardingInitialDataAction(): Promise<
         avatarUrl: string | null
         accentColor: string | null
         backgroundImageUrl: string | null
+        backgroundColor: string | null
+        cardColor: string | null
+        textColor: string | null
       }
       company: {
         name: string | null
@@ -131,7 +133,10 @@ export async function getOnboardingInitialDataAction(): Promise<
         is_solo_business,
         booking_slug,
         accent_color,
-        background_image_url
+        background_image_url,
+        background_color,
+        card_color,
+        text_color
       `)
       .eq('id', session.profile.company_id)
       .single(),
@@ -142,7 +147,14 @@ export async function getOnboardingInitialDataAction(): Promise<
   }
 
   const { resolveBackgroundDisplayUrl } = await import('@/lib/personalization-server')
+  const { normalizeHexColor } = await import('@/lib/personalization')
   const backgroundImageUrl = await resolveBackgroundDisplayUrl(company.background_image_url)
+  const companyRow = company as {
+    accent_color?: string | null
+    background_color?: string | null
+    card_color?: string | null
+    text_color?: string | null
+  }
 
   return {
     success: true,
@@ -150,8 +162,11 @@ export async function getOnboardingInitialDataAction(): Promise<
       fullName: profile.full_name || '',
       email: authData?.user?.email || profile.email || '',
       avatarUrl: profile.avatar_url,
-      accentColor: normalizeAccentColor(company.accent_color),
+      accentColor: normalizeHexColor(companyRow.accent_color),
       backgroundImageUrl,
+      backgroundColor: normalizeHexColor(companyRow.background_color),
+      cardColor: normalizeHexColor(companyRow.card_color),
+      textColor: normalizeHexColor(companyRow.text_color),
     },
     company,
   }

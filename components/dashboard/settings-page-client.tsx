@@ -192,7 +192,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: 'appearance',
     label: 'Appearance',
-    description: 'Theme, background, and accent color.',
+    description: 'Your theme, then company brand colors and background.',
     icon: Palette,
   },
   {
@@ -645,8 +645,8 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
                     <div>
                       <h2 className="text-xl font-semibold tracking-tight">Appearance</h2>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Choose your theme preference. Company admins can also set a shared
-                        background photo and accent color for the whole team and client portal.
+                        Your theme is personal. Company look (colors and background) is shared with
+                        your team and the client portal.
                       </p>
                     </div>
                     <AppearanceSettings embedded canEditCompanyBranding={isAdmin} />

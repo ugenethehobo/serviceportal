@@ -7222,8 +7222,8 @@ export async function updateAccentColorAction(accentColor: string | null) {
     const check = await verifyCompanyPersonalizationEditor()
     if (!check.ok) return { success: false as const, error: check.error }
 
-    const { normalizeAccentColor } = await import('@/lib/personalization')
-    const normalized = accentColor ? normalizeAccentColor(accentColor) : null
+    const { normalizeHexColor } = await import('@/lib/personalization')
+    const normalized = accentColor ? normalizeHexColor(accentColor) : null
     if (accentColor && !normalized) {
       return { success: false as const, error: 'Enter a valid hex color like #2563eb' }
     }
@@ -7247,6 +7247,128 @@ export async function updateAccentColorAction(accentColor: string | null) {
   } catch (error: any) {
     console.error('updateAccentColorAction error:', error)
     return { success: false as const, error: error.message || 'Failed to save accent color' }
+  }
+}
+
+/**
+ * Persist company surface colors (card, text, solid background).
+ * Pass only fields that should change; null clears that field.
+ */
+export async function updateCompanySurfaceColorsAction(input: {
+  cardColor?: string | null
+  textColor?: string | null
+  backgroundColor?: string | null
+}) {
+  try {
+    const check = await verifyCompanyPersonalizationEditor()
+    if (!check.ok) return { success: false as const, error: check.error }
+
+    const { normalizeHexColor } = await import('@/lib/personalization')
+    const { PERSONALIZATION_BACKGROUND_BUCKET } = await import(
+      '@/lib/personalization-server'
+    )
+    const supabaseAdmin = createSupabaseAdmin()
+
+    const update: Record<string, string | null> = {}
+
+    if (input.cardColor !== undefined) {
+      const normalized = input.cardColor ? normalizeHexColor(input.cardColor) : null
+      if (input.cardColor && !normalized) {
+        return { success: false as const, error: 'Invalid card color' }
+      }
+      update.card_color = normalized
+    }
+
+    if (input.textColor !== undefined) {
+      const normalized = input.textColor ? normalizeHexColor(input.textColor) : null
+      if (input.textColor && !normalized) {
+        return { success: false as const, error: 'Invalid text color' }
+      }
+      update.text_color = normalized
+    }
+
+    if (input.backgroundColor !== undefined) {
+      const normalized = input.backgroundColor
+        ? normalizeHexColor(input.backgroundColor)
+        : null
+      if (input.backgroundColor && !normalized) {
+        return { success: false as const, error: 'Invalid background color' }
+      }
+      update.background_color = normalized
+
+      // Solid color mode replaces wallpaper
+      if (normalized) {
+        const { data: company } = await supabaseAdmin
+          .from('companies')
+          .select('background_image_url')
+          .eq('id', check.companyId)
+          .single()
+
+        const reference = company?.background_image_url
+        if (reference) {
+          const storagePath = reference.includes(`/${PERSONALIZATION_BACKGROUND_BUCKET}/`)
+            ? reference.split(`/${PERSONALIZATION_BACKGROUND_BUCKET}/`)[1]?.split('?')[0]
+            : reference.startsWith('http')
+              ? null
+              : reference
+          if (storagePath) {
+            await supabaseAdmin.storage
+              .from(PERSONALIZATION_BACKGROUND_BUCKET)
+              .remove([storagePath])
+          }
+        }
+        update.background_image_url = null
+      }
+    }
+
+    if (Object.keys(update).length === 0) {
+      return { success: false as const, error: 'No appearance fields to update' }
+    }
+
+    const { error } = await supabaseAdmin
+      .from('companies')
+      .update(update)
+      .eq('id', check.companyId)
+
+    if (error) {
+      if (error.code === '42703') {
+        return {
+          success: false as const,
+          error: 'Run supabase/personalization-schema.sql first.',
+        }
+      }
+      return { success: false as const, error: error.message }
+    }
+
+    revalidateCompanyPersonalizationPaths()
+
+    return {
+      success: true as const,
+      cardColor:
+        input.cardColor !== undefined
+          ? input.cardColor
+            ? normalizeHexColor(input.cardColor)
+            : null
+          : undefined,
+      textColor:
+        input.textColor !== undefined
+          ? input.textColor
+            ? normalizeHexColor(input.textColor)
+            : null
+          : undefined,
+      backgroundColor:
+        input.backgroundColor !== undefined
+          ? input.backgroundColor
+            ? normalizeHexColor(input.backgroundColor)
+            : null
+          : undefined,
+    }
+  } catch (error: any) {
+    console.error('updateCompanySurfaceColorsAction error:', error)
+    return {
+      success: false as const,
+      error: error.message || 'Failed to save appearance colors',
+    }
   }
 }
 
@@ -7310,7 +7432,11 @@ export async function uploadBackgroundImageAction(
 
     const { error: updateError } = await supabaseAdmin
       .from('companies')
-      .update({ background_image_url: uploadData.path })
+      .update({
+        background_image_url: uploadData.path,
+        // Image mode replaces solid color
+        background_color: null,
+      })
       .eq('id', check.companyId)
 
     if (updateError) {
