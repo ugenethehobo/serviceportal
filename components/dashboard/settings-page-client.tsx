@@ -305,7 +305,7 @@ function SettingsSectionButton({
       disabled={locked}
       aria-disabled={locked || undefined}
       className={cn(
-        'w-full rounded-lg px-3 py-2.5 text-left transition-colors max-md:min-h-11 max-md:py-3',
+        'w-full rounded-lg px-3.5 py-3 text-left transition-colors max-md:min-h-11',
         locked
           ? 'cursor-not-allowed text-muted-foreground/45'
           : isActive
@@ -523,7 +523,7 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
         <div
           className={`flex min-h-0 flex-1 flex-col lg:flex-row ${MOBILE_NATURAL_HEIGHT_CLASS}`}
         >
-          <div className="shrink-0 border-b p-3 lg:hidden">
+          <div className="shrink-0 space-y-2 border-b p-4 lg:hidden">
             <Select
               value={activeSection}
               onValueChange={(value) => setActiveSection(value as SettingsSectionId)}
@@ -544,14 +544,16 @@ function SettingsPageContent({ initialData }: { initialData: SettingsPageInitial
               </SelectContent>
             </Select>
             {activeMeta ? (
-              <p className="mt-2 text-xs text-muted-foreground">{activeMeta.description}</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {activeMeta.description}
+              </p>
             ) : null}
           </div>
 
           <aside className="hidden shrink-0 border-b lg:flex lg:w-72 lg:min-h-0 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:border-r xl:w-80">
             <ScrollArea className="w-full lg:min-h-0 lg:flex-1" viewportClassName="scroll-fade">
               <TooltipProvider>
-                <nav className="flex flex-col gap-1 p-3">
+                <nav className="flex flex-col gap-1.5 p-4">
                   {visibleSections.map((section) => (
                     <SettingsSectionButton
                       key={section.id}

@@ -388,10 +388,10 @@ export function ClientPortalAccess({
     >
       <MainPageCard className="min-h-0 flex-1 gap-0 overflow-hidden p-0">
         {/* Toolbar */}
-        <div className="flex shrink-0 flex-col gap-4 border-b p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
-          <div className="min-w-0 space-y-1">
+        <div className="flex shrink-0 flex-col gap-4 border-b p-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:p-5">
+          <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-semibold sm:text-lg">Client Portal</h2>
+              <h2 className="text-lg font-semibold">Client Portal</h2>
               {hasUsers ? (
                 <Badge variant={status?.portalEnabled ? 'outline' : 'secondary'}>
                   {status?.portalEnabled ? 'Enabled' : 'Disabled'}
@@ -400,28 +400,28 @@ export function ClientPortalAccess({
                 <Badge variant="secondary">No logins</Badge>
               )}
               {hasUsers ? (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-sm text-muted-foreground">
                   {activeUsers} active · {users.length} total
                 </span>
               ) : null}
             </div>
-            <p className="max-w-2xl text-sm text-muted-foreground">
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               Manage household logins, access time limits, and passwords. Clients use these
               accounts to view jobs, estimates, documents, and pay invoices.
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex flex-col gap-3 sm:items-end">
             {hasUsers ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <Switch
                   checked={Boolean(status?.portalEnabled)}
                   onCheckedChange={(checked) => void handleToggleEnabled(Boolean(checked))}
                   disabled={isBusy}
                 />
-                <span className="text-sm">Portal enabled</span>
+                <span className="text-sm font-medium">Portal enabled</span>
               </div>
             ) : null}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 max-md:w-full max-md:flex-col max-md:[&_button]:w-full">
               <Button size="sm" onClick={openInvite} disabled={isBusy}>
                 <Mail className="size-4" />
                 Invite login
@@ -559,18 +559,18 @@ export function ClientPortalAccess({
                   </Table>
                 </div>
 
-                <div className={cn('space-y-2', MOBILE_LIST_STACK_CLASS)}>
+                <div className={MOBILE_LIST_STACK_CLASS}>
                   {users.map((user) => (
-                    <MobileListCard key={user.id} className="space-y-3 p-3">
+                    <MobileListCard key={user.id}>
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="break-words text-sm font-medium">
+                        <div className="min-w-0 space-y-1">
+                          <p className="break-words text-base font-semibold">
                             {user.fullName || user.email || 'Portal user'}
                           </p>
-                          <p className="mt-0.5 break-all text-xs text-muted-foreground">
+                          <p className="break-all text-sm text-muted-foreground">
                             {user.email || 'No email'}
                           </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
+                          <p className="text-sm text-muted-foreground">
                             Access: {formatPortalAccessExpiry(user.accessExpiresAt, timezone)}
                           </p>
                         </div>
@@ -584,7 +584,7 @@ export function ClientPortalAccess({
                           </Badge>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-2.5">
                         <Button
                           size="sm"
                           variant="outline"

@@ -69,7 +69,7 @@ export function ActivityFeedCard({
     <div
       className={cn(
         'flex shrink-0 flex-col gap-2 border-b sm:flex-row sm:items-start sm:justify-between',
-        compact ? 'gap-2 px-3 py-2.5' : 'gap-3 px-5 py-4'
+        compact ? 'gap-2.5 px-3.5 py-3' : 'gap-3 px-5 py-4'
       )}
     >
       <div className="min-w-0">
@@ -135,9 +135,9 @@ export function ActivityFeedCard({
               className={cn(
                 'flex w-full min-w-0 transition-colors hover:bg-muted/40',
                 compact
-                  ? 'items-start gap-2 px-3 py-2'
+                  ? 'items-start gap-2.5 px-3.5 py-2.5'
                   : embedded
-                    ? 'flex-col gap-2 px-4 py-3 sm:px-5 sm:py-3.5'
+                    ? 'flex-col gap-2 px-4 py-3.5 sm:px-5 sm:py-4'
                     : 'flex-col items-start gap-2 px-5 py-4 max-md:gap-3 sm:flex-row sm:items-start'
               )}
             >
@@ -164,13 +164,13 @@ export function ActivityFeedCard({
                     <p
                       className={cn(
                         'font-medium break-words',
-                        compact ? 'text-xs leading-snug' : 'text-sm'
+                        compact ? 'text-sm leading-snug' : 'text-sm'
                       )}
                     >
                       {item.title}
                     </p>
                     {item.urgent && (
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="secondary" className="text-[11px]">
                         Action needed
                       </Badge>
                     )}
@@ -178,7 +178,7 @@ export function ActivityFeedCard({
                   {!compact ? (
                     <p
                       className={cn(
-                        'mt-0.5 text-sm text-muted-foreground',
+                        'mt-1 text-sm leading-relaxed text-muted-foreground',
                         embedded ? 'break-words' : 'truncate'
                       )}
                     >
@@ -186,7 +186,7 @@ export function ActivityFeedCard({
                     </p>
                   ) : null}
                   {compact || embedded ? (
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                    <span className="mt-1 block text-xs text-muted-foreground">
                       {formatActivityWhen(item.occurredAt, timezone)}
                     </span>
                   ) : null}

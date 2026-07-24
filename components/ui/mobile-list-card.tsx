@@ -26,8 +26,8 @@ export function MobileListCard({ children, onClick, className }: MobileListCardP
           : undefined
       }
       className={cn(
-        'p-4 transition-shadow',
-        onClick && 'cursor-pointer hover:shadow-md',
+        'space-y-3 p-4 transition-shadow sm:p-5',
+        onClick && 'cursor-pointer hover:shadow-md active:bg-muted/30',
         className
       )}
     >
@@ -44,9 +44,14 @@ type MobileListCardRowProps = {
 
 export function MobileListCardRow({ label, value, className }: MobileListCardRowProps) {
   return (
-    <div className={cn('flex items-start justify-between gap-3 text-sm', className)}>
+    <div
+      className={cn(
+        'flex items-start justify-between gap-3 text-sm leading-snug',
+        className
+      )}
+    >
       <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className="min-w-0 text-right font-medium">{value}</span>
+      <span className="min-w-0 text-right font-medium break-words">{value}</span>
     </div>
   )
 }

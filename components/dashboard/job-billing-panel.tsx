@@ -412,7 +412,7 @@ export function JobBillingPanel({ scheduleId, clientId }: JobBillingPanelProps) 
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:grid lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
         {/* Left: overview — page-level surface (not nested in MainPageCard) */}
-        <MainPageCard className="gap-3 overflow-y-auto p-3 sm:p-4 lg:min-h-0">
+        <MainPageCard className="gap-4 overflow-y-auto p-4 sm:p-5 lg:min-h-0">
           <StripeConnectAlert />
 
           <div className="grid grid-cols-3 gap-2">

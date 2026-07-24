@@ -49,7 +49,7 @@ export function ScheduleCalendarPageClient({
   }, [loadWeek, weekOffset])
 
   return (
-    <div className={`${MOBILE_PAGE_ROOT_CLASS} gap-3 md:gap-4`}>
+    <div className={MOBILE_PAGE_ROOT_CLASS}>
       <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Schedule</h1>

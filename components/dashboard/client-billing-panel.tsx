@@ -108,7 +108,7 @@ export function ClientBillingPanel({
   )
 
   const summaryStrip = (
-    <div className="grid shrink-0 grid-cols-3 gap-2 sm:gap-3">
+    <div className="grid shrink-0 grid-cols-1 gap-3 min-[400px]:grid-cols-3 sm:gap-3">
       <SummaryCard label="Total billed" value={formatCurrency(billing.summary.totalCharged)} />
       <SummaryCard label="Total paid" value={formatCurrency(billing.summary.totalPaid)} />
       <SummaryCard
@@ -120,17 +120,17 @@ export function ClientBillingPanel({
   )
 
   const jobsSection = (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold">Jobs with billing</h3>
-          <p className="text-xs text-muted-foreground">
+          <h3 className="text-base font-semibold">Jobs with billing</h3>
+          <p className="text-sm text-muted-foreground">
             Open a job to record cash or manage installments.
           </p>
         </div>
         <Link
           href="/dashboard/payments"
-          className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium hover:underline max-md:min-h-10"
+          className="inline-flex shrink-0 items-center gap-1.5 text-sm font-medium hover:underline max-md:min-h-10"
         >
           All transactions
           <ExternalLink className="size-3.5" />
@@ -209,31 +209,37 @@ export function ClientBillingPanel({
                   )
                 }
               >
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-medium leading-snug">{job.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {new Date(job.startTime).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="shrink-0 capitalize">
-                      {job.status.replace('_', ' ')}
-                    </Badge>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-base font-semibold leading-snug">{job.title}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(job.startTime).toLocaleDateString()}
+                    </p>
                   </div>
-                  <MobileListCardRow
-                    label="Balance"
-                    value={
-                      <span
-                        className={
-                          job.summary.balanceDue > 0 ? 'text-orange-600' : undefined
-                        }
-                      >
-                        {formatCurrency(job.summary.balanceDue)}
-                      </span>
-                    }
-                  />
+                  <Badge variant="outline" className="shrink-0 capitalize">
+                    {job.status.replace('_', ' ')}
+                  </Badge>
                 </div>
+                <MobileListCardRow
+                  label="Charged"
+                  value={formatCurrency(job.summary.totalCharged)}
+                />
+                <MobileListCardRow
+                  label="Paid"
+                  value={formatCurrency(job.summary.totalPaid)}
+                />
+                <MobileListCardRow
+                  label="Balance"
+                  value={
+                    <span
+                      className={
+                        job.summary.balanceDue > 0 ? 'text-orange-600' : undefined
+                      }
+                    >
+                      {formatCurrency(job.summary.balanceDue)}
+                    </span>
+                  }
+                />
               </MobileListCard>
             ))}
           </div>
@@ -255,10 +261,10 @@ export function ClientBillingPanel({
     >
       {/* Desktop: two page-level cards (replace the parent main card) */}
       <div className="hidden min-h-0 flex-1 gap-4 lg:grid lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
-        <MainPageCard className="min-h-0 gap-0 overflow-hidden p-3 sm:p-4">
+        <MainPageCard className="min-h-0 gap-0 overflow-hidden p-4 sm:p-5">
           {activityColumn}
         </MainPageCard>
-        <MainPageCard className="min-h-0 gap-4 overflow-hidden p-4 sm:p-5">
+        <MainPageCard className="min-h-0 gap-5 overflow-hidden p-4 sm:p-5">
           {summaryStrip}
           {jobsSection}
         </MainPageCard>
@@ -268,7 +274,7 @@ export function ClientBillingPanel({
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:hidden">
         <StripeConnectAlert />
         {summaryStrip}
-        <MainPageCard className="max-h-[40vh] min-h-[12rem] gap-0 overflow-hidden p-0">
+        <MainPageCard className="max-h-[42vh] min-h-[14rem] gap-0 overflow-hidden p-0">
           <StaffActivityCard
             items={activity}
             timezone={timezone}
@@ -278,7 +284,7 @@ export function ClientBillingPanel({
             listClassName="h-full min-h-0 flex-1"
           />
         </MainPageCard>
-        <MainPageCard className="min-h-0 flex-1 gap-4 p-4">
+        <MainPageCard className="min-h-0 flex-1 gap-4 p-4 sm:p-5">
           {jobsSection}
         </MainPageCard>
       </div>
@@ -296,13 +302,13 @@ function SummaryCard({
   highlight?: boolean
 }) {
   return (
-    <div className="rounded-lg border bg-muted/20 px-2.5 py-2 sm:px-3 sm:py-2.5">
-      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
+    <div className="rounded-lg border bg-muted/20 px-3.5 py-3 sm:px-4 sm:py-3.5">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
       <div
         className={cn(
-          'mt-0.5 text-base font-semibold tracking-tight tabular-nums sm:text-lg',
+          'mt-1 text-lg font-semibold tracking-tight tabular-nums sm:text-xl',
           highlight && 'text-orange-600'
         )}
       >

@@ -430,10 +430,10 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
 
   return (
     <div className={MOBILE_PAGE_ROOT_CLASS}>
-      <div className="flex items-center justify-between mb-6 shrink-0 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
-        <div>
+      <div className="flex shrink-0 items-start justify-between gap-4 max-md:flex-col max-md:items-stretch">
+        <div className="min-w-0 max-w-2xl">
           <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">Leads</h1>
-          <p className="text-muted-foreground">
+          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground sm:text-base">
             Track prospects, follow up on time, and convert them to clients
           </p>
         </div>
@@ -443,8 +443,8 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
         </Button>
       </div>
 
-      <MainPageCard className="overflow-hidden p-6 max-md:p-4">
-        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-6 shrink-0">
+      <MainPageCard className="overflow-hidden p-4 sm:p-6">
+        <div className="mb-5 flex shrink-0 flex-col items-start justify-between gap-4 sm:mb-6 lg:flex-row lg:items-center">
           <div className={MOBILE_TOOLBAR_ROW_CLASS}>
             <Input
               placeholder="Search leads..."
@@ -520,11 +520,11 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableHead className="px-3">Lead</TableHead>
-                    <TableHead className="px-3">Follow-up</TableHead>
-                    <TableHead className="px-3">Stage</TableHead>
-                    <TableHead className="px-3">Source</TableHead>
-                    <TableHead className="px-3 text-right">Value</TableHead>
+                    <TableHead className="px-4">Lead</TableHead>
+                    <TableHead className="px-4">Follow-up</TableHead>
+                    <TableHead className="px-4">Stage</TableHead>
+                    <TableHead className="px-4">Source</TableHead>
+                    <TableHead className="px-4 text-right">Value</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -534,23 +534,23 @@ export function LeadsPageClient({ initialLeads }: { initialLeads: Lead[] }) {
                       onClick={() => openEditDialog(lead)}
                       className="cursor-pointer"
                     >
-                      <TableCell className="px-3">
+                      <TableCell className="px-4 py-3">
                         <div className="font-medium">{lead.name}</div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="mt-0.5 text-sm text-muted-foreground">
                           {[lead.contact_name, lead.email, lead.phone].filter(Boolean).join(' · ') ||
                             'No contact details'}
                         </div>
                       </TableCell>
-                      <TableCell className="px-3">
+                      <TableCell className="px-4 py-3">
                         <FollowUpBadge followUpAt={lead.follow_up_at} />
                       </TableCell>
-                      <TableCell className="px-3">
+                      <TableCell className="px-4 py-3">
                         <Badge variant="outline">{LEAD_STATUS_LABELS[lead.status]}</Badge>
                       </TableCell>
-                      <TableCell className="px-3 text-muted-foreground">
+                      <TableCell className="px-4 py-3 text-muted-foreground">
                         {LEAD_SOURCE_LABELS[lead.source]}
                       </TableCell>
-                      <TableCell className="px-3 text-right font-medium">
+                      <TableCell className="px-4 py-3 text-right font-medium">
                         {lead.estimated_value != null && lead.estimated_value > 0
                           ? `$${lead.estimated_value.toLocaleString()}`
                           : '—'}

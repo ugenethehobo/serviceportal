@@ -653,31 +653,48 @@ export function ClientDetailPageClient({
       onValueChange={(value) => handleTabChange(value as ClientDetailTab)}
       className={`flex flex-col h-full min-h-0 p-6 max-md:h-auto max-md:p-4 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
     >
-    {/* Header */}
-    <div className="mb-6 flex shrink-0 items-center justify-between max-lg:flex-col max-lg:items-stretch max-lg:gap-4 max-md:mb-4">
-      {/* Left side: Breadcrumbs + Client Name */}
-      <div>
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/dashboard/clients">Clients</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{client.name}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div className="flex items-center gap-3 mt-2">
-          <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">{client.name}</h1>
-          {client.status === 'archived' && (
-            <Badge variant="secondary">Archived</Badge>
+    {/* Header: title/actions on one band, full-width tabs below so they never get crushed */}
+    <div className="mb-5 shrink-0 space-y-4 max-md:mb-4 sm:mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/dashboard/clients">Clients</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{client.name}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+          <div className="mt-2 flex flex-wrap items-center gap-2.5 sm:gap-3">
+            <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">
+              {client.name}
+            </h1>
+            {client.status === 'archived' && (
+              <Badge variant="secondary">Archived</Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 flex-wrap items-center gap-2 max-md:w-full max-md:flex-col max-md:[&_button]:min-h-11 max-md:[&_button]:w-full">
+          {client.status === 'active' ? (
+            <Button variant="outline" onClick={() => setClientStatusConfirm('archive')}>
+              Archive Client
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => setClientStatusConfirm('restore')}>
+              Restore Client
+            </Button>
           )}
+          <Button variant="outline" onClick={() => router.push('/dashboard/clients')}>
+            Back to Clients
+          </Button>
         </div>
       </div>
 
-      {/* Center: Tab Navigation */}
-      <TabsList className={`h-auto ${MOBILE_LG_TAB_LIST_CLASS}`}>
+      <TabsList className={cn('h-auto w-full justify-start lg:w-fit', MOBILE_LG_TAB_LIST_CLASS)}>
         <TabsTrigger value="jobs" className="px-4 py-1.5 text-sm">
           Jobs
         </TabsTrigger>
@@ -700,22 +717,6 @@ export function ClientDetailPageClient({
           Messaging
         </TabsTrigger>
       </TabsList>
-
-      {/* Right side: status actions */}
-      <div className="flex items-center gap-2 max-md:w-full max-md:flex-col max-md:[&_button]:w-full max-md:[&_button]:min-h-11">
-        {client.status === 'active' ? (
-          <Button variant="outline" onClick={() => setClientStatusConfirm('archive')}>
-            Archive Client
-          </Button>
-        ) : (
-          <Button variant="outline" onClick={() => setClientStatusConfirm('restore')}>
-            Restore Client
-          </Button>
-        )}
-        <Button variant="outline" onClick={() => router.push('/dashboard/clients')}>
-          Back to Clients
-        </Button>
-      </div>
     </div>
 
       {/* Slim activity strip — jobs/billing/portal use their own layouts */}
@@ -744,15 +745,15 @@ export function ClientDetailPageClient({
           >
             {/* Jobs list */}
             <MainPageCard className="h-full min-h-0 gap-0 overflow-hidden p-4 sm:p-5 max-md:min-h-[16rem]">
-              <div className="mb-3 flex shrink-0 flex-col gap-3 sm:mb-4">
+              <div className="mb-4 flex shrink-0 flex-col gap-3 sm:mb-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <SearchBar
                     value={jobSearchQuery}
                     onChange={setJobSearchQuery}
                     placeholder="Search jobs by title, crew, or status..."
-                    className="max-w-md flex-1"
+                    className="max-w-md flex-1 max-md:max-w-none"
                   />
-                  <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
+                  <div className="flex flex-wrap items-center gap-3 max-md:w-full max-md:flex-col max-md:items-stretch sm:ml-auto">
                     <div className="flex items-center gap-2">
                       <Switch checked={showArchived} onCheckedChange={setShowArchived} />
                       <span className="text-sm text-muted-foreground">Show archived</span>
@@ -760,6 +761,7 @@ export function ClientDetailPageClient({
                     <Button
                       variant="outline"
                       size="sm"
+                      className="max-md:w-full"
                       disabled={client.status === 'archived'}
                       onClick={() => {
                         setIsAddJobModalOpen(true)
@@ -875,28 +877,28 @@ export function ClientDetailPageClient({
                     ))}
                   </div>
 
-                  {/* Mobile: dense single-row cards */}
-                  <div className={cn('space-y-2 p-px', MOBILE_LIST_STACK_CLASS)}>
+                  {/* Mobile: scannable job cards with clear hierarchy */}
+                  <div className={cn('p-px', MOBILE_LIST_STACK_CLASS)}>
                     {visibleSchedules.map((schedule) => (
                       <MobileListCard
                         key={schedule.id}
-                        className="p-3"
                         onClick={() =>
                           router.push(`/dashboard/clients/${clientId}/jobs/${schedule.id}`)
                         }
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5">
+                          <div className="min-w-0 space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
                               {schedule.recurring_rule_id ? (
-                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400" />
+                                <span className="h-2 w-2 shrink-0 rounded-full bg-purple-400" />
                               ) : null}
-                              <p className="truncate text-sm font-medium leading-snug">
+                              <p className="text-base font-semibold leading-snug">
                                 {schedule.title}
                               </p>
                             </div>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                               {new Date(schedule.start_time).toLocaleDateString([], {
+                                weekday: 'short',
                                 month: 'short',
                                 day: 'numeric',
                               })}
@@ -905,13 +907,17 @@ export function ClientDetailPageClient({
                                 hour: 'numeric',
                                 minute: '2-digit',
                               })}
-                              {schedule.crew ? ` · ${schedule.crew.name}` : ''}
                             </p>
+                            {schedule.crew ? (
+                              <p className="text-sm text-muted-foreground">
+                                Crew: {schedule.crew.name}
+                              </p>
+                            ) : null}
                           </div>
-                          <div className="flex shrink-0 flex-col items-end gap-1">
+                          <div className="flex shrink-0 flex-col items-end gap-1.5">
                             <JobStatusBadge status={schedule.status} />
                             {schedule.price > 0 ? (
-                              <span className="text-sm font-semibold tabular-nums text-green-600">
+                              <span className="text-base font-semibold tabular-nums text-green-600">
                                 ${schedule.price.toFixed(2)}
                               </span>
                             ) : null}
@@ -957,17 +963,17 @@ export function ClientDetailPageClient({
                     />
                   </Card>
 
-                  <Card className="flex shrink-0 flex-col gap-4 p-4 py-4 text-sm shadow-sm sm:p-5 sm:py-5">
+                  <Card className="flex shrink-0 flex-col gap-4 p-4 shadow-sm sm:p-5">
                     <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-sm font-semibold">Contact</h3>
+                      <h3 className="text-base font-semibold">Contact</h3>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
                         onClick={openAddressModal}
                       >
-                        <Pencil className="mr-1 size-3" />
+                        <Pencil className="mr-1 size-3.5" />
                         Address
                       </Button>
                     </div>
@@ -978,7 +984,7 @@ export function ClientDetailPageClient({
                         { label: 'Phone', field: 'phone', value: client.phone },
                       ].map(({ label, field, value }) => (
                         <div key={field} className="min-w-0">
-                          <div className="text-xs text-muted-foreground">{label}</div>
+                          <div className="text-sm text-muted-foreground">{label}</div>
                           {editingField === field ? (
                             <Input
                               value={tempValue}
@@ -989,14 +995,14 @@ export function ClientDetailPageClient({
                                 if (e.key === 'Escape') setEditingField(null)
                               }}
                               autoFocus
-                              className="mt-1"
+                              className="mt-1.5"
                             />
                           ) : (
                             <div
                               onClick={() =>
                                 startEditing(field, (client as any)[field] || '')
                               }
-                              className="-mx-1 cursor-pointer break-words rounded px-1 py-1 text-sm font-medium hover:bg-muted/50"
+                              className="-mx-1 cursor-pointer break-words rounded-md px-1.5 py-1.5 text-sm font-medium hover:bg-muted/50"
                             >
                               {value || (
                                 <span className="italic text-muted-foreground">
@@ -1008,15 +1014,15 @@ export function ClientDetailPageClient({
                         </div>
                       ))}
                       <div className="min-w-0">
-                        <div className="text-xs text-muted-foreground">Address</div>
+                        <div className="text-sm text-muted-foreground">Address</div>
                         <button
                           type="button"
                           onClick={openAddressModal}
-                          className="-mx-1 mt-0.5 w-full rounded px-1 py-1.5 text-left text-sm hover:bg-muted/50"
+                          className="-mx-1 mt-1 w-full rounded-md px-1.5 py-2 text-left text-sm hover:bg-muted/50"
                         >
                           {displayAddress ? (
-                            <span className="flex items-start gap-1.5 font-medium leading-snug break-words">
-                              <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                            <span className="flex items-start gap-2 font-medium leading-snug break-words">
+                              <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                               <span className="min-w-0">{displayAddress}</span>
                             </span>
                           ) : (
@@ -1029,8 +1035,8 @@ export function ClientDetailPageClient({
                     </div>
                   </Card>
 
-                  <Card className="flex shrink-0 flex-col gap-3 p-4 py-4 text-sm shadow-sm sm:p-5 sm:py-5">
-                    <h3 className="text-sm font-semibold">Notes</h3>
+                  <Card className="flex shrink-0 flex-col gap-3 p-4 shadow-sm sm:p-5">
+                    <h3 className="text-base font-semibold">Notes</h3>
                     <Textarea
                       value={client.notes || ''}
                       onChange={async (e) => {
@@ -1045,7 +1051,7 @@ export function ClientDetailPageClient({
                           })
                         }, 800)
                       }}
-                      className="min-h-[8rem] resize-y text-sm"
+                      className="min-h-[9rem] resize-y text-sm leading-relaxed"
                       placeholder="Internal notes about this client…"
                     />
                   </Card>

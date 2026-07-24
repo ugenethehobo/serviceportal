@@ -86,7 +86,7 @@ export function PortalShell({ shellData, children }: PortalShellProps) {
               </div>
             </div>
           ) : null}
-          <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 max-md:p-4 max-md:pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
             {children}
           </div>
         </PortalScrollMain>

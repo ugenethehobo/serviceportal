@@ -97,7 +97,7 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
     mapData?.mode === 'upcoming_open_days' ? 'Upcoming Job Sites' : "Today's Job Sites"
 
   return (
-    <div className={`${MOBILE_PAGE_ROOT_CLASS} gap-4 max-md:gap-3`}>
+    <div className={MOBILE_PAGE_ROOT_CLASS}>
       <PageHeader
         title="Dashboard"
         description={
@@ -119,14 +119,14 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
 
       <DashboardGlobalSearch />
 
-      <MainPageCard className="min-h-0 flex-[3] overflow-visible p-4 shadow-sm max-md:flex-none">
+      <MainPageCard className="min-h-0 flex-[3] overflow-visible p-4 shadow-sm max-md:flex-none sm:p-5">
         {isClosedDay && data.monthlyKpis ? (
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-5">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-5 lg:gap-0">
             <div className="flex min-h-0 flex-col overflow-hidden border-border/70 lg:col-span-2 lg:border-r lg:pr-6">
-              <div className="mb-3 flex shrink-0 items-center justify-between border-b pb-2">
+              <div className="mb-4 flex shrink-0 items-center justify-between border-b pb-3">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold tracking-tight">Revenue this month</h2>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
                     {data.monthlyKpis.monthLabel}
                   </p>
                 </div>
@@ -135,10 +135,10 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
             </div>
 
             <div className="flex min-h-0 flex-col overflow-visible max-md:min-h-[200px] lg:col-span-3 lg:pl-6">
-              <div className="mb-3 flex shrink-0 items-center justify-between gap-3 border-b pb-2">
+              <div className="mb-4 flex shrink-0 items-center justify-between gap-3 border-b pb-3">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold tracking-tight">Activity this month</h2>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground sm:text-sm">
                     Business closed today — live schedule returns on your next open day
                   </p>
                 </div>
@@ -147,9 +147,9 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
             </div>
           </div>
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-5">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-5 lg:gap-0">
             <div className="flex min-h-0 flex-col overflow-hidden border-border/70 lg:col-span-2 lg:border-r lg:pr-6">
-              <div className="mb-3 flex shrink-0 items-center justify-between border-b pb-2">
+              <div className="mb-4 flex shrink-0 items-center justify-between border-b pb-3">
                 <h2 className="text-lg font-semibold tracking-tight">
                   {getActiveCrewsHeading(
                     Boolean(data.isSoloBusiness),
@@ -165,16 +165,16 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
             </div>
 
             <div className="flex min-h-0 flex-col overflow-visible max-md:min-h-[200px] lg:col-span-3 lg:pl-6">
-              <div className="mb-3 flex shrink-0 items-center justify-between gap-3 border-b pb-2">
+              <div className="mb-4 flex shrink-0 items-center justify-between gap-3 border-b pb-3">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold tracking-tight">{timelineTitle}</h2>
                   {data.timelineMode === 'tomorrow' && (
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground sm:text-sm">
                       Preview for {data.timelineDateLabel} — after today&apos;s business hours
                     </p>
                   )}
                 </div>
-                <span className="shrink-0 text-[10px] text-muted-foreground">
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                   {data.businessHours.start} – {data.businessHours.end}
                 </span>
               </div>
@@ -190,12 +190,12 @@ export function DashboardPageClient({ initialData }: DashboardPageClientProps) {
         )}
       </MainPageCard>
 
-      <MainPageCard className="min-h-0 flex-[7] p-4 shadow-sm max-md:flex-none max-md:overflow-visible">
-        <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
+      <MainPageCard className="min-h-0 flex-[7] p-4 shadow-sm max-md:flex-none max-md:overflow-visible sm:p-5">
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-3 sm:mb-4">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-tight">{mapTitle}</h2>
             {mapData?.mode === 'upcoming_open_days' && mapData.previewRangeLabel && (
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground sm:text-sm">
                 {(mapData.previewJobCount ?? 0) > 0
                   ? `${mapData.previewJobCount} scheduled job${
                       mapData.previewJobCount === 1 ? '' : 's'

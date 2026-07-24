@@ -276,10 +276,12 @@ const openEditClient = (client: Client) => {
 
   return (
     <div className={MOBILE_PAGE_ROOT_CLASS}>
-      <div className="flex items-center justify-between mb-6 shrink-0 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
-        <div>
+      <div className="flex shrink-0 items-start justify-between gap-4 max-md:flex-col max-md:items-stretch">
+        <div className="min-w-0 max-w-2xl">
           <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">Clients</h1>
-          <p className="text-muted-foreground">Manage your client relationships</p>
+          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground sm:text-base">
+            Manage your client relationships
+          </p>
         </div>
         <Button onClick={() => setIsAddModalOpen(true)} className="max-md:w-full max-md:min-h-11">
           + Add Client
@@ -287,9 +289,9 @@ const openEditClient = (client: Client) => {
       </div>
 
       {/* Main Content Card */}
-      <MainPageCard className="p-6">
+      <MainPageCard className="p-4 sm:p-6">
         {/* Controls */}
-        <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="mb-5 flex flex-col items-start justify-between gap-4 sm:mb-6 sm:flex-row sm:items-center">
           <div className={MOBILE_TOOLBAR_ROW_CLASS}>
             <Input
               placeholder="Search clients..."
@@ -298,13 +300,15 @@ const openEditClient = (client: Client) => {
               className="max-w-xs max-md:max-w-none max-md:flex-1"
             />
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <Switch
                 id="archived"
                 checked={showArchived}
                 onCheckedChange={setShowArchived}
               />
-              <Label htmlFor="archived" className="text-sm">Show Archived</Label>
+              <Label htmlFor="archived" className="text-sm">
+                Show Archived
+              </Label>
             </div>
           </div>
 

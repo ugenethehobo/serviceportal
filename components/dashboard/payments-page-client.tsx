@@ -191,7 +191,7 @@ export function PaymentsPageClient({
         }
       />
 
-      <MainPageCard className="p-6">
+      <MainPageCard className="p-4 sm:p-6">
         {error ? (
           <EmptyState
             title="Could not load payments"
