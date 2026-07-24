@@ -465,18 +465,26 @@ export type RebalanceResult = {
   needsAttentionReason: string | null
 }
 
+/**
+ * Split the open (unfrozen) pool across open installments.
+ * Percent shares are absolute percent of the job total (same base as expandTemplate),
+ * not relative weights among percent-only rows — otherwise a single 30% deposit
+ * with a remainder would incorrectly claim 100% of the pool.
+ */
 function distributeOpenPool(
   open: BillingInstallment[],
   shares: Map<string, InstallmentShare>,
-  openPool: number
+  openPool: number,
+  totalCharged: number
 ): Map<string, number> {
   const amounts = new Map<string, number>()
   if (open.length === 0) return amounts
 
   let pool = Math.max(0, roundMoney(openPool))
+  const jobTotal = Math.max(0, roundMoney(totalCharged))
   const ordered = [...open].sort((a, b) => a.sequence - b.sequence)
 
-  // Fixed first (sequence order), then percent scaled to remaining after fixed, remainder last
+  // Fixed first (sequence order), then absolute percent of job total, remainder last
   let fixedUsed = 0
   for (const inst of ordered) {
     const share = shares.get(inst.key) || { mode: 'remainder' as const }
@@ -497,23 +505,21 @@ function distributeOpenPool(
     const s = shares.get(i.key)
     return !s || s.mode === 'remainder'
   })
-  // Also treat missing share as remainder
 
   let percentAssigned = 0
   if (percentItems.length > 0) {
-    const totalPct = percentItems.reduce((s, i) => {
-      const sh = shares.get(i.key)
-      return s + (sh?.mode === 'percent' ? Number(sh.percent) || 0 : 0)
-    }, 0)
     for (let i = 0; i < percentItems.length; i++) {
       const inst = percentItems[i]
       const sh = shares.get(inst.key)!
       const pct = sh.mode === 'percent' ? Number(sh.percent) || 0 : 0
+      const remainingAfterPrior = roundMoney(Math.max(0, afterFixed - percentAssigned))
       let give = 0
       if (i === percentItems.length - 1 && remainderItems.length === 0) {
-        give = roundMoney(afterFixed - percentAssigned)
-      } else if (totalPct > 0) {
-        give = roundMoney((afterFixed * pct) / totalPct)
+        // No remainder row: last percent absorbs residual of the open pool
+        give = remainingAfterPrior
+      } else {
+        const want = roundMoney((jobTotal * pct) / 100)
+        give = roundMoney(Math.min(want, remainingAfterPrior))
       }
       amounts.set(inst.id, give)
       percentAssigned = roundMoney(percentAssigned + give)
@@ -594,7 +600,12 @@ export function rebalanceInstallments(input: {
       inst.amount_due = 0
     }
   } else {
-    const distributed = distributeOpenPool(open, input.sharesByKey, openPool)
+    const distributed = distributeOpenPool(
+      open,
+      input.sharesByKey,
+      openPool,
+      totalCharged
+    )
     for (const inst of open) {
       inst.amount_due = distributed.get(inst.id) ?? 0
     }

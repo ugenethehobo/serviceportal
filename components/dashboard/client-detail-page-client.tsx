@@ -653,48 +653,29 @@ export function ClientDetailPageClient({
       onValueChange={(value) => handleTabChange(value as ClientDetailTab)}
       className={`flex flex-col h-full min-h-0 p-6 max-md:h-auto max-md:p-4 ${MOBILE_NATURAL_HEIGHT_CLASS}`}
     >
-    {/* Header: title/actions on one band, full-width tabs below so they never get crushed */}
-    <div className="mb-5 shrink-0 space-y-4 max-md:mb-4 sm:mb-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard/clients">Clients</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{client.name}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-          <div className="mt-2 flex flex-wrap items-center gap-2.5 sm:gap-3">
-            <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">
-              {client.name}
-            </h1>
-            {client.status === 'archived' && (
-              <Badge variant="secondary">Archived</Badge>
-            )}
-          </div>
-        </div>
-
-        <div className="flex shrink-0 flex-wrap items-center gap-2 max-md:w-full max-md:flex-col max-md:[&_button]:min-h-11 max-md:[&_button]:w-full">
-          {client.status === 'active' ? (
-            <Button variant="outline" onClick={() => setClientStatusConfirm('archive')}>
-              Archive Client
-            </Button>
-          ) : (
-            <Button variant="outline" onClick={() => setClientStatusConfirm('restore')}>
-              Restore Client
-            </Button>
+    {/* Header */}
+    <div className="mb-6 flex shrink-0 items-center justify-between max-lg:flex-col max-lg:items-stretch max-lg:gap-4 max-md:mb-4">
+      <div>
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink href="/dashboard/clients">Clients</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{client.name}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <div className="mt-2 flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight max-md:text-2xl">{client.name}</h1>
+          {client.status === 'archived' && (
+            <Badge variant="secondary">Archived</Badge>
           )}
-          <Button variant="outline" onClick={() => router.push('/dashboard/clients')}>
-            Back to Clients
-          </Button>
         </div>
       </div>
 
-      <TabsList className={cn('h-auto w-full justify-start lg:w-fit', MOBILE_LG_TAB_LIST_CLASS)}>
+      <TabsList className={`h-auto ${MOBILE_LG_TAB_LIST_CLASS}`}>
         <TabsTrigger value="jobs" className="px-4 py-1.5 text-sm">
           Jobs
         </TabsTrigger>
@@ -717,18 +698,22 @@ export function ClientDetailPageClient({
           Messaging
         </TabsTrigger>
       </TabsList>
-    </div>
 
-      {/* Slim activity strip — jobs/billing/portal use their own layouts */}
-      {activeTab !== 'billing' && activeTab !== 'jobs' && activeTab !== 'portal' ? (
-        <StaffActivityCard
-          items={activity}
-          timezone={initialTimezone}
-          variant="client"
-          listClassName="max-h-32"
-          compact
-        />
-      ) : null}
+      <div className="flex items-center gap-2 max-md:w-full max-md:flex-col max-md:[&_button]:w-full max-md:[&_button]:min-h-11">
+        {client.status === 'active' ? (
+          <Button variant="outline" onClick={() => setClientStatusConfirm('archive')}>
+            Archive Client
+          </Button>
+        ) : (
+          <Button variant="outline" onClick={() => setClientStatusConfirm('restore')}>
+            Restore Client
+          </Button>
+        )}
+        <Button variant="outline" onClick={() => router.push('/dashboard/clients')}>
+          Back to Clients
+        </Button>
+      </div>
+    </div>
 
       {/* Main Content */}
       <div className={`flex flex-col flex-1 min-h-0 gap-4 ${MOBILE_NATURAL_HEIGHT_CLASS}`}>
@@ -1092,57 +1077,98 @@ export function ClientDetailPageClient({
           ) : null}
         </TabsContent>
 
-        {/* Other tabs share one main card (hidden on jobs / billing / portal) */}
-        <Card
-          className={cn(
-            'flex min-h-0 flex-1 flex-col p-6 max-md:flex-none max-md:p-4',
-            MOBILE_NATURAL_HEIGHT_CLASS,
-            (activeTab === 'billing' ||
-              activeTab === 'jobs' ||
-              activeTab === 'portal') &&
-              'hidden'
-          )}
+        {/* Estimates / documents / photos / messaging: main surface + Activity side column (same pattern as Jobs) */}
+        <TabsContent
+          value="estimates"
+          className={`mt-0 flex min-h-0 flex-1 flex-col outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
         >
-          <TabsContent
-            value="estimates"
-            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
-          >
-            {mountedTabs.has('estimates') ? (
-              <ClientEstimatesPanel
-                clientId={clientId}
-                onConvertToJob={handleConvertToJob}
-                onDocumentsChange={() => setDocumentsRefreshKey((k) => k + 1)}
+          {mountedTabs.has('estimates') ? (
+            <div
+              className={cn(
+                'flex min-h-0 flex-1 flex-col gap-4',
+                'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)] lg:items-stretch lg:gap-4'
+              )}
+            >
+              <MainPageCard className="h-full min-h-0 gap-0 overflow-hidden p-4 sm:p-5 max-md:min-h-[16rem]">
+                <ClientEstimatesPanel
+                  clientId={clientId}
+                  onConvertToJob={handleConvertToJob}
+                  onDocumentsChange={() => setDocumentsRefreshKey((k) => k + 1)}
+                />
+              </MainPageCard>
+              <ClientDetailActivityColumn
+                activity={activity}
+                timezone={initialTimezone}
               />
-            ) : null}
-          </TabsContent>
+            </div>
+          ) : null}
+        </TabsContent>
 
-          <TabsContent
-            value="documents"
-            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
-          >
-            {mountedTabs.has('documents') ? (
-              <ClientDocumentsPanel clientId={clientId} refreshKey={documentsRefreshKey} />
-            ) : null}
-          </TabsContent>
+        <TabsContent
+          value="documents"
+          className={`mt-0 flex min-h-0 flex-1 flex-col outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+        >
+          {mountedTabs.has('documents') ? (
+            <div
+              className={cn(
+                'flex min-h-0 flex-1 flex-col gap-4',
+                'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)] lg:items-stretch lg:gap-4'
+              )}
+            >
+              <MainPageCard className="h-full min-h-0 gap-0 overflow-hidden p-4 sm:p-5 max-md:min-h-[16rem]">
+                <ClientDocumentsPanel clientId={clientId} refreshKey={documentsRefreshKey} />
+              </MainPageCard>
+              <ClientDetailActivityColumn
+                activity={activity}
+                timezone={initialTimezone}
+              />
+            </div>
+          ) : null}
+        </TabsContent>
 
-          <TabsContent
-            value="photos"
-            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
-          >
-            {mountedTabs.has('photos') ? (
-              <ClientPhotosPanel clientId={clientId} refreshKey={photosRefreshKey} />
-            ) : null}
-          </TabsContent>
+        <TabsContent
+          value="photos"
+          className={`mt-0 flex min-h-0 flex-1 flex-col outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+        >
+          {mountedTabs.has('photos') ? (
+            <div
+              className={cn(
+                'flex min-h-0 flex-1 flex-col gap-4',
+                'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)] lg:items-stretch lg:gap-4'
+              )}
+            >
+              <MainPageCard className="h-full min-h-0 gap-0 overflow-hidden p-4 sm:p-5 max-md:min-h-[16rem]">
+                <ClientPhotosPanel clientId={clientId} refreshKey={photosRefreshKey} />
+              </MainPageCard>
+              <ClientDetailActivityColumn
+                activity={activity}
+                timezone={initialTimezone}
+              />
+            </div>
+          ) : null}
+        </TabsContent>
 
-          <TabsContent
-            value="messaging"
-            className={`flex flex-col flex-1 min-h-0 mt-0 outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
-          >
-            {mountedTabs.has('messaging') ? (
-              <ClientMessagingPanel clientId={clientId} clientName={client.name} />
-            ) : null}
-          </TabsContent>
-        </Card>
+        <TabsContent
+          value="messaging"
+          className={`mt-0 flex min-h-0 flex-1 flex-col outline-none ${MOBILE_NATURAL_HEIGHT_CLASS}`}
+        >
+          {mountedTabs.has('messaging') ? (
+            <div
+              className={cn(
+                'flex min-h-0 flex-1 flex-col gap-4',
+                'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)] lg:items-stretch lg:gap-4'
+              )}
+            >
+              <MainPageCard className="h-full min-h-0 gap-0 overflow-hidden p-4 sm:p-5 max-md:min-h-[16rem]">
+                <ClientMessagingPanel clientId={clientId} clientName={client.name} />
+              </MainPageCard>
+              <ClientDetailActivityColumn
+                activity={activity}
+                timezone={initialTimezone}
+              />
+            </div>
+          ) : null}
+        </TabsContent>
       </div>
 
       {/* Edit Address Modal */}
@@ -1273,5 +1299,47 @@ export function ClientDetailPageClient({
         </DialogContent>
       </Dialog>
     </Tabs>
+  )
+}
+
+/** Side column activity — matches Jobs/Billing treatment (readable feed, not a slim top strip). */
+function ClientDetailActivityColumn({
+  activity,
+  timezone,
+}: {
+  activity: ActivityFeedItem[]
+  timezone: string
+}) {
+  return (
+    <div
+      className={cn(
+        'flex h-full min-h-0 flex-col',
+        MOBILE_NATURAL_HEIGHT_CLASS
+      )}
+    >
+      {/*
+        Use border (not Card ring) for the shell: Card's ring-1 is drawn outside the box
+        and gets clipped by overflow-hidden on the same element / flex ancestors.
+        No outer padding — the feed header/list own their own spacing.
+      */}
+      <div
+        className={cn(
+          'flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card shadow-sm',
+          // Phones: fixed height under main content (same ballpark as Jobs activity card)
+          'h-56 shrink-0',
+          // Desktop: fill the side column next to the main surface
+          'lg:h-full lg:min-h-0 lg:flex-1'
+        )}
+      >
+        <StaffActivityCard
+          items={activity}
+          timezone={timezone}
+          variant="client"
+          embedded
+          compact
+          listClassName="h-full min-h-0 flex-1"
+        />
+      </div>
+    </div>
   )
 }

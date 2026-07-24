@@ -624,6 +624,8 @@ export type SetJobPaymentPlanResult = {
   error?: string
   allocatedExistingPayments?: boolean
   allFuture?: AllFutureCounts
+  /** Schedules whose installment rows changed — callers should resync invoices. */
+  updatedScheduleIds?: string[]
 }
 
 /**
@@ -658,10 +660,13 @@ export async function setJobPaymentPlan(
     return { success: false, error: primary.error || 'Could not set payment plan' }
   }
 
+  const updatedScheduleIds = [input.scheduleId]
+
   if (!applyAllFuture) {
     return {
       success: true,
       allocatedExistingPayments: Boolean(primary.allocatedExistingPayments),
+      updatedScheduleIds,
     }
   }
 
@@ -676,6 +681,7 @@ export async function setJobPaymentPlan(
       success: true,
       allocatedExistingPayments: Boolean(primary.allocatedExistingPayments),
       allFuture: emptyAllFutureCounts(),
+      updatedScheduleIds,
     }
   }
 
@@ -753,6 +759,9 @@ export async function setJobPaymentPlan(
         // Count as updated even if materialize skipped (e.g. full_balance cleared) —
         // series template was applied / reconciled for this visit.
         counts = tallyAllFutureDecision(counts, 'update')
+        if (sib.id !== input.scheduleId) {
+          updatedScheduleIds.push(sib.id)
+        }
       }
       // if materialize failed, do not tally as updated or as a skip
       continue
@@ -765,6 +774,7 @@ export async function setJobPaymentPlan(
     success: true,
     allocatedExistingPayments: Boolean(primary.allocatedExistingPayments),
     allFuture: counts,
+    updatedScheduleIds,
   }
 }
 
@@ -811,6 +821,7 @@ export async function resetJobPaymentPlan(
   return {
     success: true,
     allocatedExistingPayments: Boolean(result.allocatedExistingPayments),
+    updatedScheduleIds: [input.scheduleId],
   }
 }
 

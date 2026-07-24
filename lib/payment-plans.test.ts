@@ -167,6 +167,132 @@ describe('payment-plans / allocation FIFO', () => {
 })
 
 describe('payment-plans / rebalance freeze', () => {
+  it('deposit 30% + remainder: percent is of job total, not 100% of open pool', () => {
+    const installments = [
+      inst({ id: 'i1', key: 'deposit', sequence: 1, amount_due: 0 }),
+      inst({ id: 'i2', key: 'remainder', sequence: 2, amount_due: 0 }),
+    ]
+    const shares = new Map<string, InstallmentShare>([
+      ['deposit', { mode: 'percent', percent: 30 }],
+      ['remainder', { mode: 'remainder' }],
+    ])
+    const result = rebalanceInstallments({
+      installments,
+      payments: [],
+      totalCharged: 1000,
+      sharesByKey: shares,
+    })
+    assert.equal(result.installments.find((i) => i.id === 'i1')!.amount_due, 300)
+    assert.equal(result.installments.find((i) => i.id === 'i2')!.amount_due, 700)
+    assert.equal(result.installments.find((i) => i.id === 'i2')!.status, 'pending')
+    assert.equal(result.needsAttention, false)
+  })
+
+  it('custom intervals: multiple percent shares leave remainder unpaid share', () => {
+    const installments = [
+      inst({ id: 'i1', key: 'phase1', sequence: 1, amount_due: 0 }),
+      inst({ id: 'i2', key: 'phase2', sequence: 2, amount_due: 0 }),
+      inst({ id: 'i3', key: 'final', sequence: 3, amount_due: 0 }),
+    ]
+    const shares = new Map<string, InstallmentShare>([
+      ['phase1', { mode: 'percent', percent: 25 }],
+      ['phase2', { mode: 'percent', percent: 25 }],
+      ['final', { mode: 'remainder' }],
+    ])
+    const result = rebalanceInstallments({
+      installments,
+      payments: [],
+      totalCharged: 1000,
+      sharesByKey: shares,
+    })
+    assert.equal(result.installments.find((i) => i.id === 'i1')!.amount_due, 250)
+    assert.equal(result.installments.find((i) => i.id === 'i2')!.amount_due, 250)
+    assert.equal(result.installments.find((i) => i.id === 'i3')!.amount_due, 500)
+    assert.equal(result.installments.find((i) => i.id === 'i3')!.status, 'pending')
+  })
+
+  it('custom intervals: fixed + percent + remainder match expandTemplate', () => {
+    const installments = [
+      inst({ id: 'i1', key: 'retainer', sequence: 1, amount_due: 0 }),
+      inst({ id: 'i2', key: 'mid', sequence: 2, amount_due: 0 }),
+      inst({ id: 'i3', key: 'final', sequence: 3, amount_due: 0 }),
+    ]
+    const shares = new Map<string, InstallmentShare>([
+      ['retainer', { mode: 'fixed', amount: 100 }],
+      ['mid', { mode: 'percent', percent: 40 }],
+      ['final', { mode: 'remainder' }],
+    ])
+    const result = rebalanceInstallments({
+      installments,
+      payments: [],
+      totalCharged: 1000,
+      sharesByKey: shares,
+    })
+    assert.equal(result.installments.find((i) => i.id === 'i1')!.amount_due, 100)
+    assert.equal(result.installments.find((i) => i.id === 'i2')!.amount_due, 400)
+    assert.equal(result.installments.find((i) => i.id === 'i3')!.amount_due, 500)
+  })
+
+  it('rematerialize deposit_remainder percent matches expand preview', () => {
+    let n = 0
+    const result = rematerializeInstallments({
+      scheduleId: 'job-1',
+      planId: 'plan-1',
+      clientId: 'client-1',
+      companyId: 'co-1',
+      existing: [],
+      payments: [],
+      template: {
+        version: 1,
+        type: 'deposit_remainder',
+        deposit: { mode: 'percent', percent: 30 },
+      },
+      totalCharged: 1000,
+      visitStart: new Date('2026-07-15T15:00:00.000Z'),
+      newId: () => `new-${++n}`,
+    })
+    const dep = result.installments.find((i) => i.key === 'deposit')!
+    const rem = result.installments.find((i) => i.key === 'remainder')!
+    assert.equal(dep.amount_due, 300)
+    assert.equal(rem.amount_due, 700)
+    assert.equal(rem.status, 'pending')
+  })
+
+  it('rematerialize custom percent intervals match expand preview', () => {
+    let n = 0
+    const result = rematerializeInstallments({
+      scheduleId: 'job-1',
+      planId: 'plan-1',
+      clientId: 'client-1',
+      companyId: 'co-1',
+      existing: [],
+      payments: [],
+      template: {
+        version: 1,
+        type: 'custom_installments',
+        installments: [
+          {
+            key: 'a',
+            label: 'A',
+            share: { mode: 'percent', percent: 33 },
+            collectible: { when: 'anytime' },
+          },
+          {
+            key: 'b',
+            label: 'B',
+            share: { mode: 'remainder' },
+            collectible: { when: 'on_or_after_visit_start' },
+          },
+        ],
+      },
+      totalCharged: 100,
+      visitStart: new Date('2026-07-15T15:00:00.000Z'),
+      newId: () => `new-${++n}`,
+    })
+    assert.equal(result.installments.find((i) => i.key === 'a')!.amount_due, 33)
+    assert.equal(result.installments.find((i) => i.key === 'b')!.amount_due, 67)
+  })
+
   it('deposit $300 paid, job $1000→$800: deposit stays $300, remainder $500', () => {
     const installments = [
       inst({ id: 'i1', key: 'deposit', sequence: 1, amount_due: 300 }),
@@ -253,7 +379,7 @@ describe('payment-plans / rebalance freeze', () => {
     assert.equal(result.installments.find((i) => i.id === 'i3')!.amount_due, 0)
   })
 
-  it('superseded deposit $300 paid: new opens sum to $700', () => {
+  it('superseded deposit $300 paid: new opens sum to $700 with absolute percent', () => {
     const installments = [
       inst({
         id: 'i-old',
@@ -276,6 +402,9 @@ describe('payment-plans / rebalance freeze', () => {
       totalCharged: 1000,
       sharesByKey: shares,
     })
+    // 50% of job total ($500), not 50% renormalized across open pool only
+    assert.equal(result.installments.find((i) => i.id === 'i-new1')!.amount_due, 500)
+    assert.equal(result.installments.find((i) => i.id === 'i-new2')!.amount_due, 200)
     const openSum = result.installments
       .filter((i) => i.status !== 'superseded')
       .reduce((s, i) => s + i.amount_due, 0)

@@ -445,13 +445,7 @@ export function JobDetailPageClient({
     : 'No address on file'
 
   const jobTabSwitcher = (
-    <TabsList
-      className={cn(
-        'h-auto w-auto max-w-full flex-wrap justify-center gap-1 overflow-visible',
-        'max-lg:w-full max-lg:justify-start max-lg:overflow-x-auto max-lg:overflow-y-hidden max-lg:overscroll-x-contain max-lg:touch-pan-x max-lg:flex-nowrap max-lg:h-auto max-lg:min-h-11 max-lg:gap-1 max-lg:p-1',
-        'max-lg:[&_[data-slot=tabs-trigger]]:h-9 max-lg:[&_[data-slot=tabs-trigger]]:min-h-9 max-lg:[&_[data-slot=tabs-trigger]]:shrink-0'
-      )}
-    >
+    <TabsList className="h-auto w-auto max-w-full flex-wrap justify-center gap-1 overflow-visible max-lg:w-full max-lg:justify-start max-lg:overflow-x-auto max-lg:overflow-y-hidden max-lg:overscroll-x-contain max-lg:touch-pan-x max-lg:flex-nowrap">
       {jobTabs.map((tab) => (
         <TabsTrigger
           key={tab.id}
@@ -549,13 +543,17 @@ export function JobDetailPageClient({
           : 'p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-6 lg:pb-6'
       )}
     >
-      <header className="mb-5 shrink-0 space-y-4 sm:mb-6">
-        {/* Title + actions; tabs on their own row so they stay easy to scan */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">{jobTitleBlock}</div>
-          <div className="hidden shrink-0 lg:block">{jobActionButtons}</div>
+      <header className="mb-4 shrink-0 sm:mb-6">
+        <div className="flex flex-col gap-4 max-lg:gap-3 lg:hidden">
+          {jobTitleBlock}
+          {jobTabSwitcher}
         </div>
-        <div className="w-full max-lg:max-w-full lg:w-fit lg:max-w-full">{jobTabSwitcher}</div>
+
+        <div className="hidden lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-6">
+          <div className="min-w-0 justify-self-start">{jobTitleBlock}</div>
+          <div className="justify-self-center">{jobTabSwitcher}</div>
+          <div className="justify-self-end">{jobActionButtons}</div>
+        </div>
       </header>
 
       {!isTeamMember && (

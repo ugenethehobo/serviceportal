@@ -3546,6 +3546,22 @@ export async function setJobPaymentPlanAction(data: {
       return { success: false as const, error: result.error || 'Could not set payment plan' }
     }
 
+    // Invoice PDFs embed installment schedules — resync current + any all-future visits.
+    const scheduleIdsToSync = result.updatedScheduleIds?.length
+      ? result.updatedScheduleIds
+      : [data.scheduleId]
+    for (const scheduleId of scheduleIdsToSync) {
+      try {
+        await refreshJobInvoice(scheduleId)
+      } catch (invoiceError) {
+        console.error(
+          'setJobPaymentPlanAction invoice sync error:',
+          scheduleId,
+          invoiceError
+        )
+      }
+    }
+
     revalidatePath(`/dashboard/clients/${data.clientId}`)
     revalidatePath(`/dashboard/clients/${data.clientId}/jobs/${data.scheduleId}`)
 
@@ -3584,6 +3600,21 @@ export async function resetJobPaymentPlanAction(data: {
 
     if (!result.success) {
       return { success: false as const, error: result.error || 'Could not reset payment plan' }
+    }
+
+    const scheduleIdsToSync = result.updatedScheduleIds?.length
+      ? result.updatedScheduleIds
+      : [data.scheduleId]
+    for (const scheduleId of scheduleIdsToSync) {
+      try {
+        await refreshJobInvoice(scheduleId)
+      } catch (invoiceError) {
+        console.error(
+          'resetJobPaymentPlanAction invoice sync error:',
+          scheduleId,
+          invoiceError
+        )
+      }
     }
 
     revalidatePath(`/dashboard/clients/${data.clientId}`)
