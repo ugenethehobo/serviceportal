@@ -1,131 +1,80 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   getContractTemplateAction,
-  resetContractTemplateAction,
+  replaceContractTemplatePdfAction,
   updateContractTemplateAction,
+  updateContractTemplateDetailsAction,
 } from '@/app/contract-template-actions'
-import { DocumentTemplateWorkspace } from '@/components/dashboard/document-template-workspace'
+import { ContractDocumentEditor } from '@/components/dashboard/contract-document-editor'
 import { SaveStatusBadge, type SaveStatus } from '@/components/dashboard/save-status-badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useContractPreview } from '@/hooks/use-contract-preview'
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
-import type { DocumentTemplate } from '@/lib/document-template'
-import { normalizeDocumentTemplate } from '@/lib/document-template'
-import { updateTemplateElement } from '@/lib/document-template-editor-utils'
-import { buildContractInputFieldKey } from '@/lib/document-template-fields'
-import { ArrowLeft, Loader2, PenLine, RotateCcw, Signature, TextCursorInput } from 'lucide-react'
+import { normalizeDocumentTemplate, type DocumentTemplate } from '@/lib/document-template'
+import { ArrowLeft, FileUp, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 const SAVE_DEBOUNCE_MS = 600
-const PREVIEW_DEBOUNCE_MS = 450
-
-async function fetchContractTemplatePreview(template: DocumentTemplate) {
-  const response = await fetch('/api/document-templates/preview', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind: 'contract', template }),
-  })
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null
-    throw new Error(payload?.error || 'Failed to render preview')
-  }
-
-  const blob = await response.blob()
-  return URL.createObjectURL(blob)
-}
 
 type ContractTemplateEditorProps = {
   templateId: string
-  templateLabel: string
-  usesCatchAll?: boolean
   onBack: () => void
 }
 
-export function ContractTemplateEditor({
-  templateId,
-  templateLabel,
-  usesCatchAll = false,
-  onBack,
-}: ContractTemplateEditorProps) {
+export function ContractTemplateEditor({ templateId, onBack }: ContractTemplateEditorProps) {
   const [template, setTemplate] = useState<DocumentTemplate | null>(null)
-  const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [savedName, setSavedName] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveMessage, setSaveMessage] = useState('')
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
-  const [isResetting, setIsResetting] = useState(false)
-  const previewUrlRef = useRef<string | null>(null)
-
-  const loadTemplate = useCallback(async () => {
-    setIsLoading(true)
-    const result = await getContractTemplateAction(templateId)
-    if (!result.success) {
-      toast.error(result.error || 'Failed to load contract template')
-      setIsLoading(false)
-      return
-    }
-
-    setTemplate(result.template.documentTemplate)
-    setIsLoading(false)
-  }, [templateId])
+  const [isReplacing, setIsReplacing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    void loadTemplate()
-  }, [loadTemplate])
-
-  const refreshPreview = useCallback(async (nextTemplate: DocumentTemplate) => {
-    setIsPreviewLoading(true)
-    try {
-      const nextUrl = await fetchContractTemplatePreview(nextTemplate)
-      if (previewUrlRef.current) {
-        URL.revokeObjectURL(previewUrlRef.current)
+    let cancelled = false
+    void (async () => {
+      const result = await getContractTemplateAction(templateId)
+      if (cancelled) return
+      if (!result.success) {
+        toast.error(result.error || 'Failed to load contract template')
+      } else {
+        setTemplate(result.template.documentTemplate)
+        setName(result.template.name)
+        setSavedName(result.template.name)
       }
-      previewUrlRef.current = nextUrl
-      setPreviewUrl(nextUrl)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to render preview'
-      toast.error(message)
-    } finally {
-      setIsPreviewLoading(false)
+      setIsLoading(false)
+    })()
+    return () => {
+      cancelled = true
     }
-  }, [])
+  }, [templateId])
 
-  const debouncedRefreshPreview = useDebouncedCallback((nextTemplate: DocumentTemplate) => {
-    void refreshPreview(nextTemplate)
-  }, PREVIEW_DEBOUNCE_MS)
+  const { previewUrl, isLoading: isPreviewLoading, error: previewError } = useContractPreview(
+    template ? { kind: 'contract', template, contractTemplateId: templateId } : null
+  )
+
+  useEffect(() => {
+    if (previewError) toast.error(previewError)
+  }, [previewError])
 
   const debouncedSave = useDebouncedCallback(async (nextTemplate: DocumentTemplate) => {
     setSaveStatus('saving')
     setSaveMessage('')
-
     const result = await updateContractTemplateAction(templateId, nextTemplate)
     if (!result.success) {
       setSaveStatus('error')
       setSaveMessage(result.error || 'Could not save')
       return
     }
-
     setSaveStatus('saved')
     setTimeout(() => setSaveStatus('idle'), 2000)
   }, SAVE_DEBOUNCE_MS)
 
-  useEffect(() => {
-    return () => {
-      if (previewUrlRef.current) {
-        URL.revokeObjectURL(previewUrlRef.current)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!template) return
-    debouncedRefreshPreview(template)
-  }, [template, debouncedRefreshPreview])
-
-  const updateTemplate = useCallback(
+  const handleChange = useCallback(
     (nextTemplate: DocumentTemplate) => {
       const normalized = normalizeDocumentTemplate(nextTemplate, 'contract')
       setTemplate(normalized)
@@ -134,96 +83,35 @@ export function ContractTemplateEditor({
     [debouncedSave]
   )
 
-  const selectedElement = useMemo(
-    () => template?.elements.find((element) => element.id === selectedElementId) || null,
-    [template, selectedElementId]
-  )
-
-  const addElement = useCallback(
-    (kind: 'signature' | 'initial' | 'input' | 'text') => {
-      if (!template) return
-
-      const id = `${kind}-${Date.now()}`
-      const base = {
-        id,
-        x: 50,
-        y: 560,
-        visible: true,
-        layout: 'absolute' as const,
-        fontSize: 10,
-      }
-
-      let element
-      if (kind === 'signature') {
-        element = {
-          ...base,
-          kind: 'signature' as const,
-          fieldKey: 'sign.client',
-          label: 'Client signature',
-          width: 260,
-          height: 72,
-        }
-      } else if (kind === 'initial') {
-        element = {
-          ...base,
-          kind: 'initial' as const,
-          fieldKey: 'sign.client.initials',
-          label: 'Client initials',
-          width: 120,
-          height: 48,
-        }
-      } else if (kind === 'input') {
-        element = {
-          ...base,
-          kind: 'input' as const,
-          fieldKey: buildContractInputFieldKey(id),
-          label: 'Text field',
-          width: 260,
-          height: 48,
-        }
-      } else {
-        element = {
-          ...base,
-          kind: 'text' as const,
-          text: 'Additional clause or terms',
-          width: 512,
-          layout: 'flow' as const,
-          y: 400,
-        }
-      }
-
-      updateTemplate({
-        ...template,
-        preset: 'custom',
-        elements: [...template.elements, element],
-      })
-      setSelectedElementId(id)
-    },
-    [template, updateTemplate]
-  )
-
-  const handleReset = useCallback(async () => {
-    setIsResetting(true)
-    setSaveStatus('saving')
-    try {
-      const result = await resetContractTemplateAction(templateId)
-      if (!result.success) {
-        toast.error(result.error || 'Failed to reset template')
-        setSaveStatus('error')
-        setSaveMessage(result.error || 'Could not reset')
-        return
-      }
-
-      setTemplate(result.template)
-      setSelectedElementId(null)
-      setSaveStatus('saved')
-      toast.success('Contract template reset')
-      setTimeout(() => setSaveStatus('idle'), 2000)
-      void refreshPreview(result.template)
-    } finally {
-      setIsResetting(false)
+  const saveName = async () => {
+    const trimmed = name.trim()
+    if (!trimmed || trimmed === savedName) {
+      setName(savedName)
+      return
     }
-  }, [refreshPreview, templateId])
+    const result = await updateContractTemplateDetailsAction(templateId, { name: trimmed })
+    if (!result.success) {
+      toast.error(result.error || 'Could not rename template')
+      setName(savedName)
+      return
+    }
+    setSavedName(trimmed)
+    toast.success('Template renamed')
+  }
+
+  const handleReplacePdf = async (file: File) => {
+    setIsReplacing(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    const result = await replaceContractTemplatePdfAction(templateId, formData)
+    setIsReplacing(false)
+    if (!result.success) {
+      toast.error(result.error || 'Could not replace the PDF')
+      return
+    }
+    setTemplate(result.template)
+    toast.success('PDF replaced. Check that your fields still line up.')
+  }
 
   if (isLoading) {
     return (
@@ -235,91 +123,78 @@ export function ContractTemplateEditor({
   }
 
   if (!template) {
-    return <p className="text-sm text-muted-foreground">Could not load contract template.</p>
+    return (
+      <div className="space-y-3">
+        <Button type="button" variant="ghost" size="sm" className="-ml-2" onClick={onBack}>
+          <ArrowLeft className="size-4" />
+          Back to contract templates
+        </Button>
+        <p className="text-sm text-muted-foreground">Could not load contract template.</p>
+      </div>
+    )
   }
+
+  const isPdf = !!template.background
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
+        <div className="min-w-0 flex-1 space-y-2">
           <Button type="button" variant="ghost" size="sm" className="-ml-2" onClick={onBack}>
             <ArrowLeft className="size-4" />
             Back to contract templates
           </Button>
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight">{templateLabel}</h2>
-            <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-              Design the contract PDF your clients will sign. Drag merge fields, signature boxes,
-              initials, and fillable text inputs into place.
-              {usesCatchAll ? ' This package currently inherits the catch-all template.' : ''}
-            </p>
-          </div>
+          <Input
+            aria-label="Template name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onBlur={() => void saveName()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur()
+            }}
+            maxLength={120}
+            className="h-9 max-w-md text-lg font-semibold"
+          />
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            {isPdf
+              ? `Fields are placed on top of ${template.background?.fileName}. Place client fields where they sign or fill in, and team fields for details you complete on each contract.`
+              : 'Write your terms in text blocks and drag in signatures, client fields, and team fields. Merge tags like {{client.name}} fill in automatically.'}
+          </p>
         </div>
         <SaveStatusBadge status={saveStatus} message={saveMessage} className="text-sm" />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={() => addElement('text')}>
-          <PenLine className="size-4" />
-          Add text block
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => addElement('input')}>
-          <TextCursorInput className="size-4" />
-          Add text field
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => addElement('signature')}>
-          <Signature className="size-4" />
-          Add signature
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => addElement('initial')}>
-          <PenLine className="size-4" />
-          Add initials
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => void handleReset()}
-          disabled={isResetting}
-        >
-          <RotateCcw className="size-4" />
-          Reset layout
-        </Button>
-      </div>
-
-      <DocumentTemplateWorkspace
-        kind="contract"
+      <ContractDocumentEditor
         template={template}
+        onChange={handleChange}
         previewUrl={previewUrl}
         isPreviewLoading={isPreviewLoading}
-        isActiveKind
-        selectedElementId={selectedElementId}
-        selectedElement={selectedElement}
-        onSelectElement={setSelectedElementId}
-        onMoveElement={(elementId, x, y) =>
-          updateTemplate({
-            ...updateTemplateElement(template, elementId, { x, y }),
-            preset: 'custom',
-          })
-        }
-        onResizeElement={(elementId, patch) =>
-          updateTemplate({
-            ...updateTemplateElement(template, elementId, patch),
-            preset: 'custom',
-          })
-        }
-        onToggleVisibility={(elementId, visible) =>
-          updateTemplate({
-            ...updateTemplateElement(template, elementId, { visible }),
-            preset: 'custom',
-          })
-        }
-        onUpdateTemplate={updateTemplate}
-        onUpdateElement={(elementId, patch) =>
-          updateTemplate({
-            ...updateTemplateElement(template, elementId, patch),
-            preset: 'custom',
-          })
+        toolbarExtras={
+          isPdf ? (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (file) void handleReplacePdf(file)
+                }}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={isReplacing}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {isReplacing ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4" />}
+                Replace PDF
+              </Button>
+            </>
+          ) : null
         }
       />
     </div>

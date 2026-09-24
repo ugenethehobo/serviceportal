@@ -64,7 +64,7 @@ export async function getAuthorizedDocument(
 
   const { data: document, error } = await supabaseAdmin
     .from('client_documents')
-    .select('id, storage_path, name, file_name, file_type, company_id, client_id')
+    .select('id, storage_path, name, file_name, file_type, company_id, client_id, source, contract_id')
     .eq('id', documentId)
     .single()
 
@@ -89,6 +89,16 @@ export async function getAuthorizedDocument(
       .single()
     if (!client?.portal_enabled) {
       throw new DocumentAccessError('Portal access disabled', 403)
+    }
+    if (document.source === 'contract' && document.contract_id) {
+      const { data: contract } = await supabaseAdmin
+        .from('contracts')
+        .select('status')
+        .eq('id', document.contract_id)
+        .maybeSingle()
+      if (!contract || contract.status === 'draft') {
+        throw new DocumentAccessError('Document not found', 404)
+      }
     }
   } else {
     throw new DocumentAccessError('Forbidden', 403)

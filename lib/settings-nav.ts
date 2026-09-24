@@ -71,8 +71,8 @@ export const SETTINGS_NAV_SECTIONS: SettingsNavSection[] = [
   {
     id: 'contract-templates',
     label: 'Contract templates',
-    description: 'Service agreements with signing fields.',
-    keywords: ['contract', 'agreement', 'signing', 'e-sign'],
+    description: 'Built-in templates and uploaded PDFs with signing fields.',
+    keywords: ['contract', 'agreement', 'signing', 'e-sign', 'pdf', 'upload', 'waiver'],
     adminOnly: true,
   },
   {

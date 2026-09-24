@@ -1,4 +1,4 @@
-import type { ContractStatus } from '@/lib/contracts'
+import { isContractVisibleToClient, type ContractStatus } from '@/lib/contracts'
 import {
   DEFAULT_DOCUMENT_CATEGORY,
   SYSTEM_DOCUMENT_CATEGORY_CONTRACTS,
@@ -216,4 +216,12 @@ export function groupDocumentsByCategory(
 
 export function countDocumentsInCategory(documents: GalleryDocument[], category: string) {
   return documents.filter((document) => document.displayCategory === category).length
+}
+/** Portal listings: draft contract PDFs stay internal until the contract is sent. */
+export function filterClientVisibleDocuments<T extends { source: string; contract_status?: ContractStatus | null }>(
+  documents: T[]
+): T[] {
+  return documents.filter(
+    (document) => document.source !== 'contract' || isContractVisibleToClient(document.contract_status)
+  )
 }

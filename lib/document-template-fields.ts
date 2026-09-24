@@ -144,6 +144,12 @@ export const DOCUMENT_FIELD_DEFINITIONS: DocumentFieldDefinition[] = [
     group: 'Contract',
   },
   {
+    key: 'contract.signed_name',
+    label: 'Signer printed name',
+    kinds: ['contract'],
+    group: 'Contract',
+  },
+  {
     key: 'sign.client',
     label: 'Client signature',
     kinds: ['contract'],
@@ -158,6 +164,65 @@ export const DOCUMENT_FIELD_DEFINITIONS: DocumentFieldDefinition[] = [
 ]
 
 export const CONTRACT_INPUT_FIELD_PREFIX = 'input.'
+export const CONTRACT_STAFF_FIELD_PREFIX = 'staff.'
+export const CONTRACT_CHECKBOX_FIELD_PREFIX = 'check.'
+
+/** Merge fields that can be dropped onto a contract page as a positioned value. */
+export const CONTRACT_MERGE_FIELD_KEYS = [
+  'client.name',
+  'client.contact_name',
+  'client.address',
+  'client.email',
+  'client.phone',
+  'company.name',
+  'company.address',
+  'company.phone',
+  'document.title',
+  'document.number',
+  'document.date',
+  'job.title',
+  'job.visit_date',
+  'service.name',
+  'contract.signed_date',
+  'contract.signed_name',
+] as const
+
+export type ContractMergeFieldKey = (typeof CONTRACT_MERGE_FIELD_KEYS)[number]
+
+/** `{{tag}}` placeholders usable inside contract text blocks. */
+export const CONTRACT_MERGE_TAGS: Array<{ tag: string; label: string }> =
+  CONTRACT_MERGE_FIELD_KEYS.map((key) => ({
+    tag: `{{${key}}}`,
+    label: DOCUMENT_FIELD_DEFINITIONS.find((field) => field.key === key)?.label ?? key,
+  }))
+
+const MERGE_TAG_PATTERN = /\{\{\s*([a-z_]+(?:\.[a-z_]+)+)\s*\}\}/gi
+
+/**
+ * Replaces `{{field.key}}` tags using the resolver. Unknown tags are left untouched so
+ * typos stay visible in the preview instead of silently disappearing.
+ */
+export function interpolateMergeTags(
+  text: string,
+  resolve: (key: string) => string | null | undefined
+): string {
+  return text.replace(MERGE_TAG_PATTERN, (match, key: string) => {
+    const value = resolve(key.toLowerCase())
+    return value === undefined ? match : (value ?? '')
+  })
+}
+
+export function isContractStaffFieldKey(fieldKey: string | undefined): boolean {
+  return !!fieldKey?.startsWith(CONTRACT_STAFF_FIELD_PREFIX)
+}
+
+export function buildContractStaffFieldKey(id: string): string {
+  return `${CONTRACT_STAFF_FIELD_PREFIX}${id}`
+}
+
+export function buildContractCheckboxFieldKey(id: string): string {
+  return `${CONTRACT_CHECKBOX_FIELD_PREFIX}${id}`
+}
 
 export function isContractInputFieldKey(fieldKey: string | undefined): boolean {
   return !!fieldKey?.startsWith(CONTRACT_INPUT_FIELD_PREFIX)

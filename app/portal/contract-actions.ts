@@ -1,22 +1,16 @@
 'use server'
 
-import { signContractByClient } from '@/lib/contracts-server'
-import {
-  extractContractSigningRequirements,
-  type ContractSigningRequirements,
-} from '@/lib/contract-signing'
-import {
-  loadContractTemplateById,
-  resolveContractTemplateForSchedule,
-} from '@/lib/contract-templates-server'
+import { headers } from 'next/headers'
+import { loadContractSigningLayout, signContractByClient } from '@/lib/contracts-server'
+import type { ContractSigningRequirements } from '@/lib/contract-signing'
 import {
   formatContractNumber,
   formatContractStatus,
+  isContractVisibleToClient,
   isSignableContractStatus,
   type ContractRecord,
   type ContractStatus,
 } from '@/lib/contracts'
-import { normalizeDocumentTemplate } from '@/lib/document-template'
 import { createSupabaseAdmin, resolvePortalSession } from '@/lib/portal-auth'
 
 async function requirePortalClient() {
@@ -63,36 +57,6 @@ export type PortalContractSigningData = {
   fieldValues: Record<string, string>
 }
 
-async function loadContractSigningRequirements(
-  admin: ReturnType<typeof createSupabaseAdmin>,
-  contract: ContractRecord & { schedule?: { title?: string } | { title?: string }[] | null }
-): Promise<ContractSigningRequirements> {
-  const schedule = Array.isArray(contract.schedule)
-    ? contract.schedule[0]
-    : contract.schedule
-
-  let template = null
-  if (contract.contract_template_id) {
-    const record = await loadContractTemplateById(
-      admin,
-      contract.company_id,
-      contract.contract_template_id
-    )
-    template = record?.template ?? null
-  }
-
-  if (!template) {
-    const resolved = await resolveContractTemplateForSchedule(
-      admin,
-      contract.company_id,
-      schedule?.title || contract.title
-    )
-    template = resolved.template
-  }
-
-  return extractContractSigningRequirements(normalizeDocumentTemplate(template, 'contract'))
-}
-
 export async function getPortalContractSigningPageAction(contractId: string): Promise<
   | { success: true; data: PortalContractSigningData }
   | { success: false; error: string }
@@ -112,7 +76,7 @@ export async function getPortalContractSigningPageAction(contractId: string): Pr
       .eq('client_id', portal.clientId)
       .single()
 
-    if (error || !contract) {
+    if (error || !contract || !isContractVisibleToClient(contract.status as ContractStatus)) {
       return { success: false, error: 'Contract not found' }
     }
 
@@ -127,15 +91,25 @@ export async function getPortalContractSigningPageAction(contractId: string): Pr
       .eq('source', 'contract')
       .maybeSingle()
 
-    const requirements = await loadContractSigningRequirements(
+    const schedule = Array.isArray(contract.schedule) ? contract.schedule[0] : contract.schedule
+    const { requirements } = await loadContractSigningLayout(
       admin,
-      contract as ContractRecord & { schedule?: { title?: string } | { title?: string }[] | null }
+      contract as ContractRecord,
+      (schedule as { title?: string } | null)?.title || contract.title
     )
 
-    const fieldValues =
+    const storedValues =
       contract.field_values && typeof contract.field_values === 'object'
         ? (contract.field_values as Record<string, string>)
         : {}
+    // Only hand the client the values for fields they fill in.
+    const clientKeys = new Set([
+      ...requirements.inputFields.map((field) => field.key),
+      ...requirements.checkboxFields.map((field) => field.key),
+    ])
+    const fieldValues = Object.fromEntries(
+      Object.entries(storedValues).filter(([key]) => clientKeys.has(key))
+    )
 
     const status = contract.status as ContractStatus
 
@@ -182,7 +156,12 @@ export async function signPortalContractAction(
 > {
   try {
     const portal = await requirePortalClientWrite()
-    const contract = await signContractByClient(contractId, portal.clientId, input)
+    const requestHeaders = await headers()
+    const forwardedFor = requestHeaders.get('x-forwarded-for')
+    const contract = await signContractByClient(contractId, portal.clientId, input, {
+      ip: forwardedFor?.split(',')[0]?.trim() || requestHeaders.get('x-real-ip'),
+      userAgent: requestHeaders.get('user-agent'),
+    })
 
     return {
       success: true,

@@ -1,9 +1,17 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DocumentElement, DocumentKind, DocumentTableColumns, DocumentTemplate } from '@/lib/document-template'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
+  getDocumentPageSize,
+  getElementPageIndex,
+  type DocumentElement,
+  type DocumentKind,
+  type DocumentTableColumns,
+  type DocumentTemplate,
+} from '@/lib/document-template'
+import {
+  allowsHeightResize,
   clampElementPosition,
   clampElementSize,
   clampTableColumns,
@@ -14,7 +22,6 @@ import {
   getTableColumnOffsets,
   getTableColumnPositions,
   isElementValidForKind,
-  isInteractiveDocumentElement,
   isResizableElement,
   PREVIEW_DISPLAY_WIDTH,
 } from '@/lib/document-template-editor-utils'
@@ -46,7 +53,16 @@ type DocumentTemplatePreviewProps = {
   onMoveElement: (elementId: string, x: number, y: number) => void
   onResizeElement: (elementId: string, patch: { width?: number; height?: number }) => void
   onUpdateTableColumns: (columns: DocumentTableColumns) => void
+  /** Zero-based page shown (multi-page contracts). */
+  pageIndex?: number
+  /** Called when a toolbox item is dropped on the page, with page coordinates in points. */
+  onDropNewElement?: (payload: string, x: number, y: number) => void
+  headerActions?: ReactNode
+  description?: string
 }
+
+/** dataTransfer type used by the contract field toolbox. */
+export const DOCUMENT_FIELD_DRAG_TYPE = 'application/x-serviceportal-field'
 
 type DragState = {
   mode: 'move' | 'resize' | 'column'
@@ -81,6 +97,10 @@ export function DocumentTemplatePreview({
   onMoveElement,
   onResizeElement,
   onUpdateTableColumns,
+  pageIndex = 0,
+  onDropNewElement,
+  headerActions,
+  description = 'Click or drag elements to reposition them on the page.',
 }: DocumentTemplatePreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [displayWidth, setDisplayWidth] = useState(PREVIEW_DISPLAY_WIDTH)
@@ -88,10 +108,16 @@ export function DocumentTemplatePreview({
   const [draggingElementId, setDraggingElementId] = useState<string | null>(null)
   const [elementDraft, setElementDraft] = useState<Record<string, ElementDraft>>({})
   const [columnDraft, setColumnDraft] = useState<ColumnDraft>({})
+  const [isDropTarget, setIsDropTarget] = useState(false)
 
-  const scale = getPreviewScale(template, displayWidth)
+  // Scale, bounds, and clamping all work against the size of the page being shown.
+  const pageTemplate = useMemo(
+    () => ({ ...template, page: getDocumentPageSize(template, pageIndex) }),
+    [template, pageIndex]
+  )
+  const scale = getPreviewScale(pageTemplate, displayWidth)
   const pageDisplayWidth = displayWidth
-  const pageDisplayHeight = getPreviewDisplayHeight(template, displayWidth)
+  const pageDisplayHeight = getPreviewDisplayHeight(pageTemplate, displayWidth)
   const tableElement = template.elements.find((element) => element.id === 'line-items') || null
 
   useEffect(() => {
@@ -236,7 +262,7 @@ export function DocumentTemplatePreview({
           },
           drag.originX + deltaX,
           drag.originY + deltaY,
-          template
+          pageTemplate
         )
 
         setElementDraft((current) => ({
@@ -251,12 +277,12 @@ export function DocumentTemplatePreview({
       }
 
       if (drag.mode === 'resize') {
+        const resizeHeight = allowsHeightResize(element)
         const nextSize = clampElementSize(
           element,
           drag.originWidth + deltaX,
-          drag.originHeight +
-            (element.kind === 'image' || isInteractiveDocumentElement(element) ? deltaY : 0),
-          template
+          drag.originHeight + (resizeHeight ? deltaY : 0),
+          pageTemplate
         )
 
         setElementDraft((current) => ({
@@ -264,10 +290,7 @@ export function DocumentTemplatePreview({
           [drag.elementId]: {
             ...current[drag.elementId],
             width: nextSize.width,
-            height:
-              element.kind === 'image' || isInteractiveDocumentElement(element)
-                ? nextSize.height
-                : current[drag.elementId]?.height,
+            height: resizeHeight ? nextSize.height : current[drag.elementId]?.height,
           },
         }))
         return
@@ -287,7 +310,7 @@ export function DocumentTemplatePreview({
         setColumnDraft(nextColumns)
       }
     },
-    [columnDraft, scale, tableElement, template]
+    [columnDraft, pageTemplate, scale, tableElement, template]
   )
 
   const commitDrag = useCallback(
@@ -347,16 +370,17 @@ export function DocumentTemplatePreview({
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
         <div>
           <p className="text-sm font-medium">PDF preview</p>
-          <p className="text-xs text-muted-foreground">
-            Click or drag elements to reposition them on the page.
-          </p>
+          <p className="text-xs text-muted-foreground">{description}</p>
         </div>
-        {isLoading && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
-            Updating…
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {isLoading && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" />
+              Updating…
+            </div>
+          )}
+          {headerActions}
+        </div>
       </div>
 
       <div
@@ -368,15 +392,46 @@ export function DocumentTemplatePreview({
       >
           <div className="flex justify-center">
             <div
-              className="relative shrink-0 overflow-hidden rounded-sm bg-white shadow-md ring-1 ring-black/10"
+              className={cn(
+                'relative shrink-0 overflow-hidden rounded-sm bg-white shadow-md ring-1 ring-black/10',
+                isDropTarget && 'ring-2 ring-primary'
+              )}
               style={{ width: pageDisplayWidth, height: pageDisplayHeight }}
               onClick={() => onSelectElement(null)}
+              onDragOver={
+                onDropNewElement
+                  ? (event) => {
+                      if (!event.dataTransfer.types.includes(DOCUMENT_FIELD_DRAG_TYPE)) return
+                      event.preventDefault()
+                      event.dataTransfer.dropEffect = 'copy'
+                      setIsDropTarget(true)
+                    }
+                  : undefined
+              }
+              onDragLeave={onDropNewElement ? () => setIsDropTarget(false) : undefined}
+              onDrop={
+                onDropNewElement
+                  ? (event) => {
+                      setIsDropTarget(false)
+                      const payload = event.dataTransfer.getData(DOCUMENT_FIELD_DRAG_TYPE)
+                      if (!payload) return
+                      event.preventDefault()
+                      const rect = event.currentTarget.getBoundingClientRect()
+                      onDropNewElement(
+                        payload,
+                        (event.clientX - rect.left) / scale,
+                        (event.clientY - rect.top) / scale
+                      )
+                    }
+                  : undefined
+              }
             >
               {previewUrl ? (
                 <DocumentTemplatePdfCanvas
                   url={previewUrl}
                   width={pageDisplayWidth}
                   height={pageDisplayHeight}
+                  pageIndex={pageIndex}
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center bg-white text-sm text-muted-foreground">
@@ -386,7 +441,12 @@ export function DocumentTemplatePreview({
 
               <div className="absolute inset-0">
                 {template.elements
-                  .filter((element) => element.visible && isElementValidForKind(element, kind))
+                  .filter(
+                    (element) =>
+                      element.visible &&
+                      isElementValidForKind(element, kind) &&
+                      getElementPageIndex(element) === pageIndex
+                  )
                   .map((element) => {
                     const rect = getOverlayRect(element)
                     const isSelected = selectedElementId === element.id

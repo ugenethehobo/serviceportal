@@ -11,10 +11,14 @@ import {
   DEFAULT_BRAND_COLORS,
   DEFAULT_TABLE_COLUMNS,
   DOCUMENT_PAGE,
+  getDocumentPageCount,
+  getDocumentPageSize,
+  getElementPageIndex,
   type DocumentKind,
   type DocumentElement,
   type DocumentTemplate,
 } from '@/lib/document-template'
+import { interpolateMergeTags } from '@/lib/document-template-fields'
 
 export type DocumentRenderData = {
   kind: DocumentKind
@@ -50,7 +54,17 @@ export type DocumentRenderData = {
   contract?: {
     serviceName: string | null
     signedDate: string | null
+    signedName?: string | null
   }
+  /** Uploaded PDF to draw contract fields on top of. Contracts only. */
+  basePdfBytes?: Uint8Array | null
+  /** Show placeholders for empty staff-filled fields (editor previews only). */
+  showStaffPlaceholders?: boolean
+  /** Appends a signature certificate page. Contracts only. */
+  auditTrail?: {
+    title: string
+    rows: Array<{ label: string; value: string }>
+  } | null
   fieldValues?: Record<string, string>
   signatures?: {
     client?: Uint8Array | null
@@ -115,6 +129,10 @@ function textBaselineFromTop(topY: number, fontSize: number) {
 }
 
 export async function renderDocumentPdf(data: DocumentRenderData): Promise<Uint8Array> {
+  if (data.kind === 'contract') {
+    return renderContractPdf(data)
+  }
+
   const pdf = await PDFDocument.create()
   const pageWidth = data.template.page.width || DOCUMENT_PAGE.width
   const pageHeight = data.template.page.height || DOCUMENT_PAGE.height
@@ -183,6 +201,111 @@ export async function renderDocumentPdf(data: DocumentRenderData): Promise<Uint8
   return pdf.save()
 }
 
+/**
+ * Contracts are free-form: every element renders at its own position on its own page.
+ * When an uploaded PDF is supplied its pages are the canvas; otherwise blank pages are
+ * created from the template's page sizes.
+ */
+async function renderContractPdf(data: DocumentRenderData): Promise<Uint8Array> {
+  const pdf = data.basePdfBytes
+    ? await PDFDocument.load(data.basePdfBytes, { updateMetadata: false })
+    : await PDFDocument.create()
+
+  const fonts: FontSet = {
+    regular: await pdf.embedFont(StandardFonts.Helvetica),
+    bold: await pdf.embedFont(StandardFonts.HelveticaBold),
+  }
+  const logoImage = await resolveLogoImage(pdf, data.company)
+  const signatureImages = await resolveSignatureImages(pdf, data.signatures)
+
+  const pages: PDFPage[] = []
+  if (data.basePdfBytes) {
+    pages.push(...pdf.getPages())
+  } else {
+    const pageCount = getDocumentPageCount(data.template)
+    for (let index = 0; index < pageCount; index++) {
+      const size = getDocumentPageSize(data.template, index)
+      pages.push(pdf.addPage([size.width, size.height]))
+    }
+  }
+  if (pages.length === 0) {
+    pages.push(pdf.addPage([DOCUMENT_PAGE.width, DOCUMENT_PAGE.height]))
+  }
+
+  const contexts: RenderContext[] = pages.map((page) => {
+    const { width, height } = page.getSize()
+    return {
+      pdf,
+      page,
+      fonts,
+      data,
+      pageWidth: width,
+      pageHeight: height,
+      margin: MARGIN,
+      logoImage,
+      signatureImages,
+    }
+  })
+
+  const visibleElements = data.template.elements
+    .filter((element) => element.visible)
+    .sort((a, b) => a.y - b.y)
+
+  for (const element of visibleElements) {
+    const pageIndex = Math.min(getElementPageIndex(element), contexts.length - 1)
+    renderElement(contexts[pageIndex], element, element.y)
+  }
+
+  if (data.auditTrail) {
+    renderAuditTrailPage(pdf, fonts, data.auditTrail)
+  }
+
+  return pdf.save()
+}
+
+function renderAuditTrailPage(
+  pdf: PDFDocument,
+  fonts: FontSet,
+  auditTrail: NonNullable<DocumentRenderData['auditTrail']>
+) {
+  const page = pdf.addPage([DOCUMENT_PAGE.width, DOCUMENT_PAGE.height])
+  const { height } = page.getSize()
+  const dark = rgb(0.1, 0.1, 0.1)
+  const muted = rgb(0.4, 0.4, 0.4)
+  const labelWidth = 150
+  const valueWidth = DOCUMENT_PAGE.width - MARGIN * 2 - labelWidth
+
+  let topY = MARGIN
+  drawAlignedText(page, auditTrail.title, MARGIN, height - textBaselineFromTop(topY, 16), 16, fonts.bold, dark)
+  topY += 30
+  page.drawLine({
+    start: { x: MARGIN, y: height - topY },
+    end: { x: DOCUMENT_PAGE.width - MARGIN, y: height - topY },
+    thickness: 1,
+    color: rgb(0.85, 0.85, 0.85),
+  })
+  topY += 16
+
+  for (const row of auditTrail.rows) {
+    const lines = wrapTextToWidth(row.value || '—', fonts.regular, 10, valueWidth)
+    drawAlignedText(page, row.label, MARGIN, height - textBaselineFromTop(topY, 10), 10, fonts.bold, muted)
+    for (const line of lines) {
+      drawAlignedText(
+        page,
+        line,
+        MARGIN + labelWidth,
+        height - textBaselineFromTop(topY, 10),
+        10,
+        fonts.regular,
+        dark
+      )
+      topY += 15
+    }
+    topY += 6
+    if (topY > height - MARGIN) break
+  }
+}
+
 async function resolveSignatureImages(
   pdf: PDFDocument,
   signatures: DocumentRenderData['signatures']
@@ -247,6 +370,8 @@ function renderElement(ctx: RenderContext, element: DocumentElement, topY: numbe
       return renderSignatureField(ctx, element, topY, 'initial')
     case 'input':
       return renderInputField(ctx, element, topY)
+    case 'checkbox':
+      return renderCheckboxField(ctx, element, topY)
     case 'field':
     default:
       return renderField(ctx, element, topY)
@@ -275,8 +400,69 @@ function renderImageElement(ctx: RenderContext, element: DocumentElement, topY: 
   return topY + height
 }
 
+/**
+ * Raw merge-field values used by `{{tags}}` and overlay fields. Returns undefined for keys
+ * that are not merge fields, and null for known fields without a value.
+ */
+export function resolveMergeFieldValue(
+  data: DocumentRenderData,
+  key: string
+): string | null | undefined {
+  switch (key) {
+    case 'company.name':
+      return data.company.name
+    case 'company.address':
+      return data.company.address ?? null
+    case 'company.phone':
+      return data.company.phone ?? null
+    case 'client.name':
+      return data.client.name
+    case 'client.contact_name':
+      return data.client.contact_name ?? null
+    case 'client.address':
+      return data.client.address ?? null
+    case 'client.email':
+      return data.client.email ?? null
+    case 'client.phone':
+      return data.client.phone ?? null
+    case 'document.title':
+      return data.document.title
+    case 'document.number':
+      return data.document.number
+    case 'document.date':
+      return data.document.date
+    case 'job.title':
+      return data.job?.title ?? null
+    case 'job.visit_date':
+      return data.job?.visitDate ?? null
+    case 'service.name':
+      return data.contract?.serviceName ?? null
+    case 'contract.signed_date':
+      return data.contract?.signedDate ?? null
+    case 'contract.signed_name':
+      return data.contract?.signedName ?? null
+    case 'estimate.title':
+      return data.estimate?.title ?? null
+    case 'estimate.description':
+      return data.estimate?.description ?? null
+    default:
+      return undefined
+  }
+}
+
+function isContractSigned(ctx: RenderContext): boolean {
+  return !!ctx.data.contract?.signedDate
+}
+
 function renderField(ctx: RenderContext, element: DocumentElement, topY: number): number {
   const fieldKey = element.fieldKey || ''
+
+  if (element.appearance === 'overlay') {
+    const value = resolveMergeFieldValue(ctx.data, fieldKey)
+    if (value !== undefined) {
+      return drawOptionalText(ctx, element, topY, value, 'primary')
+    }
+  }
 
   switch (fieldKey) {
     case 'company.name':
@@ -358,6 +544,16 @@ function renderField(ctx: RenderContext, element: DocumentElement, topY: number)
           : 'Signed: _____________',
         'muted'
       )
+    case 'contract.signed_name':
+      return drawOptionalText(
+        ctx,
+        element,
+        topY,
+        ctx.data.contract?.signedName
+          ? `Name: ${ctx.data.contract.signedName}`
+          : 'Name: _____________',
+        'muted'
+      )
     case 'sign.client':
       return renderSignatureField(ctx, element, topY, 'signature')
     case 'sign.client.initials':
@@ -370,12 +566,64 @@ function renderField(ctx: RenderContext, element: DocumentElement, topY: number)
   }
 }
 
+const OVERLAY_CLIENT_FILL = rgb(1, 0.95, 0.72)
+const OVERLAY_CLIENT_BORDER = rgb(0.85, 0.66, 0.1)
+const OVERLAY_STAFF_FILL = rgb(0.86, 0.92, 1)
+const OVERLAY_STAFF_BORDER = rgb(0.35, 0.55, 0.9)
+
+/** Tinted "fill here" tag drawn where a value is still missing. */
+function drawOverlayPlaceholder(
+  ctx: RenderContext,
+  element: DocumentElement,
+  topY: number,
+  width: number,
+  height: number,
+  label: string,
+  variant: 'client' | 'staff'
+) {
+  ctx.page.drawRectangle({
+    x: element.x,
+    y: pdfY(ctx, topY + height),
+    width,
+    height,
+    color: variant === 'staff' ? OVERLAY_STAFF_FILL : OVERLAY_CLIENT_FILL,
+    borderColor: variant === 'staff' ? OVERLAY_STAFF_BORDER : OVERLAY_CLIENT_BORDER,
+    borderWidth: 0.75,
+    opacity: 0.85,
+  })
+  const fontSize = Math.max(6, Math.min(9, height - 4))
+  drawAlignedText(
+    ctx.page,
+    truncateToWidth(label, ctx.fonts.regular, fontSize, width - 6),
+    element.x + 3,
+    pdfY(ctx, topY + Math.max(fontSize + 1, (height + fontSize * FONT_ASCENDER_RATIO) / 2)),
+    fontSize,
+    ctx.fonts.regular,
+    rgb(0.25, 0.25, 0.25)
+  )
+}
+
+function shouldShowPlaceholder(ctx: RenderContext, element: DocumentElement): boolean {
+  if (element.filledBy === 'staff') return ctx.data.showStaffPlaceholders === true
+  return !isContractSigned(ctx)
+}
+
 function renderInputField(ctx: RenderContext, element: DocumentElement, topY: number): number {
   const width = element.width || 260
   const height = element.height || 48
-  const label = element.label?.trim() || 'Response'
+  const isStaff = element.filledBy === 'staff'
+  const label = element.label?.trim() || (isStaff ? 'Details' : 'Response')
   const fieldKey = element.fieldKey || element.id
   const value = ctx.data.fieldValues?.[fieldKey]?.trim() || ''
+
+  if (element.appearance === 'overlay') {
+    if (value) {
+      drawWrappedTextInBox(ctx, element, topY, value, width)
+    } else if (shouldShowPlaceholder(ctx, element)) {
+      drawOverlayPlaceholder(ctx, element, topY, width, height, label, isStaff ? 'staff' : 'client')
+    }
+    return topY + height
+  }
 
   if (!value) {
     const borderColor = resolveBrandColor(ctx.data.template, 'border')
@@ -392,18 +640,105 @@ function renderInputField(ctx: RenderContext, element: DocumentElement, topY: nu
   drawTextBlock(ctx, { ...element, fontSize: element.fontSize || 9 }, topY + 4, label, 'muted')
 
   if (value) {
-    drawWrappedOptionalText(ctx, element, topY + 18, value, Math.floor(width / 6), 'primary')
-  } else {
+    drawWrappedTextInBox(ctx, element, topY + 18, value, width)
+  } else if (!isStaff || ctx.data.showStaffPlaceholders) {
     drawTextBlock(
       ctx,
       { ...element, fontSize: element.fontSize || 10, color: '#9ca3af' },
       topY + 22,
-      'Client fills in when signing',
+      isStaff ? 'Filled in by your team' : 'Client fills in when signing',
       'muted'
     )
   }
 
   return topY + height + 8
+}
+
+function renderCheckboxField(ctx: RenderContext, element: DocumentElement, topY: number): number {
+  const fieldKey = element.fieldKey || element.id
+  const checked = ctx.data.fieldValues?.[fieldKey] === 'true'
+  const height = element.height || 16
+  const boxSize =
+    element.appearance === 'overlay'
+      ? Math.max(8, Math.min(height, element.width || height, 24))
+      : Math.max(8, Math.min(height, 14))
+  const label = element.label?.trim() || 'I agree'
+  const boxTopY = topY + (height - boxSize) / 2
+
+  if (element.appearance === 'overlay') {
+    if (!checked) {
+      if (shouldShowPlaceholder(ctx, element)) {
+        drawOverlayPlaceholder(ctx, element, boxTopY, boxSize, boxSize, '', 'client')
+      }
+      return topY + height
+    }
+  } else {
+    ctx.page.drawRectangle({
+      x: element.x,
+      y: pdfY(ctx, boxTopY + boxSize),
+      width: boxSize,
+      height: boxSize,
+      borderColor: resolveBrandColor(ctx.data.template, 'primary'),
+      borderWidth: 1,
+    })
+    const fontSize = element.fontSize || 10
+    drawTextBlock(
+      ctx,
+      {
+        ...element,
+        x: element.x + boxSize + 6,
+        width: Math.max(40, (element.width || 260) - boxSize - 6),
+        fontSize,
+      },
+      topY + Math.max(0, (height - fontSize) / 2 - 1),
+      label,
+      'primary'
+    )
+  }
+
+  if (checked) {
+    const inset = boxSize * 0.22
+    const color = resolveBrandColor(ctx.data.template, 'primary')
+    const left = element.x + inset
+    const right = element.x + boxSize - inset
+    const top = pdfY(ctx, boxTopY + inset)
+    const bottom = pdfY(ctx, boxTopY + boxSize - inset)
+    ctx.page.drawLine({ start: { x: left, y: top }, end: { x: right, y: bottom }, thickness: 1.5, color })
+    ctx.page.drawLine({ start: { x: left, y: bottom }, end: { x: right, y: top }, thickness: 1.5, color })
+  }
+
+  return topY + height + (element.appearance === 'overlay' ? 0 : 6)
+}
+
+/** Draws a value wrapped to the element width using real font metrics. */
+function drawWrappedTextInBox(
+  ctx: RenderContext,
+  element: DocumentElement,
+  topY: number,
+  value: string,
+  width: number
+): number {
+  const fontSize = element.fontSize || 10
+  const font = element.fontWeight === 'bold' ? ctx.fonts.bold : ctx.fonts.regular
+  const color = element.color
+    ? parseColor(element.color)
+    : resolveBrandColor(ctx.data.template, 'primary')
+  let currentTopY = topY
+  for (const line of wrapTextToWidth(value, font, fontSize, width)) {
+    drawAlignedText(
+      ctx.page,
+      line,
+      element.x,
+      pdfY(ctx, textBaselineFromTop(currentTopY, fontSize)),
+      fontSize,
+      font,
+      color,
+      element.align || 'left',
+      width
+    )
+    currentTopY += fontSize * TEXT_LINE_HEIGHT
+  }
+  return currentTopY
 }
 
 function renderSignatureField(
@@ -420,6 +755,13 @@ function renderSignatureField(
     variant === 'signature'
       ? ctx.signatureImages.client
       : ctx.signatureImages.clientInitials
+
+  if (element.appearance === 'overlay' && !image) {
+    if (shouldShowPlaceholder(ctx, element)) {
+      drawOverlayPlaceholder(ctx, element, topY, width, height, label, 'client')
+    }
+    return topY + height
+  }
 
   if (!image) {
     const borderColor = resolveBrandColor(ctx.data.template, 'border')
@@ -466,7 +808,11 @@ function resolveBrandColor(template: DocumentTemplate, key: keyof typeof DEFAULT
 }
 
 function renderStaticText(ctx: RenderContext, element: DocumentElement, topY: number): number {
-  return drawTextBlock(ctx, element, topY, element.text || '')
+  const text = interpolateMergeTags(element.text || '', (key) =>
+    resolveMergeFieldValue(ctx.data, key)
+  )
+  const width = element.width || ctx.pageWidth - element.x - ctx.margin
+  return drawWrappedTextInBox(ctx, element, topY, text, width)
 }
 
 function renderLine(ctx: RenderContext, element: DocumentElement, topY: number): number {
@@ -910,6 +1256,8 @@ function drawAlignedText(
   align: 'left' | 'center' | 'right' = 'left',
   width?: number
 ) {
+  text = toEncodableText(font, text)
+  if (!text) return
   let drawX = x
   if (width && align !== 'left') {
     const textWidth = font.widthOfTextAtSize(text, size)
@@ -935,6 +1283,133 @@ function parseColor(color?: string): RGB {
   const g = parseInt(hex.slice(2, 4), 16) / 255
   const b = parseInt(hex.slice(4, 6), 16) / 255
   return rgb(r, g, b)
+}
+
+const TEXT_LINE_HEIGHT = 1.4
+
+const encodableCharsetCache = new WeakMap<object, Set<number>>()
+
+const CHARACTER_FALLBACKS: Record<string, string> = {
+  '\t': ' ',
+  '\u00a0': ' ',
+  '\u2018': "'",
+  '\u2019': "'",
+  '\u201c': '"',
+  '\u201d': '"',
+  '\u2013': '-',
+  '\u2014': '-',
+  '\u2026': '...',
+  '\u2022': '-',
+  '\u2713': 'X',
+  '\u2714': 'X',
+}
+
+/**
+ * Standard PDF fonts only cover WinAnsi. Client-entered text can contain anything
+ * (emoji, other scripts), which would make pdf-lib throw mid-render, so unsupported
+ * characters are substituted instead.
+ */
+export function toEncodableText(font: FontSet['regular'], text: string): string {
+  let charset = encodableCharsetCache.get(font)
+  if (!charset) {
+    charset = new Set(font.getCharacterSet())
+    encodableCharsetCache.set(font, charset)
+  }
+
+  let result = ''
+  for (const char of text) {
+    const codePoint = char.codePointAt(0) ?? 0
+    if (charset.has(codePoint)) {
+      result += char
+      continue
+    }
+    const fallback = CHARACTER_FALLBACKS[char]
+    if (fallback !== undefined && [...fallback].every((c) => charset!.has(c.codePointAt(0) ?? 0))) {
+      result += fallback
+    } else if (char === '\n' || char === '\r') {
+      result += ' '
+    } else {
+      result += '?'
+    }
+  }
+  return result
+}
+
+/**
+ * Wraps text to a pixel width using the font's real glyph metrics. Explicit newlines start
+ * new lines (blank lines are kept) and words longer than the width are broken.
+ */
+export function wrapTextToWidth(
+  text: string,
+  font: FontSet['regular'],
+  fontSize: number,
+  maxWidth: number
+): string[] {
+  const measure = (value: string) => font.widthOfTextAtSize(toEncodableText(font, value), fontSize)
+  const width = Math.max(fontSize, maxWidth)
+  const lines: string[] = []
+
+  for (const paragraph of text.replace(/\r\n?/g, '\n').split('\n')) {
+    const words = paragraph.split(/[ \t]+/).filter(Boolean)
+    if (words.length === 0) {
+      lines.push('')
+      continue
+    }
+
+    let current = ''
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word
+      if (measure(candidate) <= width) {
+        current = candidate
+        continue
+      }
+      if (current) lines.push(current)
+
+      if (measure(word) <= width) {
+        current = word
+        continue
+      }
+
+      let chunk = ''
+      for (const char of word) {
+        if (chunk && measure(chunk + char) > width) {
+          lines.push(chunk)
+          chunk = char
+        } else {
+          chunk += char
+        }
+      }
+      current = chunk
+    }
+    lines.push(current)
+  }
+
+  return lines.length ? lines : ['']
+}
+
+/** Height a text block needs at the given width (matches the renderer's line spacing). */
+export function measureWrappedTextHeight(
+  text: string,
+  font: FontSet['regular'],
+  fontSize: number,
+  maxWidth: number
+): number {
+  return wrapTextToWidth(text, font, fontSize, maxWidth).length * fontSize * TEXT_LINE_HEIGHT
+}
+
+function truncateToWidth(
+  text: string,
+  font: FontSet['regular'],
+  fontSize: number,
+  maxWidth: number
+): string {
+  const safe = toEncodableText(font, text)
+  if (font.widthOfTextAtSize(safe, fontSize) <= maxWidth) return safe
+  let result = safe
+  while (result.length > 1 && font.widthOfTextAtSize(`${result}...`, fontSize) > maxWidth) {
+    result = result.slice(0, -1)
+  }
+  return result.length > 1 ? `${result}...` : ''
 }
 
 function wrapText(text: string, maxChars: number): string[] {

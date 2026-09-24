@@ -20,6 +20,7 @@ import { validateMessageBody, type MessagingMessage } from '@/lib/messaging'
 import { normalizeJobPhotoCategories } from '@/lib/job-photo-categories'
 import { JOB_PHOTO_BUCKET, type JobPhoto, type JobPhotoWithUrl } from '@/lib/job-photos'
 import {
+  filterClientVisibleDocuments,
   normalizeUploadedDocumentRows,
   type UploadedDocument,
 } from '@/lib/uploaded-documents'
@@ -650,8 +651,10 @@ export async function getPortalDocumentsPageDataAction(): Promise<
 
     return {
       success: true,
-      documents: normalizeUploadedDocumentRows(
-        (documentsResult.data || []) as Parameters<typeof normalizeUploadedDocumentRows>[0]
+      documents: filterClientVisibleDocuments(
+        normalizeUploadedDocumentRows(
+          (documentsResult.data || []) as Parameters<typeof normalizeUploadedDocumentRows>[0]
+        )
       ),
       jobs: jobsResult.data || [],
     }
@@ -706,7 +709,9 @@ export async function getPortalUploadedDocumentsAction(): Promise<
 
     return {
       success: true,
-      documents: normalizeUploadedDocumentRows((documents || []) as Parameters<typeof normalizeUploadedDocumentRows>[0]),
+      documents: filterClientVisibleDocuments(
+        normalizeUploadedDocumentRows((documents || []) as Parameters<typeof normalizeUploadedDocumentRows>[0])
+      ),
     }
   } catch (error: any) {
     console.error('getPortalUploadedDocumentsAction error:', error)
