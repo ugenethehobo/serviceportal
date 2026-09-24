@@ -46,7 +46,17 @@ export function getPreviewFitDimensions(
 }
 
 export function isInteractiveDocumentElement(element: DocumentElement): boolean {
-  return element.kind === 'signature' || element.kind === 'initial' || element.kind === 'input'
+  return (
+    element.kind === 'signature' ||
+    element.kind === 'initial' ||
+    element.kind === 'input' ||
+    element.kind === 'checkbox'
+  )
+}
+
+/** Elements whose height is set by the user rather than by their content. */
+export function allowsHeightResize(element: DocumentElement): boolean {
+  return element.kind === 'image' || element.kind === 'text' || isInteractiveDocumentElement(element)
 }
 
 export function getElementLabel(element: DocumentElement): string {
@@ -63,7 +73,15 @@ export function getElementLabel(element: DocumentElement): string {
   }
 
   if (element.kind === 'input') {
-    return element.label?.trim() || 'Text input field'
+    return element.label?.trim() || (element.filledBy === 'staff' ? 'Team field' : 'Text input field')
+  }
+
+  if (element.kind === 'checkbox') {
+    return element.label?.trim() || 'Checkbox'
+  }
+
+  if (element.kind === 'line') {
+    return 'Divider line'
   }
 
   if (element.fieldKey) {
@@ -75,7 +93,7 @@ export function getElementLabel(element: DocumentElement): string {
 }
 
 export function isElementValidForKind(element: DocumentElement, kind: DocumentKind): boolean {
-  if (element.kind === 'signature' || element.kind === 'initial' || element.kind === 'input') {
+  if (isInteractiveDocumentElement(element)) {
     return kind === 'contract'
   }
 
@@ -88,8 +106,14 @@ export function isElementValidForKind(element: DocumentElement, kind: DocumentKi
 }
 
 export function getElementGroup(element: DocumentElement, kind: DocumentKind): string {
-  if (element.kind === 'signature' || element.kind === 'initial' || element.kind === 'input') {
+  if (element.kind === 'input' && element.filledBy === 'staff') {
+    return 'Team fields'
+  }
+  if (isInteractiveDocumentElement(element)) {
     return 'Signing'
+  }
+  if (element.kind === 'text' || element.kind === 'line') {
+    return 'Content'
   }
 
   if (element.fieldKey) {
@@ -154,6 +178,9 @@ export function getElementBounds(element: DocumentElement): { width: number; hei
       if (element.kind === 'input') {
         return { width: element.width || 260, height: element.height || 48 }
       }
+      if (element.kind === 'checkbox') {
+        return { width: element.width || 200, height: element.height || 16 }
+      }
       return { width: element.width || 220, height: Math.max(20, fontSize + 10) }
   }
 }
@@ -207,6 +234,8 @@ export function groupElementsForKind(template: DocumentTemplate, kind: DocumentK
     'Estimate',
     'Contract',
     'Signing',
+    'Team fields',
+    'Content',
     'Inputs',
     'Line items',
     'Totals',
@@ -238,9 +267,9 @@ export function isResizableElement(element: DocumentElement): boolean {
   return (
     element.kind === 'image' ||
     element.kind === 'table' ||
-    element.kind === 'signature' ||
-    element.kind === 'initial' ||
-    element.kind === 'input'
+    element.kind === 'text' ||
+    element.kind === 'field' ||
+    isInteractiveDocumentElement(element)
   )
 }
 
@@ -281,14 +310,19 @@ export function clampElementSize(
   const pageWidth = template.page.width || DOCUMENT_PAGE.width
   const pageHeight = template.page.height || DOCUMENT_PAGE.height
   const isInteractive = isInteractiveDocumentElement(element)
-  const minWidth = element.kind === 'image' ? 40 : isInteractive ? 80 : 240
+  const isFreeText = element.kind === 'text' || element.kind === 'field'
+  const minWidth =
+    element.kind === 'checkbox' ? 10 : element.kind === 'image' ? 40 : isInteractive || isFreeText ? 40 : 240
   const minHeight =
-    element.kind === 'image' ? 24 : isInteractive ? 28 : element.kind === 'table' ? 80 : 80
+    element.kind === 'checkbox'
+      ? 10
+      : element.kind === 'image' || isFreeText
+        ? 12
+        : isInteractive
+          ? 14
+          : 80
   const maxWidth = pageWidth - element.x
-  const maxHeight =
-    element.kind === 'image' || isInteractive
-      ? pageHeight - element.y
-      : element.height || 200
+  const maxHeight = allowsHeightResize(element) ? pageHeight - element.y : element.height || 200
 
   return {
     width: Math.round(Math.min(Math.max(minWidth, width), maxWidth)),

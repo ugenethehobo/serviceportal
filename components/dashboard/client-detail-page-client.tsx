@@ -63,6 +63,7 @@ import { JobStatusBadge } from '@/components/dashboard/job-status-badge'
 import { ClientBillingPanel } from '@/components/dashboard/client-billing-panel'
 import { ClientEstimatesPanel } from '@/components/dashboard/client-estimates-panel'
 import { ClientDocumentsPanel } from '@/components/dashboard/client-documents-panel'
+import { ContractsPanel } from '@/components/dashboard/contracts-panel'
 import { ClientPhotosPanel } from '@/components/dashboard/client-photos-panel'
 import { ClientMessagingPanel } from '@/components/dashboard/client-messaging-panel'
 import { ClientPortalAccess } from '@/components/dashboard/client-portal-access'
@@ -1117,7 +1118,11 @@ export function ClientDetailPageClient({
                 'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)] lg:items-stretch lg:gap-4'
               )}
             >
-              <MainPageCard className="h-full min-h-0 gap-0 overflow-hidden p-4 sm:p-5 max-md:min-h-[16rem]">
+              <MainPageCard className="h-full min-h-0 gap-4 overflow-hidden p-4 sm:p-5 max-md:min-h-[16rem]">
+                <ContractsPanel
+                  clientId={clientId}
+                  onContractChanged={() => setDocumentsRefreshKey((key) => key + 1)}
+                />
                 <ClientDocumentsPanel clientId={clientId} refreshKey={documentsRefreshKey} />
               </MainPageCard>
               <ClientDetailActivityColumn

@@ -38,8 +38,10 @@ export const ZAPIER_EVENT_TYPES = [
   'payment_received',
   'job_scheduled',
   'estimate_sent',
+  'contract_created',
   'contract_sent',
   'contract_signed',
+  'contract_voided',
   'lead_created',
 ] as const
 
@@ -51,8 +53,10 @@ export const ZAPIER_EVENT_LABELS: Record<ZapierEventType, string> = {
   payment_received: 'Payment recorded',
   job_scheduled: 'Job scheduled or rescheduled',
   estimate_sent: 'Estimate sent to client',
+  contract_created: 'Contract created',
   contract_sent: 'Contract sent to client',
   contract_signed: 'Contract signed by client',
+  contract_voided: 'Contract voided',
   lead_created: 'Lead created',
 }
 
@@ -85,6 +89,15 @@ export const ZAPIER_EVENT_PAYLOAD_FIELDS: Record<ZapierEventType, readonly strin
     'client_name',
     'client_email',
   ],
+  contract_created: [
+    'contract_id',
+    'contract_number',
+    'client_id',
+    'schedule_id',
+    'contract_title',
+    'template_name',
+    'source',
+  ],
   contract_sent: [
     'contract_id',
     'client_id',
@@ -99,6 +112,17 @@ export const ZAPIER_EVENT_PAYLOAD_FIELDS: Record<ZapierEventType, readonly strin
     'schedule_id',
     'contract_title',
     'client_name',
+    'signed_name',
+    'signed_at',
+    'field_values',
+  ],
+  contract_voided: [
+    'contract_id',
+    'contract_number',
+    'client_id',
+    'schedule_id',
+    'contract_title',
+    'previous_status',
   ],
   job_scheduled: [
     'schedule_id',
@@ -155,6 +179,27 @@ export function getZapierTestPayload(event: ZapierEventType): Record<string, unk
         client_name: 'Sample Client',
         client_email: 'client@example.com',
       }
+    case 'contract_created':
+      return {
+        test: true,
+        contract_id: '00000000-0000-0000-0000-000000000006',
+        contract_number: 'CTR-20260101-ABC123',
+        client_id: '00000000-0000-0000-0000-000000000002',
+        schedule_id: '00000000-0000-0000-0000-000000000001',
+        contract_title: 'Sample service agreement',
+        template_name: 'Service agreement',
+        source: 'template',
+      }
+    case 'contract_voided':
+      return {
+        test: true,
+        contract_id: '00000000-0000-0000-0000-000000000006',
+        contract_number: 'CTR-20260101-ABC123',
+        client_id: '00000000-0000-0000-0000-000000000002',
+        schedule_id: '00000000-0000-0000-0000-000000000001',
+        contract_title: 'Sample service agreement',
+        previous_status: 'ready_for_signing',
+      }
     case 'contract_sent':
       return {
         test: true,
@@ -173,6 +218,9 @@ export function getZapierTestPayload(event: ZapierEventType): Record<string, unk
         schedule_id: '00000000-0000-0000-0000-000000000001',
         contract_title: 'Sample service agreement',
         client_name: 'Sample Client',
+        signed_name: 'Sample Client',
+        signed_at: new Date().toISOString(),
+        field_values: { 'check.ack': 'true' },
       }
     case 'job_scheduled':
       return {

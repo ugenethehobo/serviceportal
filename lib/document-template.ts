@@ -18,8 +18,19 @@ export type DocumentElementKind =
   | 'signature'
   | 'initial'
   | 'input'
+  | 'checkbox'
 
 export type DocumentElementLayout = 'flow' | 'absolute'
+
+/** Who completes an interactive contract field. */
+export type DocumentFieldFilledBy = 'client' | 'staff'
+
+/**
+ * How interactive and merge fields are drawn.
+ * - boxed: bordered box with a label (builder layouts).
+ * - overlay: value only, for placing fields on top of an uploaded PDF's own lines.
+ */
+export type DocumentElementAppearance = 'boxed' | 'overlay'
 
 export type DocumentElement = {
   id: string
@@ -39,6 +50,23 @@ export type DocumentElement = {
   label?: string
   text?: string
   format?: 'currency' | 'date' | 'plain'
+  /** Zero-based page index (contracts only; other documents are single page). */
+  page?: number
+  /** Interactive fields only. Defaults to required. */
+  required?: boolean
+  /** Text inputs only. Defaults to the client. */
+  filledBy?: DocumentFieldFilledBy
+  appearance?: DocumentElementAppearance
+}
+
+export type DocumentPageSize = { width: number; height: number }
+
+/** Uploaded PDF that contract fields are drawn on top of. */
+export type DocumentTemplateBackground = {
+  kind: 'pdf'
+  storagePath: string
+  fileName: string
+  pageCount: number
 }
 
 export type DocumentBrandColors = {
@@ -66,6 +94,9 @@ export type DocumentTemplate = {
   brandColors?: DocumentBrandColors
   tableColumns?: DocumentTableColumns
   preset?: DocumentTemplatePreset
+  /** Per-page sizes for multi-page contracts. `page` mirrors the first entry. */
+  pages?: DocumentPageSize[]
+  background?: DocumentTemplateBackground
 }
 
 export const DEFAULT_BRAND_COLORS: DocumentBrandColors = {
@@ -814,7 +845,47 @@ const VALID_ELEMENT_KINDS: DocumentElementKind[] = [
   'signature',
   'initial',
   'input',
+  'checkbox',
 ]
+
+export const MAX_CONTRACT_PAGES = 40
+
+function normalizePageIndex(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
+  const index = Math.floor(value)
+  if (index <= 0) return undefined
+  return Math.min(index, MAX_CONTRACT_PAGES - 1)
+}
+
+function normalizePageSize(input: unknown): DocumentPageSize | null {
+  if (!input || typeof input !== 'object') return null
+  const raw = input as Partial<DocumentPageSize>
+  if (typeof raw.width !== 'number' || typeof raw.height !== 'number') return null
+  if (!Number.isFinite(raw.width) || !Number.isFinite(raw.height)) return null
+  if (raw.width < 72 || raw.height < 72 || raw.width > 5000 || raw.height > 5000) return null
+  return { width: Math.round(raw.width * 100) / 100, height: Math.round(raw.height * 100) / 100 }
+}
+
+function normalizeBackground(input: unknown): DocumentTemplateBackground | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const raw = input as Partial<DocumentTemplateBackground>
+  if (raw.kind !== 'pdf') return undefined
+  if (typeof raw.storagePath !== 'string' || !raw.storagePath.trim()) return undefined
+  if (raw.storagePath.includes('..')) return undefined
+  const pageCount =
+    typeof raw.pageCount === 'number' && Number.isFinite(raw.pageCount)
+      ? Math.max(1, Math.min(MAX_CONTRACT_PAGES, Math.floor(raw.pageCount)))
+      : 1
+  return {
+    kind: 'pdf',
+    storagePath: raw.storagePath.trim(),
+    fileName:
+      typeof raw.fileName === 'string' && raw.fileName.trim()
+        ? raw.fileName.trim().slice(0, 200)
+        : 'contract.pdf',
+    pageCount,
+  }
+}
 
 function normalizeElement(input: unknown, fallback?: DocumentElement): DocumentElement | null {
   if (!input || typeof input !== 'object') return fallback ?? null
@@ -842,6 +913,10 @@ function normalizeElement(input: unknown, fallback?: DocumentElement): DocumentE
     text: typeof raw.text === 'string' ? raw.text : fallback?.text,
     format:
       raw.format === 'currency' || raw.format === 'date' ? raw.format : fallback?.format,
+    page: normalizePageIndex(raw.page),
+    required: raw.required === false ? false : undefined,
+    filledBy: raw.filledBy === 'staff' ? 'staff' : undefined,
+    appearance: raw.appearance === 'overlay' ? 'overlay' : undefined,
   }
 }
 
@@ -872,21 +947,48 @@ export function normalizeDocumentTemplate(
     normalizedElements.push(normalized)
   }
 
-  for (const fallbackElement of defaults.elements) {
-    if (!seenIds.has(fallbackElement.id)) {
-      normalizedElements.push({ ...fallbackElement })
+  // Contracts are free-form: staff can delete elements, so missing defaults stay deleted.
+  if (kind !== 'contract') {
+    for (const fallbackElement of defaults.elements) {
+      if (!seenIds.has(fallbackElement.id)) {
+        normalizedElements.push({ ...fallbackElement })
+      }
+    }
+  }
+
+  const firstPage: DocumentPageSize = {
+    width: typeof raw.page?.width === 'number' ? raw.page.width : defaults.page.width,
+    height: typeof raw.page?.height === 'number' ? raw.page.height : defaults.page.height,
+  }
+
+  let pages: DocumentPageSize[] | undefined
+  let background: DocumentTemplateBackground | undefined
+  if (kind === 'contract') {
+    background = normalizeBackground(raw.background)
+    pages = (Array.isArray(raw.pages) ? raw.pages : [])
+      .map(normalizePageSize)
+      .filter((size): size is DocumentPageSize => size !== null)
+      .slice(0, MAX_CONTRACT_PAGES)
+    if (pages.length === 0) pages = [firstPage]
+    if (background) {
+      // The uploaded PDF decides the page count.
+      while (pages.length < background.pageCount) pages.push({ ...pages[pages.length - 1] })
+      pages = pages.slice(0, background.pageCount)
+    }
+    const lastPageIndex = pages.length - 1
+    for (const element of normalizedElements) {
+      if ((element.page ?? 0) > lastPageIndex) {
+        element.page = lastPageIndex > 0 ? lastPageIndex : undefined
+      }
     }
   }
 
   const normalized: DocumentTemplate = {
     version: 2,
-    page: {
-      width:
-        typeof raw.page?.width === 'number' ? raw.page.width : defaults.page.width,
-      height:
-        typeof raw.page?.height === 'number' ? raw.page.height : defaults.page.height,
-    },
+    page: pages ? { ...pages[0] } : firstPage,
     elements: normalizedElements,
+    ...(pages ? { pages } : {}),
+    ...(background ? { background } : {}),
     showPayments: kind === 'invoice' ? raw.showPayments !== false : undefined,
     footerDueText:
       typeof raw.footerDueText === 'string' && raw.footerDueText.trim()
@@ -910,7 +1012,7 @@ export function normalizeDocumentTemplate(
 export function documentTemplateNeedsPositionRepair(template: DocumentTemplate): boolean {
   const stackCounts = new Map<string, number>()
   for (const element of template.elements.filter((item) => item.visible)) {
-    const key = `${element.x}:${element.y}`
+    const key = `${element.page ?? 0}:${element.x}:${element.y}`
     stackCounts.set(key, (stackCounts.get(key) || 0) + 1)
   }
   return Math.max(0, ...stackCounts.values()) >= 4
@@ -925,7 +1027,7 @@ function repairDocumentTemplatePositions(
 
   const stackCounts = new Map<string, number>()
   for (const element of template.elements.filter((item) => item.visible)) {
-    const key = `${element.x}:${element.y}`
+    const key = `${element.page ?? 0}:${element.x}:${element.y}`
     stackCounts.set(key, (stackCounts.get(key) || 0) + 1)
   }
 
@@ -1071,4 +1173,19 @@ export function resolveCompanyDocumentTemplates(
 
 export function getVisibleDocumentElements(template: DocumentTemplate) {
   return template.elements.filter((element) => element.visible)
+}
+export function getDocumentPageCount(template: DocumentTemplate): number {
+  return Math.max(1, template.pages?.length ?? 1)
+}
+
+export function getDocumentPageSize(template: DocumentTemplate, pageIndex = 0): DocumentPageSize {
+  const size = template.pages?.[pageIndex] ?? template.pages?.[0] ?? template.page
+  return {
+    width: size?.width || DOCUMENT_PAGE.width,
+    height: size?.height || DOCUMENT_PAGE.height,
+  }
+}
+
+export function getElementPageIndex(element: DocumentElement): number {
+  return element.page ?? 0
 }

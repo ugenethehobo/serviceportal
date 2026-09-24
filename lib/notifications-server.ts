@@ -375,26 +375,31 @@ export async function notifyClientContractSent(
     contractTitle: string
     contractId: string
     scheduleId?: string | null
+    /** Re-sends the signing request without re-firing the Zapier "sent" event. */
+    reminder?: boolean
   }
 ) {
   const baseUrl = getAppBaseUrl()
   const portalUrl = `${baseUrl}/portal/contracts/${input.contractId}`
   const companyName = input.companyName?.trim() || 'Your service company'
   const clientLabel = input.clientName?.trim() || 'there'
+  const reminder = input.reminder === true
 
-  const { queueCompanyZapierEvent } = await import('@/lib/integration-events')
-  queueCompanyZapierEvent(supabaseAdmin, {
-    companyId: input.companyId,
-    event: 'contract_sent',
-    data: {
-      contract_id: input.contractId,
-      client_id: input.clientId ?? null,
-      schedule_id: input.scheduleId ?? null,
-      contract_title: input.contractTitle,
-      client_name: input.clientName ?? null,
-      client_email: input.clientEmail ?? null,
-    },
-  })
+  if (!reminder) {
+    const { queueCompanyZapierEvent } = await import('@/lib/integration-events')
+    queueCompanyZapierEvent(supabaseAdmin, {
+      companyId: input.companyId,
+      event: 'contract_sent',
+      data: {
+        contract_id: input.contractId,
+        client_id: input.clientId ?? null,
+        schedule_id: input.scheduleId ?? null,
+        contract_title: input.contractTitle,
+        client_name: input.clientName ?? null,
+        client_email: input.clientEmail ?? null,
+      },
+    })
+  }
 
   await dispatchNotification(supabaseAdmin, {
     companyId: input.companyId,
@@ -402,11 +407,13 @@ export async function notifyClientContractSent(
     email: input.clientEmail
       ? {
           to: input.clientEmail,
-          subject: `Contract ready: ${input.contractTitle}`,
+          subject: reminder
+            ? `Reminder: please sign ${input.contractTitle}`
+            : `Contract ready: ${input.contractTitle}`,
           ...buildNotificationEmail(
             companyName,
-            'Your contract is ready for signing',
-            `<p>Hi ${escapeHtml(clientLabel)},</p><p><strong>${escapeHtml(input.contractTitle)}</strong> is ready for your review and signature.</p>`,
+            reminder ? 'Your contract is waiting for your signature' : 'Your contract is ready for signing',
+            `<p>Hi ${escapeHtml(clientLabel)},</p><p><strong>${escapeHtml(input.contractTitle)}</strong> is ${reminder ? 'still waiting' : 'ready'} for your review and signature.</p>`,
             { label: 'Review and sign', href: portalUrl }
           ),
           text: `${companyName} sent you a contract: ${input.contractTitle}. Sign: ${portalUrl}`,
@@ -415,7 +422,9 @@ export async function notifyClientContractSent(
     sms: input.clientPhone
       ? {
           phone: input.clientPhone,
-          message: `${companyName}: Contract "${input.contractTitle}" is ready for signing. ${portalUrl}`,
+          message: reminder
+            ? `${companyName}: Reminder - contract "${input.contractTitle}" is waiting for your signature. ${portalUrl}`
+            : `${companyName}: Contract "${input.contractTitle}" is ready for signing. ${portalUrl}`,
         }
       : undefined,
     metadata: {
@@ -495,11 +504,11 @@ export async function notifyStaffContractSigned(
     clientId: string
     contractId: string
     scheduleId?: string | null
+    signedName?: string | null
+    signedAt?: string | null
+    fieldValues?: Record<string, string>
   }
 ) {
-  const staffEmails = await getStaffEmailsForCompany(supabaseAdmin, input.companyId)
-  if (staffEmails.length === 0) return
-
   const baseUrl = getAppBaseUrl()
   const clientLabel = input.clientName?.trim() || 'A client'
   const companyName = input.companyName?.trim() || 'Service Portal'
@@ -517,9 +526,13 @@ export async function notifyStaffContractSigned(
       schedule_id: input.scheduleId ?? null,
       contract_title: input.contractTitle,
       client_name: input.clientName ?? null,
+      signed_name: input.signedName ?? null,
+      signed_at: input.signedAt ?? null,
+      field_values: input.fieldValues ?? {},
     },
   })
 
+  const staffEmails = await getStaffEmailsForCompany(supabaseAdmin, input.companyId)
   for (const email of staffEmails) {
     await dispatchNotification(supabaseAdmin, {
       companyId: input.companyId,

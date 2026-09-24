@@ -1,5 +1,5 @@
 import type { DocumentTemplate } from '@/lib/document-template'
-import { renderDocumentPdf } from '@/lib/document-template-renderer'
+import { renderDocumentPdf, type DocumentRenderData } from '@/lib/document-template-renderer'
 
 export type ContractPdfData = {
   contract: {
@@ -8,6 +8,7 @@ export type ContractPdfData = {
     title: string
     serviceName: string | null
     signedDate: string | null
+    signedName?: string | null
     jobTitle: string
     visitDate: string | null
   }
@@ -25,6 +26,9 @@ export type ContractPdfData = {
     address?: string | null
   }
   template: DocumentTemplate
+  basePdfBytes?: Uint8Array | null
+  showStaffPlaceholders?: boolean
+  auditTrail?: DocumentRenderData['auditTrail']
   fieldValues?: Record<string, string>
   signatures?: {
     client?: Uint8Array | null
@@ -56,7 +60,11 @@ export async function generateContractPdf(data: ContractPdfData): Promise<Uint8A
     contract: {
       serviceName: data.contract.serviceName,
       signedDate: data.contract.signedDate,
+      signedName: data.contract.signedName ?? null,
     },
+    basePdfBytes: data.basePdfBytes,
+    showStaffPlaceholders: data.showStaffPlaceholders,
+    auditTrail: data.auditTrail,
     fieldValues: data.fieldValues,
     signatures: data.signatures,
     lineItems: [],

@@ -7,7 +7,9 @@ import type {
   DocumentTemplate,
 } from '@/lib/document-template'
 import { DEFAULT_BRAND_COLORS } from '@/lib/document-template'
-import { getElementLabel } from '@/lib/document-template-editor-utils'
+import { getElementLabel, isInteractiveDocumentElement } from '@/lib/document-template-editor-utils'
+import { CONTRACT_MERGE_TAGS } from '@/lib/document-template-fields'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -22,6 +24,7 @@ import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { Copy, Trash2 } from 'lucide-react'
 
 type DocumentTemplatePropertiesProps = {
   kind: DocumentKind
@@ -31,6 +34,9 @@ type DocumentTemplatePropertiesProps = {
   onUpdateElement: (elementId: string, patch: Partial<DocumentElement>) => void
   scrollMaxHeight?: string
   embedded?: boolean
+  pageCount?: number
+  onDeleteElement?: (elementId: string) => void
+  onDuplicateElement?: (elementId: string) => void
 }
 
 export function DocumentTemplateProperties({
@@ -41,6 +47,9 @@ export function DocumentTemplateProperties({
   onUpdateElement,
   scrollMaxHeight = 'max-h-[min(70vh,720px)]',
   embedded = false,
+  pageCount = 1,
+  onDeleteElement,
+  onDuplicateElement,
 }: DocumentTemplatePropertiesProps) {
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', !embedded && 'rounded-xl border bg-card shadow-sm')}>
@@ -50,18 +59,33 @@ export function DocumentTemplateProperties({
         </p>
         <p className="text-xs text-muted-foreground">
           {selectedElement
-            ? `Position x ${selectedElement.x}, y ${selectedElement.y}`
-            : 'Document-wide settings and footer text.'}
+            ? `Position x ${selectedElement.x}, y ${selectedElement.y}${
+                pageCount > 1 ? ` · page ${(selectedElement.page ?? 0) + 1}` : ''
+              }`
+            : kind === 'contract'
+              ? 'Brand colors. Select an element to edit it.'
+              : 'Document-wide settings and footer text.'}
         </p>
       </div>
 
       <ScrollArea className="min-h-0 flex-1" viewportClassName={scrollMaxHeight}>
         <div className="space-y-4 p-4">
           {selectedElement ? (
-            <ElementProperties
-              selectedElement={selectedElement}
-              onUpdateElement={onUpdateElement}
-            />
+            <>
+              {kind === 'contract' ? (
+                <ContractElementProperties
+                  selectedElement={selectedElement}
+                  pageCount={pageCount}
+                  onUpdateElement={onUpdateElement}
+                  onDeleteElement={onDeleteElement}
+                  onDuplicateElement={onDuplicateElement}
+                />
+              ) : null}
+              <ElementProperties
+                selectedElement={selectedElement}
+                onUpdateElement={onUpdateElement}
+              />
+            </>
           ) : (
             <TemplateProperties
               kind={kind}
@@ -150,6 +174,8 @@ function TemplateProperties({
 
       {kind === 'invoice' && <Separator />}
 
+      {(kind !== 'contract' ||
+        template.elements.some((element) => element.fieldKey === 'footer.text')) && (
       <div className="space-y-2">
         <Label htmlFor="footer-due-text" className="text-sm">
           {kind === 'invoice' ? 'Footer note (balance due)' : 'Footer note'}
@@ -164,6 +190,7 @@ function TemplateProperties({
           className="resize-none text-sm"
         />
       </div>
+      )}
 
       {kind === 'invoice' && (
         <div className="space-y-2">
@@ -238,15 +265,22 @@ function ElementProperties({
             onChange={(event) =>
               onUpdateElement(selectedElement.id, { text: event.target.value })
             }
-            rows={3}
-            className="resize-none text-sm"
+            rows={6}
+            className="resize-y text-sm"
+          />
+          <MergeTagPicker
+            onInsert={(tag) =>
+              onUpdateElement(selectedElement.id, {
+                text: `${selectedElement.text || ''}${
+                  selectedElement.text && !/\s$/.test(selectedElement.text) ? ' ' : ''
+                }${tag}`,
+              })
+            }
           />
         </div>
       )}
 
-      {(selectedElement.kind === 'signature' ||
-        selectedElement.kind === 'initial' ||
-        selectedElement.kind === 'input') && (
+      {isInteractiveDocumentElement(selectedElement) && (
         <div className="space-y-2">
           <Label htmlFor="field-label" className="text-sm">
             Field label
@@ -264,12 +298,16 @@ function ElementProperties({
                 ? 'Client signature'
                 : selectedElement.kind === 'initial'
                   ? 'Client initials'
-                  : 'Text field'
+                  : selectedElement.kind === 'checkbox'
+                    ? 'I agree to the terms'
+                    : 'Text field'
             }
           />
           {selectedElement.kind === 'input' ? (
             <p className="text-xs text-muted-foreground">
-              Clients fill this in when signing the contract.
+              {selectedElement.filledBy === 'staff'
+                ? 'Your team fills this in on each contract before sending it.'
+                : 'Clients fill this in when signing the contract.'}
             </p>
           ) : null}
         </div>
@@ -448,5 +486,213 @@ function BrandColorField({
         className="h-9 w-full cursor-pointer p-1"
       />
     </div>
+  )
+}
+function MergeTagPicker({ onInsert }: { onInsert: (tag: string) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs text-muted-foreground">
+        Insert client and job details. They fill in automatically on each contract.
+      </p>
+      <div className="flex flex-wrap gap-1">
+        {CONTRACT_MERGE_TAGS.map((item) => (
+          <button
+            key={item.tag}
+            type="button"
+            onClick={() => onInsert(item.tag)}
+            className="rounded-md border bg-muted/40 px-1.5 py-0.5 text-[11px] hover:bg-muted"
+            title={item.tag}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function NumberField({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        {label}
+      </Label>
+      <Input
+        id={id}
+        type="number"
+        value={Math.round(value)}
+        onChange={(event) => {
+          const next = Number(event.target.value)
+          if (Number.isFinite(next)) onChange(Math.max(0, next))
+        }}
+        className="h-8"
+      />
+    </div>
+  )
+}
+
+function ContractElementProperties({
+  selectedElement,
+  pageCount,
+  onUpdateElement,
+  onDeleteElement,
+  onDuplicateElement,
+}: {
+  selectedElement: DocumentElement
+  pageCount: number
+  onUpdateElement: (elementId: string, patch: Partial<DocumentElement>) => void
+  onDeleteElement?: (elementId: string) => void
+  onDuplicateElement?: (elementId: string) => void
+}) {
+  const id = selectedElement.id
+  const interactive = isInteractiveDocumentElement(selectedElement)
+  const supportsAppearance = interactive || selectedElement.kind === 'field'
+
+  return (
+    <>
+      <div className="flex gap-2">
+        {onDuplicateElement ? (
+          <Button type="button" size="sm" variant="outline" className="flex-1" onClick={() => onDuplicateElement(id)}>
+            <Copy className="size-3.5" />
+            Duplicate
+          </Button>
+        ) : null}
+        {onDeleteElement ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="flex-1 text-destructive hover:text-destructive"
+            onClick={() => onDeleteElement(id)}
+          >
+            <Trash2 className="size-3.5" />
+            Delete
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <NumberField id="element-x" label="X" value={selectedElement.x} onChange={(x) => onUpdateElement(id, { x })} />
+        <NumberField id="element-y" label="Y" value={selectedElement.y} onChange={(y) => onUpdateElement(id, { y })} />
+        {selectedElement.width !== undefined || interactive || selectedElement.kind === 'text' ? (
+          <NumberField
+            id="element-width"
+            label="Width"
+            value={selectedElement.width ?? 220}
+            onChange={(width) => onUpdateElement(id, { width: Math.max(10, width) })}
+          />
+        ) : null}
+        {interactive || selectedElement.kind === 'text' || selectedElement.kind === 'image' ? (
+          <NumberField
+            id="element-height"
+            label="Height"
+            value={selectedElement.height ?? 48}
+            onChange={(height) => onUpdateElement(id, { height: Math.max(10, height) })}
+          />
+        ) : null}
+      </div>
+
+      {pageCount > 1 ? (
+        <div className="space-y-2">
+          <Label className="text-sm">Page</Label>
+          <Select
+            value={String(selectedElement.page ?? 0)}
+            onValueChange={(value) => {
+              const page = Number(value ?? 0)
+              onUpdateElement(id, { page: page > 0 ? page : undefined })
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>{`Page ${(selectedElement.page ?? 0) + 1}`}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: pageCount }, (_, index) => (
+                <SelectItem key={index} value={String(index)}>
+                  Page {index + 1}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
+      {selectedElement.kind === 'input' ? (
+        <div className="space-y-2">
+          <Label className="text-sm">Filled in by</Label>
+          <Select
+            value={selectedElement.filledBy === 'staff' ? 'staff' : 'client'}
+            onValueChange={(value) => {
+              const staff = value === 'staff'
+              const key = selectedElement.fieldKey || ''
+              const suffix = key.replace(/^(input|staff)\./, '') || id
+              onUpdateElement(id, {
+                filledBy: staff ? 'staff' : undefined,
+                fieldKey: `${staff ? 'staff' : 'input'}.${suffix}`,
+              })
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                {selectedElement.filledBy === 'staff' ? 'Your team (before sending)' : 'Client (when signing)'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="client">Client (when signing)</SelectItem>
+              <SelectItem value="staff">Your team (before sending)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
+      {selectedElement.kind === 'input' || selectedElement.kind === 'checkbox' ? (
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="element-required" className="text-sm font-normal">
+            Required
+          </Label>
+          <Switch
+            id="element-required"
+            checked={selectedElement.required !== false}
+            onCheckedChange={(checked) => onUpdateElement(id, { required: checked ? undefined : false })}
+          />
+        </div>
+      ) : null}
+
+      {supportsAppearance ? (
+        <div className="space-y-2">
+          <Label className="text-sm">Style</Label>
+          <Select
+            value={selectedElement.appearance === 'overlay' ? 'overlay' : 'boxed'}
+            onValueChange={(value) =>
+              onUpdateElement(id, { appearance: value === 'overlay' ? 'overlay' : undefined })
+            }
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                {selectedElement.appearance === 'overlay' ? 'Value only' : 'Labeled'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="boxed">Labeled</SelectItem>
+              <SelectItem value="overlay">Value only</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Use &ldquo;Value only&rdquo; to write onto a blank line in an uploaded PDF.
+          </p>
+        </div>
+      ) : null}
+
+      <Separator />
+    </>
   )
 }

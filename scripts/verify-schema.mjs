@@ -159,6 +159,20 @@ const checks = [
     label: 'stripe_webhook_events table',
     run: async () => tableQueryable('stripe_webhook_events', 'id,source,event_type'),
   },
+  {
+    migration: 'contracts-schema.sql',
+    label: 'contract_templates + contracts',
+    run: async () =>
+      (await tableQueryable('contract_templates')) && (await tableQueryable('contracts')),
+  },
+  {
+    migration: 'contracts-v2-schema.sql',
+    label: 'contract template library + contract snapshots',
+    run: async () =>
+      (await columnExists('contract_templates', 'is_default')) &&
+      (await columnExists('contracts', 'template_snapshot')) &&
+      (await columnExists('bookable_services', 'contract_template_id')),
+  },
 ]
 
 console.log(`Verifying Supabase schema: ${url}\n`)

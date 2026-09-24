@@ -1,11 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { DocumentTemplatePalette } from '@/components/dashboard/document-template-palette'
 import { DocumentTemplatePreview } from '@/components/dashboard/document-template-preview'
 import { DocumentTemplateProperties } from '@/components/dashboard/document-template-properties'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { DocumentElement, DocumentKind, DocumentTemplate } from '@/lib/document-template'
+import {
+  getDocumentPageCount,
+  type DocumentElement,
+  type DocumentKind,
+  type DocumentTemplate,
+} from '@/lib/document-template'
 
 type DocumentTemplateWorkspaceProps = {
   kind: DocumentKind
@@ -21,6 +26,14 @@ type DocumentTemplateWorkspaceProps = {
   onToggleVisibility: (elementId: string, visible: boolean) => void
   onUpdateTemplate: (template: DocumentTemplate) => void
   onUpdateElement: (elementId: string, patch: Partial<DocumentElement>) => void
+  pageIndex?: number
+  onDropNewElement?: (payload: string, x: number, y: number) => void
+  onDeleteElement?: (elementId: string) => void
+  onDuplicateElement?: (elementId: string) => void
+  previewHeaderActions?: ReactNode
+  previewDescription?: string
+  /** Rendered above the elements list (e.g. the contract field toolbox). */
+  sidebarTop?: ReactNode
 }
 
 export function DocumentTemplateWorkspace({
@@ -37,6 +50,13 @@ export function DocumentTemplateWorkspace({
   onToggleVisibility,
   onUpdateTemplate,
   onUpdateElement,
+  pageIndex = 0,
+  onDropNewElement,
+  onDeleteElement,
+  onDuplicateElement,
+  previewHeaderActions,
+  previewDescription,
+  sidebarTop,
 }: DocumentTemplateWorkspaceProps) {
   const [sidePanel, setSidePanel] = useState<'elements' | 'properties'>('elements')
 
@@ -65,6 +85,9 @@ export function DocumentTemplateWorkspace({
       selectedElement={isActiveKind ? selectedElement : null}
       onUpdateTemplate={onUpdateTemplate}
       onUpdateElement={onUpdateElement}
+      pageCount={getDocumentPageCount(template)}
+      onDeleteElement={onDeleteElement}
+      onDuplicateElement={onDuplicateElement}
       embedded
     />
   )
@@ -84,10 +107,15 @@ export function DocumentTemplateWorkspace({
           onUpdateTableColumns={(columns) =>
             onUpdateTemplate({ ...template, tableColumns: columns, preset: 'custom' })
           }
+          pageIndex={pageIndex}
+          onDropNewElement={onDropNewElement}
+          headerActions={previewHeaderActions}
+          description={previewDescription}
         />
       </section>
 
       <aside className="shrink-0 xl:sticky xl:top-0 xl:order-1 xl:w-80 xl:max-w-[320px] xl:self-start">
+        {sidebarTop ? <div className="mb-4">{sidebarTop}</div> : null}
         <div className="hidden flex-col gap-4 xl:flex">
           <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
             {palette}

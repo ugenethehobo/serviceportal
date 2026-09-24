@@ -13,6 +13,7 @@ import { PortalPageHeader } from '@/components/portal/portal-page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -144,7 +145,8 @@ export function PortalContractSigningClient({
             <div className="space-y-2">
               <p className="font-medium">You signed this contract</p>
               <p className="text-sm text-muted-foreground">
-                A signed copy is saved in your Documents folder under Contracts.
+                A signed copy, with a signature certificate page, is saved in your Documents folder
+                under Contracts.
               </p>
               <Link
                 href="/portal/documents"
@@ -177,19 +179,60 @@ export function PortalContractSigningClient({
 
           {data.requirements.inputFields.map((field) => (
             <div key={field.key} className="space-y-2">
-              <Label htmlFor={field.key}>{field.label}</Label>
-              <Textarea
-                id={field.key}
-                value={fieldValues[field.key] || ''}
-                onChange={(event) =>
+              <Label htmlFor={field.key}>
+                {field.label}
+                {field.required ? null : (
+                  <span className="font-normal text-muted-foreground"> (optional)</span>
+                )}
+              </Label>
+              {field.multiline ? (
+                <Textarea
+                  id={field.key}
+                  value={fieldValues[field.key] || ''}
+                  maxLength={2000}
+                  onChange={(event) =>
+                    setFieldValues((current) => ({
+                      ...current,
+                      [field.key]: event.target.value,
+                    }))
+                  }
+                  rows={3}
+                />
+              ) : (
+                <Input
+                  id={field.key}
+                  value={fieldValues[field.key] || ''}
+                  maxLength={2000}
+                  onChange={(event) =>
+                    setFieldValues((current) => ({
+                      ...current,
+                      [field.key]: event.target.value,
+                    }))
+                  }
+                />
+              )}
+            </div>
+          ))}
+
+          {(data.requirements.checkboxFields ?? []).map((field) => (
+            <Label key={field.key} className="flex items-start gap-3 text-sm font-normal leading-snug">
+              <Checkbox
+                checked={fieldValues[field.key] === 'true'}
+                onCheckedChange={(checked) =>
                   setFieldValues((current) => ({
                     ...current,
-                    [field.key]: event.target.value,
+                    [field.key]: checked === true ? 'true' : '',
                   }))
                 }
-                rows={3}
+                className="mt-0.5"
               />
-            </div>
+              <span>
+                {field.label}
+                {field.required ? null : (
+                  <span className="text-muted-foreground"> (optional)</span>
+                )}
+              </span>
+            </Label>
           ))}
 
           {data.requirements.requiresSignature ? (

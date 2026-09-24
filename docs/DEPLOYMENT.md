@@ -150,6 +150,8 @@ All SQL files live in `supabase/`. Run them in the **Supabase SQL editor** (or v
 | 36 | `portal-multi-login-schema.sql` | Multiple client portal logins per client (drop unique on `profiles.client_id`) |
 | 37 | `job-payment-plan-schema.sql` | Multi-payment job plans (`job_payment_plans`, `billing_installments`, company/series templates) |
 | 38 | `portal-access-expiry-schema.sql` | Per-login portal access expiry (`profiles.portal_access_expires_at`; NULL = no limit) |
+| 39 | `contracts-schema.sql` | `contract_templates`, `contracts`, `client_documents.contract_id` |
+| 40 | `contracts-v2-schema.sql` | Contract template library, PDF templates, per-contract snapshots, signing audit trail |
 
 > **Security:** Run `production-rls-hardening.sql` before exposing the app to real customers. It replaces the global `company-logos` read policy with company-scoped storage policies.
 

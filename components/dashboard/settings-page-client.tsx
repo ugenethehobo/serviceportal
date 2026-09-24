@@ -226,7 +226,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: 'contract-templates',
     label: 'Contract templates',
-    description: 'Service agreements with signing fields.',
+    description: 'Built-in templates and uploaded PDFs with signing fields.',
     icon: FileSignature,
     adminOnly: true,
   },
